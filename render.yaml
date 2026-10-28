@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: sky-colosseum
+    name: Usslmo
     runtime: node
     region: singapore
     plan: free
