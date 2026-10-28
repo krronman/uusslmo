@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sky Colosseum Online</title>
+<style>
+html,body{margin:0;height:100%;background:#8fc4f5;overflow:hidden;font-family:system-ui,sans-serif}
+canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:12px;background:rgba(20,30,60,.65);color:#fff;padding:6px 12px;border-radius:999px;font-size:13px}
+#hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));background:rgba(20,30,60,.65);color:#fff;padding:8px 16px;border-radius:999px;font-size:14px;white-space:nowrap}
+kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;font-weight:700}
+#chat{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(58px + env(safe-area-inset-bottom,0px));width:min(360px,86vw);display:none;padding:8px 12px;border-radius:10px;border:2px solid #fff;font-size:15px;outline:none}
+#login{position:fixed;inset:0;background:rgba(15,25,55,.55);display:flex;align-items:center;justify-content:center;z-index:5}
+#login form{background:#fff;color:#123;padding:24px;border-radius:14px;text-align:center;width:min(300px,80vw)}
+#login h1{margin:0 0 12px;font-size:20px}
+#login input{width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:2px solid #9ab;border-radius:8px;margin-bottom:12px}
+#login button{width:100%;padding:10px;font-size:16px;border:0;border-radius:8px;background:#2196f3;color:#fff;font-weight:700;cursor:pointer}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="hud">Connecting…</div>
+<div id="hint">Move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Chat <kbd>Enter</kbd></div>
+<input id="chat" maxlength="60" placeholder="Type a message and press Enter" autocomplete="off">
+<div id="login"><form id="lf"><h1>🏛️ Sky Colosseum</h1>
+<input id="name" maxlength="14" placeholder="Your name" autocomplete="off"><button>Enter the arena</button></form></div>
+<script>
+const W=1254, PX=5;
+const cv=document.getElementById('c'), ctx=cv.getContext('2d'), hud=document.getElementById('hud');
+const chatEl=document.getElementById('chat'), login=document.getElementById('login');
+const bg=new Image(); bg.src='bg.jpg';
+const spImg=new Image(); spImg.src='player.png';
+let vw,vh,scale,ox,oy,dpr;
+function resize(){dpr=devicePixelRatio||1;vw=innerWidth;vh=innerHeight;cv.width=vw*dpr;cv.height=vh*dpr;
+ scale=Math.min(vw,vh)/W*dpr;ox=(cv.width-W*scale)/2;oy=(cv.height-W*scale)/2}
+addEventListener('resize',resize);resize();
+
+// ---- per-player shirt colour ----
+const hsl=(h,s,l)=>{s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return[f(0)*255,f(8)*255,f(4)*255]};
+const cache={};
+function spriteFor(hue){
+ if(cache[hue])return cache[hue];
+ const c=document.createElement('canvas');c.width=7;c.height=15;const x=c.getContext('2d');x.drawImage(spImg,0,0);
+ const d=x.getImageData(0,0,7,15),a=d.data,li=hsl(hue,85,55),da=hsl(hue,85,42);
+ for(let i=0;i<a.length;i+=4){if(a[i+2]>200&&a[i]<60){const c2=a[i+1]>=165?li:da;a[i]=c2[0];a[i+1]=c2[1];a[i+2]=c2[2]}}
+ x.putImageData(d,0,0);return cache[hue]=c;
+}
+
+// ---- networking ----
+let ws,myId=null,joined=false;const others=new Map(),bubbles=new Map();
+function connect(){
+ ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
+ ws.onopen=()=>{hud.textContent='Connected';if(joined)ws.send(JSON.stringify({t:'join',name:nameEl.value}))};
+ ws.onclose=()=>{hud.textContent='Disconnected – reconnecting…';others.clear();setTimeout(connect,1500)};
+ ws.onmessage=e=>{const m=JSON.parse(e.data);
+  if(m.t==='hello')myId=m.id;
+  else if(m.t==='state'){const seen=new Set();
+   for(const p of m.p){seen.add(p.id);let o=others.get(p.id);
+    if(!o){o={x:p.x,y:p.y,phase:0,face:p.f};others.set(p.id,o)}
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,face:p.f})}
+   for(const id of others.keys())if(!seen.has(id))others.delete(id);
+   hud.textContent='Players online: '+m.p.length}
+  else if(m.t==='chat')bubbles.set(m.id,{text:m.text,until:performance.now()+4000});
+  else if(m.t==='full')hud.textContent='Server full – try again later';
+ };
+}
+const nameEl=document.getElementById('name');
+document.getElementById('lf').onsubmit=e=>{e.preventDefault();joined=true;login.style.display='none';
+ if(ws.readyState===1)ws.send(JSON.stringify({t:'join',name:nameEl.value}))};
+connect();
+
+// ---- input ----
+const keys={},map={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',ArrowUp:'w',ArrowLeft:'a',ArrowDown:'s',ArrowRight:'d'};
+let lastSent='';
+function sendInput(){const dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0),k=dx+','+dy;
+ if(k!==lastSent&&ws.readyState===1){lastSent=k;ws.send(JSON.stringify({t:'input',dx,dy}))}}
+addEventListener('keydown',e=>{
+ if(document.activeElement===chatEl){
+  if(e.key==='Enter'){const t=chatEl.value.trim();if(t&&ws.readyState===1)ws.send(JSON.stringify({t:'chat',text:t}));chatEl.value='';chatEl.style.display='none';chatEl.blur()}
+  else if(e.key==='Escape'){chatEl.style.display='none';chatEl.blur()}
+  return}
+ if(!joined)return;
+ if(e.key==='Enter'){chatEl.style.display='block';chatEl.focus();for(const k in keys)keys[k]=false;sendInput();e.preventDefault();return}
+ if(map[e.code]){keys[map[e.code]]=true;sendInput();e.preventDefault()}});
+addEventListener('keyup',e=>{if(map[e.code]){keys[map[e.code]]=false;sendInput()}});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;sendInput()});
+
+// ---- rendering ----
+function drawPlayer(o,isMe){
+ const s=Math.sin(o.phase),step=o.moving?s:0,bob=o.moving&&Math.abs(s)>.6?1:0;
+ const lL=step>.3?1:0,lR=step<-.3?1:0,w=7*PX,h=15*PX,x0=o.x-w/2,yb=o.y-h,sp=spriteFor(o.hue);
+ ctx.fillStyle='rgba(30,40,80,.3)';ctx.beginPath();ctx.ellipse(o.x,o.y-2,w*.62-(bob?2:0),PX*1.3,0,0,7);ctx.fill();
+ ctx.save();ctx.translate(o.x,0);ctx.scale(o.face,1);ctx.translate(-o.x,0);
+ ctx.save();ctx.translate(o.x,yb+h);ctx.rotate((o.moving?step*PX*.4:0)*.012);ctx.translate(-o.x,-(yb+h));
+ ctx.drawImage(sp,0,0,7,11,x0,yb-bob*PX,w,11*PX);
+ ctx.drawImage(sp,0,11,7,1,x0,yb+11*PX-bob*PX*.5,w,PX);
+ ctx.restore();
+ ctx.drawImage(sp,0,12,4,3,x0,yb+12*PX-lL*PX,4*PX,3*PX);
+ ctx.drawImage(sp,4,12,3,3,x0+4*PX,yb+12*PX-lR*PX,3*PX,3*PX);
+ ctx.restore();
+ // name tag
+ ctx.font='bold 15px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(10,20,50,.85)';
+ ctx.fillStyle=isMe?'#ffe066':'#fff';ctx.strokeText(o.name||'',o.x,yb-8);ctx.fillText(o.name||'',o.x,yb-8);
+}
+function drawBubble(o,b){
+ ctx.font='14px system-ui,sans-serif';const tw=ctx.measureText(b.text).width+16,bx=o.x-tw/2,by=o.y-15*PX-52;
+ ctx.fillStyle='#fff';ctx.strokeStyle='#345';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(bx,by,tw,24,8);ctx.fill();ctx.stroke();
+ ctx.fillStyle='#123';ctx.textAlign='center';ctx.fillText(b.text,o.x,by+17);
+}
+let last=performance.now();
+function frame(t){
+ const dt=Math.min((t-last)/1000,.05);last=t;
+ ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#8fc4f5';ctx.fillRect(0,0,cv.width,cv.height);
+ ctx.setTransform(scale,0,0,scale,ox,oy);ctx.drawImage(bg,0,0,W,W);ctx.imageSmoothingEnabled=false;
+ const k=1-Math.exp(-dt*18),list=[];
+ for(const [id,o] of others){
+  if(o.tx!==undefined){o.x+=(o.tx-o.x)*k;o.y+=(o.ty-o.y)*k}
+  if(o.moving)o.phase+=dt*11;else o.phase=0;
+  list.push([id,o]);
+ }
+ list.sort((a,b)=>a[1].y-b[1].y);
+ for(const [id,o] of list)drawPlayer(o,id===myId);
+ for(const [id,o] of list){const b=bubbles.get(id);if(b){if(t>b.until)bubbles.delete(id);else drawBubble(o,b)}}
+ requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>
