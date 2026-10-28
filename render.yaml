@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: JEON1
+    name: JEONIL
     runtime: node
     region: singapore
     plan: free
