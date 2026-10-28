@@ -2,6 +2,7 @@ services:
   - type: web
     name: sky-colosseum
     runtime: node
+    region: singapore
     plan: free
     buildCommand: npm install
     startCommand: node server.js
