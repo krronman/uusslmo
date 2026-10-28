@@ -44,17 +44,17 @@ function spriteFor(hue){
 }
 
 // ---- networking ----
-let ws,myId=null,joined=false;const others=new Map(),bubbles=new Map();
+let ws,myId=null,joined=false,arena=null;const others=new Map(),bubbles=new Map();
 function connect(){
  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
  ws.onopen=()=>{hud.textContent='Connected';if(joined)ws.send(JSON.stringify({t:'join',name:nameEl.value}))};
  ws.onclose=()=>{hud.textContent='Disconnected – reconnecting…';others.clear();setTimeout(connect,1500)};
  ws.onmessage=e=>{const m=JSON.parse(e.data);
-  if(m.t==='hello')myId=m.id;
+  if(m.t==='hello'){myId=m.id;arena=m.arena}
   else if(m.t==='state'){const seen=new Set();
    for(const p of m.p){seen.add(p.id);let o=others.get(p.id);
     if(!o){o={x:p.x,y:p.y,phase:0,face:p.f};others.set(p.id,o)}
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,face:p.f})}
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f})}
    for(const id of others.keys())if(!seen.has(id))others.delete(id);
    hud.textContent='Players online: '+m.p.length}
   else if(m.t==='chat')bubbles.set(m.id,{text:m.text,until:performance.now()+4000});
@@ -111,7 +111,24 @@ function frame(t){
  ctx.setTransform(scale,0,0,scale,ox,oy);ctx.drawImage(bg,0,0,W,W);ctx.imageSmoothingEnabled=false;
  const k=1-Math.exp(-dt*18),list=[];
  for(const [id,o] of others){
-  if(o.tx!==undefined){o.x+=(o.tx-o.x)*k;o.y+=(o.ty-o.y)*k}
+  if(id===myId&&arena){
+   // 내 캐릭터: 서버를 기다리지 않고 즉시 이동 (클라이언트 예측)
+   const dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0);
+   o.moving=!!(dx||dy);
+   if(o.moving){
+    const l=Math.hypot(dx,dy);
+    o.x+=dx/l*300*dt;o.y+=dy/l*300*dt*0.8;
+    if(dx)o.face=dx>0?1:-1;
+    const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=Math.hypot(nx,ny);
+    if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}
+   }
+   // 서버 위치와 어긋나면 살짝 보정 (멈췄을 때, 또는 오차가 클 때)
+   if(o.tx!==undefined){
+    const err=Math.hypot(o.tx-o.x,o.ty-o.y);
+    const c=(!o.moving&&!o.sm)?k:(err>80?k*0.3:0);
+    o.x+=(o.tx-o.x)*c;o.y+=(o.ty-o.y)*c;
+   }
+  }else if(o.tx!==undefined){o.x+=(o.tx-o.x)*k;o.y+=(o.ty-o.y)*k}
   if(o.moving)o.phase+=dt*11;else o.phase=0;
   list.push([id,o]);
  }
