@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: Usslmo
+    name: JEON1
     runtime: node
     region: singapore
     plan: free
