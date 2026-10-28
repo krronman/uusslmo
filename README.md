@@ -1,4 +1,4 @@
-# Sky Colosseum Online
+# UUsslmo
 
 Multiplayer WASD pixel-walker. Node.js + WebSocket (`ws`), server-authoritative movement.
 
