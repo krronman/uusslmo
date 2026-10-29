@@ -51,7 +51,7 @@ wss.on('connection', ws => {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; broadcast({ t: 'chat', id, text }); }
     } else if (m.t === 'class') {
-      if (m.cls === 'Knight' || m.cls === 'Archer') p.cls = m.cls;
+      if (['Knight', 'Archer', 'Shielder', 'Assassin'].includes(m.cls)) p.cls = m.cls;
     } else if (m.t === 'ready') {
       p.ready = !p.ready; checkReady();
     }
