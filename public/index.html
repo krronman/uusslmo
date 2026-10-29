@@ -17,11 +17,11 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #readyBtn{font:700 15px system-ui,sans-serif;border:2px solid #fff;border-radius:10px;color:#fff;background:rgba(20,30,60,.75);padding:10px 16px;cursor:pointer}
 #readyBtn{position:fixed;left:50%;top:60%;transform:translateX(-50%);min-width:90px;font-size:18px}
 #readyBtn.on{background:#2e9e4f}
-#classBtn{position:fixed;right:12px;top:50%;transform:translateY(-50%);width:110px;aspect-ratio:360/167;border:0;padding:0;cursor:pointer;background:url(class-btn.png) center/100% 100% no-repeat;image-rendering:pixelated;z-index:4}
+#classBtn{all:unset;position:fixed;right:12px;top:50%;transform:translateY(-50%);width:110px;height:51px;cursor:pointer;background:url(class-btn.png) center/100% 100% no-repeat;z-index:4}
 #classBtn:hover{filter:brightness(1.12)}
 #classBtn:active{transform:translateY(-50%) scale(.96)}
-#classMenu{position:fixed;right:132px;top:50%;transform:translateY(-50%);width:min(340px,calc(100vw - 160px));aspect-ratio:640/356;display:none;flex-wrap:wrap;align-content:center;justify-content:center;gap:3.5% 4%;padding:9% 10%;box-sizing:border-box;background:url(class-panel.png) center/100% 100% no-repeat;z-index:4}
-#classMenu button{width:46%;aspect-ratio:420/153;border:0;padding:0;cursor:pointer;background:url(class-option.png) center/100% 100% no-repeat;color:#fff;font:700 clamp(9px,2.3vw,12px) 'Press Start 2P',system-ui,sans-serif;text-shadow:1px 1px 0 #0044aa,-1px 1px 0 #0044aa}
+#classMenu{all:unset;position:fixed;right:132px;top:50%;transform:translateY(-50%);width:360px;height:200px;box-sizing:border-box;display:none;flex-direction:row;flex-wrap:wrap;align-content:center;justify-content:center;gap:10px 12px;padding:34px 40px;background:url(class-panel.png) center/100% 100% no-repeat;z-index:4}
+#classMenu button{all:unset;box-sizing:border-box;width:130px;height:47px;line-height:47px;text-align:center;cursor:pointer;background:url(class-option.png) center/100% 100% no-repeat;color:#fff;font:700 11px 'Press Start 2P',system-ui,sans-serif;text-shadow:1px 1px 0 #0044aa}
 #classMenu button:hover{filter:brightness(1.15)}
 #classMenu button.sel{filter:brightness(1.25) drop-shadow(0 0 3px #ffe066);color:#ffe066}
 </style>
