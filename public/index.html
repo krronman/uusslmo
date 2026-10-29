@@ -27,6 +27,16 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #classMenu button:nth-of-type(4){left:186px;top:105px}
 #classMenu button:hover{filter:brightness(1.15)}
 #classMenu button.sel{filter:brightness(1.25) drop-shadow(0 0 3px #ffe066);color:#ffe066}
+#chatLog{position:fixed;left:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));width:min(300px,60vw);background:rgba(20,30,60,.72);color:#fff;border:2px solid #fff;border-radius:10px;font-size:13px;z-index:3;overflow:hidden}
+#clHead{padding:6px 10px;font-weight:700;cursor:pointer;background:rgba(255,255,255,.12);user-select:none;display:flex;justify-content:space-between}
+#clBody{height:170px;overflow-y:auto;padding:6px 10px;line-height:1.35;word-break:break-word}
+#chatLog.min #clBody{display:none}
+#clBody div{margin-bottom:3px}
+#clBody .sys{color:#ffe066}
+#clBody .tm{opacity:.55;font-size:11px;margin-right:4px}
+#banner{position:fixed;top:calc(52px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);padding:8px 20px;border-radius:12px;background:rgba(20,30,60,.75);color:#fff;font:700 20px system-ui,sans-serif;display:none;z-index:3;white-space:nowrap;border:2px solid #fff}
+#fade{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .6s;z-index:6}
+#readyBtn.off{opacity:.45;cursor:not-allowed}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head><body>
@@ -41,7 +51,9 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <button data-c="Shielder">Shielder</button>
 <button data-c="Assassin">Assassin</button>
 </div>
-<button id="readyBtn">0/0</button>
+<button id="readyBtn">0/2</button>
+<div id="chatLog"><div id="clHead"><span>💬 Chat</span><span id="clArrow">▾</span></div><div id="clBody"></div></div>
+<div id="banner"></div><div id="fade"></div>
 <div id="login"><form id="lf"><h1>🏛️ Sky Colosseum</h1>
 <input id="name" maxlength="14" placeholder="Your name" autocomplete="off"><button>Enter the arena</button></form></div>
 <script>
@@ -65,9 +77,23 @@ function spriteFor(hue){
  for(let i=0;i<a.length;i+=4){if(a[i+2]>200&&a[i]<60){const c2=a[i+1]>=165?li:da;a[i]=c2[0];a[i+1]=c2[1];a[i+2]=c2[2]}}
  x.putImageData(d,0,0);return cache[hue]=c;
 }
-
+// ---- chat log window ----
+const CHAT_TTL=10*60*1000,clBody=document.getElementById('clBody'),chatLogEl=document.getElementById('chatLog');
+const banner=document.getElementById('banner'),fade=document.getElementById('fade'),logs=[];
+document.getElementById('clHead').onclick=()=>{chatLogEl.classList.toggle('min');document.getElementById('clArrow').textContent=chatLogEl.classList.contains('min')?'▸':'▾'};
+function addLog(name,text,sys,age){
+ const at=Date.now()-(age||0),d=new Date(at),el=document.createElement('div'),tm=document.createElement('span');
+ tm.className='tm';tm.textContent=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+ el.append(tm,sys?text:name+': '+text);if(sys)el.className='sys';
+ const stick=clBody.scrollTop+clBody.clientHeight>=clBody.scrollHeight-20;
+ clBody.appendChild(el);logs.push({at,el});
+ if(stick)clBody.scrollTop=clBody.scrollHeight;
+}
+setInterval(()=>{const lim=Date.now()-CHAT_TTL;while(logs.length&&logs[0].at<lim)logs.shift().el.remove()},5000);
+function flash(){fade.style.transition='none';fade.style.opacity=.9;requestAnimationFrame(()=>requestAnimationFrame(()=>{fade.style.transition='opacity .6s';fade.style.opacity=0}))}
 // ---- networking ----
 let ws,myId=null,joined=false,snapUntil=0,arena=null;
+let phase='lobby',zone=1,myRole=0,snapNext=false,cdEnd=0,winnerText='',winnerUntil=0;
 const others=new Map(),bubbles=new Map();
 function connect(){
  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
@@ -75,23 +101,32 @@ function connect(){
  ws.onclose=()=>{hud.textContent='Disconnected – reconnecting…';others.clear();setTimeout(connect,1500)};
  ws.onmessage=e=>{const m=JSON.parse(e.data);
   if(m.t==='hello'){myId=m.id;arena=m.arena}
+  else if(m.t==='history'){clBody.innerHTML='';logs.length=0;for(const c of m.log)addLog(c.name,c.text,c.sys,c.age)}
   else if(m.t==='state'){
+   phase=m.ph;zone=m.z;
    const seen=new Set();
    for(const p of m.p){
     seen.add(p.id);
     let o=others.get(p.id);
     if(!o){o={x:p.x,y:p.y,phase:0,face:p.f};others.set(p.id,o)}
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,cls:p.c,ready:p.r});
+    if(snapNext){o.x=p.x;o.y=p.y}
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,cls:p.c,ready:p.r,role:p.o});
    }
+   snapNext=false;
    for(const id of others.keys())if(!seen.has(id))others.delete(id);
-   hud.textContent='Players online: '+m.p.length;
-   readyBtn.textContent=m.p.filter(p=>p.r).length+'/'+m.p.length;
-   const me=m.p.find(p=>p.id===myId);
+   const me=m.p.find(p=>p.id===myId),total=m.p.length,rc=m.p.filter(p=>p.r).length;
+   myRole=me?me.o:0;
+   hud.textContent=phase==='round'?'Round in progress · alive: '+m.p.filter(p=>p.o===1).length:'Players online: '+total;
+   readyBtn.style.display=phase==='lobby'?'':'none';
+   readyBtn.textContent=rc+'/'+Math.max(total,2);
+   readyBtn.classList.toggle('off',total<2);
    readyBtn.classList.toggle('on',!!(me&&me.r));
    classMenu.querySelectorAll('button').forEach(b=>b.classList.toggle('sel',!!me&&me.c===b.dataset.c));
   }
-  else if(m.t==='arrange'){for(const k in keys)keys[k]=false;lastSent='0,0';snapUntil=performance.now()+1000}
-  else if(m.t==='chat')bubbles.set(m.id,{text:m.text,until:performance.now()+4000});
+  else if(m.t==='chat'){addLog(m.name,m.text,m.sys,0);if(m.id)bubbles.set(m.id,{text:m.text,until:performance.now()+4000})}
+  else if(m.t==='countdown'){cdEnd=m.ms?performance.now()+m.ms:0}
+  else if(m.t==='tp'){snapNext=true;flash()}
+  else if(m.t==='winner'){winnerText='🏆 '+m.name+' wins!';winnerUntil=performance.now()+5000}
   else if(m.t==='full')hud.textContent='Server full – try again later';
  };
 }
@@ -147,6 +182,23 @@ function drawBubble(o,b){
  ctx.fillStyle='#fff';ctx.strokeStyle='#345';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(bx,by,tw,24,8);ctx.fill();ctx.stroke();
  ctx.fillStyle='#123';ctx.textAlign='center';ctx.fillText(b.text,o.x,by+17);
 }
+function drawZone(){
+ if(!arena)return;const rx=arena.RX*zone,ry=arena.RY*zone;
+ ctx.save();ctx.fillStyle='rgba(200,30,60,.38)';
+ ctx.beginPath();ctx.ellipse(arena.CX,arena.CY,arena.RX,arena.RY,0,0,6.2832);
+ if(zone>0){ctx.moveTo(arena.CX+rx,arena.CY);ctx.ellipse(arena.CX,arena.CY,rx,ry,0,0,6.2832)}
+ ctx.fill('evenodd');
+ if(zone>0){ctx.beginPath();ctx.ellipse(arena.CX,arena.CY,rx,ry,0,0,6.2832);ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.setLineDash([14,10]);ctx.stroke()}
+ ctx.restore();
+}
+let bannerTxt='';
+function updateBanner(t){
+ let b='';
+ if(phase==='countdown'&&cdEnd){const r=Math.ceil((cdEnd-t)/1000);if(r>0)b='⚔️ Round starts in '+r+'…'}
+ else if(phase==='round')b=myRole===2?'👁 Spectating':'Stay inside the zone!';
+ else if(t<winnerUntil)b=winnerText;
+ if(b!==bannerTxt){bannerTxt=b;banner.textContent=b;banner.style.display=b?'block':'none'}
+}
 let last=performance.now();
 function frame(t){
  const dt=Math.min((t-last)/1000,.05);last=t;
@@ -154,7 +206,7 @@ function frame(t){
  ctx.setTransform(scale,0,0,scale,ox,oy);ctx.drawImage(bg,0,0,W,W);ctx.imageSmoothingEnabled=false;
  const k=1-Math.exp(-dt*18),list=[];
  for(const [id,o] of others){
-  if(id===myId&&arena){
+  if(id===myId&&arena&&myRole!==2){
    // 내 캐릭터: 서버를 기다리지 않고 즉시 이동 (클라이언트 예측)
    const dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0);
    o.moving=!!(dx||dy);
@@ -176,8 +228,11 @@ function frame(t){
   list.push([id,o]);
  }
  list.sort((a,b)=>a[1].y-b[1].y);
- for(const [id,o] of list)drawPlayer(o,id===myId);
- for(const [id,o] of list){const b=bubbles.get(id);if(b){if(t>b.until)bubbles.delete(id);else drawBubble(o,b)}}
+ const vis=phase==='round'?list.filter(([id,o])=>o.role===1):list;
+ if(phase==='round')drawZone();
+ for(const [id,o] of vis)drawPlayer(o,id===myId);
+ for(const [id,o] of vis){const b=bubbles.get(id);if(b){if(t>b.until)bubbles.delete(id);else drawBubble(o,b)}}
+ updateBanner(t);
  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
