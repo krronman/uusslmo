@@ -14,19 +14,30 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #login h1{margin:0 0 12px;font-size:20px}
 #login input{width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:2px solid #9ab;border-radius:8px;margin-bottom:12px}
 #login button{width:100%;padding:10px;font-size:16px;border:0;border-radius:8px;background:#2196f3;color:#fff;font-weight:700;cursor:pointer}
-#classBtn,#readyBtn,#classMenu button{font:700 15px system-ui,sans-serif;border:2px solid #fff;border-radius:10px;color:#fff;background:rgba(20,30,60,.75);padding:10px 16px;cursor:pointer}
-#classBtn{position:fixed;right:12px;top:50%;transform:translateY(-50%)}
-#classMenu{position:fixed;right:12px;top:calc(50% + 28px);display:none;flex-direction:column;gap:6px;z-index:4}
-#classMenu button.sel{background:#2196f3}
+#readyBtn{font:700 15px system-ui,sans-serif;border:2px solid #fff;border-radius:10px;color:#fff;background:rgba(20,30,60,.75);padding:10px 16px;cursor:pointer}
 #readyBtn{position:fixed;left:50%;top:60%;transform:translateX(-50%);min-width:90px;font-size:18px}
 #readyBtn.on{background:#2e9e4f}
-</style></head><body>
+#classBtn{position:fixed;right:12px;top:50%;transform:translateY(-50%);width:110px;aspect-ratio:360/167;border:0;padding:0;cursor:pointer;background:url(class-btn.png) center/100% 100% no-repeat;image-rendering:pixelated;z-index:4}
+#classBtn:hover{filter:brightness(1.12)}
+#classBtn:active{transform:translateY(-50%) scale(.96)}
+#classMenu{position:fixed;right:132px;top:50%;transform:translateY(-50%);width:min(340px,calc(100vw - 160px));aspect-ratio:640/356;display:none;flex-wrap:wrap;align-content:center;justify-content:center;gap:3.5% 4%;padding:9% 10%;box-sizing:border-box;background:url(class-panel.png) center/100% 100% no-repeat;z-index:4}
+#classMenu button{width:46%;aspect-ratio:420/153;border:0;padding:0;cursor:pointer;background:url(class-option.png) center/100% 100% no-repeat;color:#fff;font:700 clamp(9px,2.3vw,12px) 'Press Start 2P',system-ui,sans-serif;text-shadow:1px 1px 0 #0044aa,-1px 1px 0 #0044aa}
+#classMenu button:hover{filter:brightness(1.15)}
+#classMenu button.sel{filter:brightness(1.25) drop-shadow(0 0 3px #ffe066);color:#ffe066}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head><body>
 <canvas id="c"></canvas>
 <div id="hud">Connecting…</div>
 <div id="hint">Move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Chat <kbd>Enter</kbd></div>
 <input id="chat" maxlength="60" placeholder="Type a message and press Enter" autocomplete="off">
-<button id="classBtn">class</button>
-<div id="classMenu"><button data-c="Knight">⚔️ Knight</button><button data-c="Archer">🏹 Archer</button></div>
+<button id="classBtn" aria-label="class"></button>
+<div id="classMenu">
+<button data-c="Knight">Knight</button>
+<button data-c="Archer">Archer</button>
+<button data-c="Shielder">Shielder</button>
+<button data-c="Assassin">Assassin</button>
+</div>
 <button id="readyBtn">0/0</button>
 <div id="login"><form id="lf"><h1>🏛️ Sky Colosseum</h1>
 <input id="name" maxlength="14" placeholder="Your name" autocomplete="off"><button>Enter the arena</button></form></div>
@@ -100,7 +111,9 @@ const tx=o=>ws.readyState===1&&ws.send(JSON.stringify(o));
 classBtn.onclick=()=>{classMenu.style.display=classMenu.style.display==='flex'?'none':'flex';classBtn.blur()};
 classMenu.querySelectorAll('button').forEach(b=>b.onclick=()=>{tx({t:'class',cls:b.dataset.c});classMenu.style.display='none';b.blur()});
 readyBtn.onclick=()=>{tx({t:'ready'});readyBtn.blur()};
- 
+
+const CLS={Knight:['⚔️','#ffb3a7'],Archer:['🏹','#b6f0a8'],Shielder:['🛡️','#a9d4ff'],Assassin:['🗡️','#d9b3ff']};
+
 // ---- rendering ----
 function drawPlayer(o,isMe){
  const s=Math.sin(o.phase),step=o.moving?s:0,bob=o.moving&&Math.abs(s)>.6?1:0;
@@ -117,8 +130,8 @@ function drawPlayer(o,isMe){
  // name tag
  ctx.font='bold 15px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(10,20,50,.85)';
  ctx.fillStyle=isMe?'#ffe066':'#fff';ctx.strokeText(o.name||'',o.x,yb-8);ctx.fillText(o.name||'',o.x,yb-8);
- if(o.cls){const t=(o.cls==='Knight'?'⚔️ ':'🏹 ')+o.cls;ctx.font='bold 13px system-ui,sans-serif';ctx.lineWidth=3;
-  ctx.fillStyle=o.cls==='Knight'?'#ffb3a7':'#b6f0a8';ctx.strokeText(t,o.x,yb-26);ctx.fillText(t,o.x,yb-26)}
+ if(o.cls&&CLS[o.cls]){const t=CLS[o.cls][0]+' '+o.cls;ctx.font='bold 13px system-ui,sans-serif';ctx.lineWidth=3;
+  ctx.fillStyle=CLS[o.cls][1];ctx.strokeText(t,o.x,yb-26);ctx.fillText(t,o.x,yb-26)}
 }
 function drawBubble(o,b){
  ctx.font='14px system-ui,sans-serif';const tw=ctx.measureText(b.text).width+16,bx=o.x-tw/2,by=o.y-15*PX-68;
