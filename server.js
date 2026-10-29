@@ -36,24 +36,40 @@ wss.on('connection', ws => {
   const id = nextId++;
   const a = Math.random() * Math.PI * 2, r = Math.random() * 0.5;
   const p = { id, ws, name: 'Player' + id, hue: Math.floor(Math.random() * 360),
-    x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true };
+    x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true, joined: false, cls: '', ready: false };
   players.set(id, p);
   send(ws, { t: 'hello', id, arena: { CX, CY, RX, RY } });
 
   ws.on('pong', () => { p.alive = true; });
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
-    if (m.t === 'join') p.name = clean(m.name, 14) || p.name;
-    else if (m.t === 'input') {
+    if (m.t === 'join') { p.name = clean(m.name, 14) || p.name; p.joined = true; return; }
+    if (!p.joined) return;
+    if (m.t === 'input') {
       p.dx = Math.sign(Number(m.dx) || 0); p.dy = Math.sign(Number(m.dy) || 0);
     } else if (m.t === 'chat') {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; broadcast({ t: 'chat', id, text }); }
+    } else if (m.t === 'class') {
+      if (m.cls === 'Knight' || m.cls === 'Archer') p.cls = m.cls;
+    } else if (m.t === 'ready') {
+      p.ready = !p.ready; checkReady();
     }
   });
-  ws.on('close', () => { players.delete(id); broadcast({ t: 'leave', id }); });
+  ws.on('close', () => { players.delete(id); broadcast({ t: 'leave', id }); checkReady(); });
   ws.on('error', () => {});
 });
+function checkReady() {
+  const list = [...players.values()].filter(p => p.joined);
+  if (!list.length || !list.every(p => p.ready)) return;
+  list.forEach((p, i) => {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / list.length;
+    p.x = CX + Math.cos(a) * RX * 0.92;
+    p.y = CY + Math.sin(a) * RY * 0.92;
+    p.dx = p.dy = 0; p.ready = false;
+  });
+  broadcast({ t: 'arrange' });
+}
 
 // Authoritative simulation
 let last = Date.now();
@@ -61,6 +77,7 @@ setInterval(() => {
   const now = Date.now(), dt = Math.min((now - last) / 1000, 0.1); last = now;
   const list = [];
   for (const p of players.values()) {
+    if (!p.joined) continue;
     let { dx, dy } = p;
     const moving = !!(dx || dy);
     if (moving) {
@@ -70,7 +87,7 @@ setInterval(() => {
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
     }
-    list.push({ id: p.id, name: p.name, hue: p.hue, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, f: p.face, m: moving ? 1 : 0 });
+    list.push({ id: p.id, name: p.name, hue: p.hue, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, f: p.face, m: moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0 });
   }
   broadcast({ t: 'state', p: list });
 }, 1000 / TICK);
