@@ -64,23 +64,29 @@ function spriteFor(hue){
 }
 
 // ---- networking ----
-let ws,myId=null,joined=false,snapUntil=0,arena=null;const others=new Map(),bubbles=new Map();
+let ws,myId=null,joined=false,snapUntil=0,arena=null;
+const others=new Map(),bubbles=new Map();
 function connect(){
  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
  ws.onopen=()=>{hud.textContent='Connected';if(joined)ws.send(JSON.stringify({t:'join',name:nameEl.value}))};
  ws.onclose=()=>{hud.textContent='Disconnected – reconnecting…';others.clear();setTimeout(connect,1500)};
  ws.onmessage=e=>{const m=JSON.parse(e.data);
   if(m.t==='hello'){myId=m.id;arena=m.arena}
-  else if(m.t==='state'){const seen=new Set();
-   for(const p of m.p){seen.add(p.id);let o=others.get(p.id);
+  else if(m.t==='state'){
+   const seen=new Set();
+   for(const p of m.p){
+    seen.add(p.id);
+    let o=others.get(p.id);
     if(!o){o={x:p.x,y:p.y,phase:0,face:p.f};others.set(p.id,o)}
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,cls:p.c,ready:p.r})
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,cls:p.c,ready:p.r});
+   }
    for(const id of others.keys())if(!seen.has(id))others.delete(id);
    hud.textContent='Players online: '+m.p.length;
    readyBtn.textContent=m.p.filter(p=>p.r).length+'/'+m.p.length;
    const me=m.p.find(p=>p.id===myId);
    readyBtn.classList.toggle('on',!!(me&&me.r));
-   classMenu.querySelectorAll('button').forEach(b=>b.classList.toggle('sel',!!me&&me.c===b.dataset.c))}
+   classMenu.querySelectorAll('button').forEach(b=>b.classList.toggle('sel',!!me&&me.c===b.dataset.c));
+  }
   else if(m.t==='arrange'){for(const k in keys)keys[k]=false;lastSent='0,0';snapUntil=performance.now()+1000}
   else if(m.t==='chat')bubbles.set(m.id,{text:m.text,until:performance.now()+4000});
   else if(m.t==='full')hud.textContent='Server full – try again later';
