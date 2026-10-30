@@ -76,7 +76,7 @@ function spriteFor(hue,cls){
  if(im&&im.complete&&im.naturalWidth)return im;
  if(cache[hue])return cache[hue];
  const c=document.createElement('canvas');c.width=15;c.height=15;const x=c.getContext('2d');x.drawImage(spImg,0,0);
- const d=x.getImageData(0,0,15,15)
+ const d=x.getImageData(0,0,15,15),a=d.data,li=hsl(hue,85,55),da=hsl(hue,85,42);
  for(let i=0;i<a.length;i+=4){if(a[i+2]>200&&a[i]<60){const c2=a[i+1]>=165?li:da;a[i]=c2[0];a[i+1]=c2[1];a[i+2]=c2[2]}}
  x.putImageData(d,0,0);return cache[hue]=c;
 }
