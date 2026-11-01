@@ -400,8 +400,8 @@ function frame(t){
    o.moving=!!(dx||dy);
    if(Math.abs(Math.cos(myAim))>.2)o.face=Math.cos(myAim)>0?1:-1;       // face the cursor side
    if(o.moving){
-    const l=Math.hypot(dx,dy),fwd=-dy/l,str=dx/l,c=Math.cos(myAim),sn=Math.sin(myAim);   // W = toward cursor, D = strafe right
-    const wx=fwd*c-str*sn,wy=fwd*sn+str*c,spd=300*(o.gd?1.4:1)*(o.sl?.7:1);
+    const l=Math.hypot(dx,dy),spd=300*(o.gd?1.4:1)*(o.sl?.7:1);
+    o.x+=dx/l*spd*dt;o.y+=dy/l*spd*dt*0.8;
     o.x+=wx*spd*dt;o.y+=wy*spd*dt*0.8;
     const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=Math.hypot(nx,ny);
     if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}
