@@ -70,7 +70,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 </head><body>
 <canvas id="c"></canvas>
 <div id="hud">Connecting…</div>
-<div id="hint">Move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Chat <kbd>Enter</kbd> · Attack <kbd>F</kbd> · Skills <kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd></div>
+<div id="hint">Aim 🖱 · Move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Chat <kbd>Enter</kbd> · Attack <kbd>F</kbd> · Skills <kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd></div>
 <input id="chat" maxlength="60" placeholder="Type a message and press Enter" autocomplete="off">
 <button id="classBtn" aria-label="class"></button>
 <button id="readyBtn">0/2</button>
@@ -87,6 +87,8 @@ const chatEl=document.getElementById('chat'), login=document.getElementById('log
 const bg=new Image(); bg.src='bg.jpg';
 const spImg=new Image(); spImg.src='player.png';
 const swordImg=new Image();swordImg.src='sword.png';
+const arrowImg=new Image();arrowImg.src='arrow.png';
+const bowImg=new Image();bowImg.src='bow.png';
 const clsImg={};for(const c of ['Knight','Archer','Shielder','Assassin']){const i=new Image();i.src=c.toLowerCase()+'.png';clsImg[c]=i}
 let vw,vh,scale,ox,oy,dpr;
 function resize(){dpr=devicePixelRatio||1;vw=innerWidth;vh=innerHeight;cv.width=vw*dpr;cv.height=vh*dpr;
@@ -139,7 +141,9 @@ function connect(){
     let o=others.get(p.id);
     if(!o){o={x:p.x,y:p.y,phase:0,face:p.f};others.set(p.id,o)}
     if(snapNext){o.x=p.x;o.y=p.y}
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,cls:p.c,ready:p.r,role:p.o,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl});
+    const f0=o.face;
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl});
+    if(p.id===myId)o.face=f0;   // own facing is driven by the cursor locally
    }
    snapNext=false;
    for(const id of others.keys())if(!seen.has(id))others.delete(id);
@@ -157,7 +161,9 @@ function connect(){
   }
   else if(m.t==='chat'){addLog(m.name,m.text,m.sys,0);if(m.id)bubbles.set(m.id,{text:m.text,until:performance.now()+4000})}
   else if(m.t==='countdown'){cdEnd=m.ms?performance.now()+m.ms:0}
-  else if(m.t==='tp'){snapNext=true;flash()}
+  else if(m.t==='tp'){snapNext=true;arrowsC.length=0;flash()}
+  else if(m.t==='arrow'){m.t0=performance.now();arrowsC.push(m);const o=others.get(m.by);if(o)o.shot=m.t0}
+  else if(m.t==='arrowEnd'){const i=arrowsC.findIndex(a=>a.id===m.id);if(i>=0)arrowsC.splice(i,1)}
   else if(m.t==='winner'){winnerText='🏆 '+m.name+' wins!';winnerUntil=performance.now()+5000}
   else if(m.t==='cd'){skCd[m.k]=performance.now()+m.ms}
   else if(m.t==='fx'){m.t0=performance.now();fxs.push(m);
@@ -173,10 +179,19 @@ connect();
 
 // ---- input ----
 const keys={},map={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',ArrowUp:'w',ArrowLeft:'a',ArrowDown:'s',ArrowRight:'d'};
-let lastSent='',aimX=1,aimY=0,atkLocal=0;
+let lastSent='',atkLocal=0,myAim=0,mWx=0,mWy=0,mouseOn=false,aimSent=0,aimSentT=0;
+const ATK_CD={Knight:700,Archer:800},arrowsC=[];
+const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b)),lerpAng=(a,b,t)=>a+angDiff(b,a)*t;
+addEventListener('mousemove',e=>{mWx=(e.clientX*dpr-ox)/scale;mWy=(e.clientY*dpr-oy)/scale;mouseOn=true});
+function updateAim(o){                          // aim = direction from the character's body to the cursor
+ if(!mouseOn)return;
+ const dx=mWx-o.x,dy=(mWy-(o.y-30))/0.8;
+ if(dx*dx+dy*dy>64)myAim=Math.atan2(dy,dx);
+ const n=performance.now();
+ if(Math.abs(angDiff(myAim,aimSent))>.03&&n-aimSentT>45){aimSent=myAim;aimSentT=n;tx({t:'aim',a:+myAim.toFixed(3)})}
+}
 function sendInput(){const dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0),k=dx+','+dy;
- if(dx||dy){aimX=dx;aimY=dy}
- if(k!==lastSent&&ws.readyState===1){lastSent=k;ws.send(JSON.stringify({t:'input',dx,dy}))}}
+ if(k!==lastSent&&ws.readyState===1){lastSent=k;ws.send(JSON.stringify({t:'input',dx,dy,a:+myAim.toFixed(3)}))}}
 addEventListener('keydown',e=>{
  if(document.activeElement===chatEl){
   if(e.key==='Enter'){const t=chatEl.value.trim();if(t&&ws.readyState===1)ws.send(JSON.stringify({t:'chat',text:t}));chatEl.value='';chatEl.style.display='none';chatEl.blur()}
@@ -186,8 +201,8 @@ addEventListener('keydown',e=>{
  if(!joined)return;
  if(e.key==='Enter'){chatEl.style.display='block';chatEl.focus();for(const k in keys)keys[k]=false;sendInput();e.preventDefault();return}
  if(!e.repeat){
-  if(e.code==='KeyF'){tx({t:'atk'});const n=performance.now();if(n>=atkLocal){atkLocal=n+600;localSwing(100*Math.PI/180,220)}return}
-  if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyR'){tx({t:'skill',k:e.code.slice(3)});if(e.code==='KeyQ'&&performance.now()>=skCd.Q)localSwing(120*Math.PI/180,380);return}}
+  if(e.code==='KeyF'){tx({t:'atk',a:+myAim.toFixed(3)});const n=performance.now();if(n>=atkLocal){atkLocal=n+(ATK_CD[myCls]||600);localSwing(100*Math.PI/180,220)}return}
+  if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyR'){tx({t:'skill',k:e.code.slice(3),a:+myAim.toFixed(3)});if(e.code==='KeyQ'&&performance.now()>=skCd.Q)localSwing(120*Math.PI/180,380);return}}
  if(map[e.code]){keys[map[e.code]]=true;sendInput();e.preventDefault()}});
 addEventListener('keyup',e=>{if(map[e.code]){keys[map[e.code]]=false;sendInput()}});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;sendInput()});
@@ -206,7 +221,8 @@ const CHARS=[
    {icon:'⚔️',name:'Sword Strike',key:'Q · 8s',desc:'Wide cone slash (2x basic range): 250 dmg and 1s knock-up.'},
    {icon:'💨',name:'Guard Rush',key:'E · 12s',desc:'Take 70% less damage and gain +40% move speed for 3s.'},
    {icon:'🗡️',name:'Judgment',key:'R · 25s',desc:'8 swords ring you: 200 AoE dmg each, slows enemies 30% for 2s.'}]},
- {id:'Archer',img:'archer.png',soon:1},
+ {id:'Archer',img:'archer.png',stats:{hp:1000,atk:180},
+  style:'Ranged attacker. Shoots an arrow toward the cursor every 0.8s (F). Skills coming soon.'},
  {id:'Shielder',img:'shielder.png',soon:1},
  {id:'Assassin',img:'assassin.png',soon:1},
  ...new Array(16).fill(null)
@@ -255,7 +271,7 @@ const CLS={Knight:['⚔️','#ffb3a7'],Archer:['🏹','#b6f0a8'],Shielder:['🛡
 
 // ---- rendering ----
 function startSwing(o,a,span,dur){o.sw={t0:performance.now(),dur,a,span}}
-function localSwing(span,dur){const o=others.get(myId);if(o&&myCls==='Knight'&&myRole!==2)startSwing(o,Math.atan2(aimY,aimX),span,dur)}
+function localSwing(span,dur){const o=others.get(myId);if(o&&myCls==='Knight'&&myRole!==2)startSwing(o,myAim,span,dur)}
 function drawSword(o,h,lift){
  if(!(swordImg.complete&&swordImg.naturalWidth))return;
  const now=performance.now(),sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,cx=o.x,cy=o.y-h*.5-lift;
@@ -270,6 +286,24 @@ function drawSword(o,h,lift){
   ctx.drawImage(swordImg,0,0,7,15,-3.5*PX,-11*PX,7*PX,15*PX);
  }
  ctx.restore();
+}
+function drawBow(o,h,lift){
+ if(!(bowImg.complete&&bowImg.naturalWidth))return;
+ const now=performance.now(),a=o.da||0,th=Math.atan2(.8*Math.sin(a),Math.cos(a));
+ const rc=o.shot?Math.max(0,1-(now-o.shot)/180):0,bob=Math.sin(now/260+o.x*.05)*2.5+(o.moving?Math.sin(o.phase*2)*2:0);
+ const dist=36-8*rc,cx=o.x+Math.cos(th)*dist,cy=o.y-h*.5-lift+8+Math.sin(th)*dist*.8+bob;
+ ctx.save();ctx.translate(cx,cy);ctx.rotate(th+Math.PI);              // the bow sprite points left
+ ctx.drawImage(bowImg,0,0,8,15,-4*PX,-7.5*PX,8*PX,15*PX);ctx.restore();
+}
+function drawArrows(t){
+ if(!(arrowImg.complete&&arrowImg.naturalWidth))return;
+ for(let i=arrowsC.length-1;i>=0;i--){
+  const r=arrowsC[i],d=r.spd*(t-r.t0)/1000;
+  if(d>=r.range+40){arrowsC.splice(i,1);continue}
+  const dd=d+28,th=Math.atan2(.8*Math.sin(r.a),Math.cos(r.a));
+  ctx.save();ctx.translate(r.x+Math.cos(r.a)*dd,r.y+Math.sin(r.a)*dd*.8-30);ctx.rotate(th+Math.PI);   // the arrow sprite points left
+  ctx.drawImage(arrowImg,0,0,14,3,0,-1.5*PX,14*PX,3*PX);ctx.restore();
+ }
 }
 function drawPlayer(o,isMe){
  const lift=o.su>0?Math.sin((1-Math.min(1,o.su/1000))*Math.PI)*55:0;
@@ -286,6 +320,7 @@ function drawPlayer(o,isMe){
  ctx.drawImage(sp,8,12,7,3,x0+8*PX,yb+12*PX-lR*PX,7*PX,3*PX);
  ctx.restore();
  if(o.cls==='Knight')drawSword(o,h,lift);
+ if(o.cls==='Archer')drawBow(o,h,lift);
  // name tag
  ctx.font='bold 15px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(10,20,50,.85)';
  ctx.fillStyle=isMe?'#ffe066':'#fff';ctx.strokeText(o.name||'',o.x,yb-8);ctx.fillText(o.name||'',o.x,yb-8);
@@ -360,13 +395,14 @@ function frame(t){
  for(const [id,o] of others){
   if(id===myId&&arena&&myRole!==2){
    // 내 캐릭터: 서버를 기다리지 않고 즉시 이동 (클라이언트 예측)
+   updateAim(o);
    const stun=o.su>0,dx=stun?0:(keys.d?1:0)-(keys.a?1:0),dy=stun?0:(keys.s?1:0)-(keys.w?1:0);
    o.moving=!!(dx||dy);
+   if(Math.abs(Math.cos(myAim))>.2)o.face=Math.cos(myAim)>0?1:-1;       // face the cursor side
    if(o.moving){
-    const l=Math.hypot(dx,dy);
-    const spd=300*(o.gd?1.4:1)*(o.sl?.7:1);
-    o.x+=dx/l*spd*dt;o.y+=dy/l*spd*dt*0.8;
-    if(dx)o.face=dx>0?1:-1;
+    const l=Math.hypot(dx,dy),fwd=-dy/l,str=dx/l,c=Math.cos(myAim),sn=Math.sin(myAim);   // W = toward cursor, D = strafe right
+    const wx=fwd*c-str*sn,wy=fwd*sn+str*c,spd=300*(o.gd?1.4:1)*(o.sl?.7:1);
+    o.x+=wx*spd*dt;o.y+=wy*spd*dt*0.8;
     const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=Math.hypot(nx,ny);
     if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}
    }
@@ -377,6 +413,7 @@ function frame(t){
     o.x+=(o.tx-o.x)*c;o.y+=(o.ty-o.y)*c;
    }
   }else if(o.tx!==undefined){o.x+=(o.tx-o.x)*k;o.y+=(o.ty-o.y)*k}
+  o.da=id===myId?myAim:lerpAng(o.da===undefined?(o.aim||0):o.da,o.aim||0,k);
   if(o.moving)o.phase+=dt*11;else o.phase=0;
   list.push([id,o]);
  }
@@ -386,7 +423,7 @@ function frame(t){
  drawFx(t);
  for(const [id,o] of vis)drawPlayer(o,id===myId);
  for(const [id,o] of vis){const b=bubbles.get(id);if(b){if(t>b.until)bubbles.delete(id);else drawBubble(o,b)}}
- drawHits(t);updateSkillbar(t);
+ drawArrows(t);drawHits(t);updateSkillbar(t);
  updateBanner(t);
  requestAnimationFrame(frame);
 }
