@@ -276,11 +276,9 @@ setInterval(() => {
     let { dx, dy } = p;
     if (p.role === 2 || now < p.stunUntil) dx = dy = 0;
     if (dx || dy) {
-      const l = Math.hypot(dx, dy), fwd = -dy / l, str = dx / l;       // W = forward, D = strafe right
-      const c = Math.cos(p.aim), sn = Math.sin(p.aim);
-      const wx = fwd * c - str * sn, wy = fwd * sn + str * c;           // move direction on the ground plane
+      const l = Math.hypot(dx, dy); dx /= l; dy /= l;
       const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1);
-      p.x += wx * spd * dt; p.y += wy * spd * dt * 0.8;
+      p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
     }
