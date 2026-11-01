@@ -68,7 +68,7 @@ function startRound() {
     broadcast({ t: 'countdown', ms: 0 });
     return sysChat('Round cancelled: not enough players.');
   }
-  phase = 'round'; roundStart = Date.now();
+  phase = 'round'; roundStart = Date.now(); arrows.clear();
   parts.forEach((p, i) => {
     const a = -Math.PI / 2 + i * 2 * Math.PI / parts.length;   // evenly spaced on the outer edge
     p.lx = p.x; p.ly = p.y;
@@ -89,7 +89,7 @@ function checkRoundEnd() {
   endRound(winner);
 }
 function endRound(winner) {
-  phase = 'lobby';
+  phase = 'lobby'; arrows.clear();
   for (const p of players.values()) {
     if (p.inRound) { p.x = p.lx; p.y = p.ly; }      // back to where they were in the lobby
     p.role = 0; p.inRound = false; p.ready = false; p.dx = p.dy = 0;
@@ -102,15 +102,56 @@ function endRound(winner) {
 
 // ---- combat ----
 const RAD = Math.PI / 180;
-const BASE = { hp: 1000, dmg: 150, reduce: 0 };                          // every class without custom stats
-const CLASS_STATS = { Knight: { hp: 1000, dmg: 150, reduce: 0.2 } };    // Knight passive [Armor]: -20% damage taken
+const BASE = { hp: 1000, dmg: 150, reduce: 0, atkCd: 600 };                          // every class without custom stats
+const CLASS_STATS = {
+  Knight: { hp: 1000, dmg: 150, reduce: 0.2, atkCd: 700 },   // passive [Armor]: -20% damage taken; attack every 0.7s
+  Archer: { hp: 1000, dmg: 180, reduce: 0, atkCd: 800 }     // shoots an arrow every 0.8s for 180
+};
 const statsOf = p => CLASS_STATS[p.cls] || BASE;
-const ATK = { range: 75, span: 100 * RAD, cd: 600 };                    // basic attack (Space)
+const ARROW = { speed: 800, range: 700, radius: 28 };      // ground px/s, ground px, hit radius
+const ATK = { range: 75, span: 100 * RAD };                            // melee basic attack (F)
 const KNIGHT = {
   Q: { cd: 8000, range: 150, span: 120 * RAD, dmg: 250, stun: 1000 },   // range = 2x basic attack
   E: { cd: 12000, dur: 3000, reduce: 0.7, speed: 1.4 },                 // -70% damage taken, +40% speed
   R: { cd: 25000, swords: 8, ring: 130, radius: 55, dmg: 200, slow: 0.7, slowMs: 2000 }
 };
+
+function setAim(p, a) {
+  if (!Number.isFinite(a)) return;
+  p.aim = Math.atan2(Math.sin(a), Math.cos(a));
+  if (Math.abs(Math.cos(p.aim)) > 0.2) p.face = Math.cos(p.aim) > 0 ? 1 : -1;   // sprite faces the cursor side
+}
+const arrows = new Map(); let arrowSeq = 0;
+function spawnArrow(p, dmg) {
+  const id = ++arrowSeq;
+  arrows.set(id, { id, owner: p.id, x: p.x, gy: p.y / 0.8, a: p.aim, dmg, left: ARROW.range });
+  broadcast({ t: 'arrow', id, by: p.id, x: p.x, y: p.y, a: p.aim, spd: ARROW.speed, range: ARROW.range });
+}
+function segDist(px, py, ax, ay, bx, by) {
+  const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy;
+  const k = l2 ? Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / l2)) : 0;
+  return Math.hypot(px - (ax + k * vx), py - (ay + k * vy));
+}
+function endArrow(ar) { arrows.delete(ar.id); broadcast({ t: 'arrowEnd', id: ar.id }); }
+function stepArrows(dt, now) {
+  let any = false;
+  for (const ar of arrows.values()) {
+    const step = Math.min(ARROW.speed * dt, ar.left);
+    const nx = ar.x + Math.cos(ar.a) * step, ngy = ar.gy + Math.sin(ar.a) * step;
+    let hit = null, best = 1e9;
+    if (phase === 'round') for (const t of players.values()) {
+      if (t.id === ar.owner || !t.joined || t.role !== 1) continue;
+      if (segDist(t.x, t.y / 0.8, ar.x, ar.gy, nx, ngy) > ARROW.radius) continue;
+      const d = Math.hypot(t.x - ar.x, t.y / 0.8 - ar.gy);
+      if (d < best) { best = d; hit = t; }
+    }
+    if (hit) { dmgTo(hit, ar.dmg, now); endArrow(ar); any = true; continue; }
+    ar.x = nx; ar.gy = ngy; ar.left -= step;
+    const ex = (ar.x - CX) / RX, ey = (ar.gy * 0.8 - CY) / RY;
+    if (ar.left <= 0 || ex * ex + ey * ey > 1.15) endArrow(ar);
+  }
+  if (any) checkRoundEnd();
+}
 
 function resetCombat(p) {
   p.mh = p.hp = statsOf(p).hp;
@@ -132,7 +173,7 @@ function inCone(a, t, range, span) {                 // ground plane: y is stret
   const dx = t.x - a.x, dy = (t.y - a.y) / 0.8, d = Math.hypot(dx, dy);
   if (d > range + 10) return false;
   if (d < 10) return true;
-  let diff = Math.abs(Math.atan2(dy, dx) - Math.atan2(a.ay, a.ax));
+  let diff = Math.abs(Math.atan2(dy, dx) - a.aim);
   if (diff > Math.PI) diff = 2 * Math.PI - diff;
   return diff <= span / 2;
 }
@@ -141,9 +182,11 @@ const canAct = (p, now) => p.joined && p.role !== 2 && now >= p.stunUntil;
 function doAttack(p) {
   const now = Date.now();
   if (!canAct(p, now) || now < p.atkReady) return;
-  p.atkReady = now + ATK.cd;
-  broadcast({ t: 'fx', type: 'cone', by: p.id, x: p.x, y: p.y, a: Math.atan2(p.ay, p.ax), span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
-  for (const t of targetsOf(p)) if (inCone(p, t, ATK.range, ATK.span)) dmgTo(t, statsOf(p).dmg, now);
+  const st = statsOf(p);
+  p.atkReady = now + st.atkCd;
+  if (p.cls === 'Archer') { spawnArrow(p, st.dmg); return; }
+  broadcast({ t: 'fx', type: 'cone', by: p.id, x: p.x, y: p.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
+  for (const t of targetsOf(p)) if (inCone(p, t, ATK.range, ATK.span)) dmgTo(t, st.dmg, now);
   checkRoundEnd();
 }
 function doSkill(p, k) {
@@ -152,7 +195,7 @@ function doSkill(p, k) {
   const S = KNIGHT[k];
   p['cd' + k] = now + S.cd; send(p.ws, { t: 'cd', k, ms: S.cd });
   if (k === 'Q') {
-    broadcast({ t: 'fx', type: 'cone', by: p.id, x: p.x, y: p.y, a: Math.atan2(p.ay, p.ax), span: S.span, r: S.range, c: 'rgba(255,214,107,.65)', dur: 380 });
+    broadcast({ t: 'fx', type: 'cone', by: p.id, x: p.x, y: p.y, a: p.aim, span: S.span, r: S.range, c: 'rgba(255,214,107,.65)', dur: 380 });
     for (const t of targetsOf(p)) if (inCone(p, t, S.range, S.span)) { dmgTo(t, S.dmg, now); if (t.role === 1) t.stunUntil = now + S.stun; }
   } else if (k === 'E') {
     p.guardUntil = now + S.dur;
@@ -179,7 +222,7 @@ wss.on('connection', ws => {
   const p = { id, ws, name: 'Player' + id, hue: Math.floor(Math.random() * 360),
     x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
     joined: false, cls: '', ready: false, role: 0, inRound: false, lx: 0, ly: 0, deathOrder: 0,
-    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, ax: 1, ay: 0 };
+    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, aim: 0 };
   players.set(id, p);
   pruneChat();
   send(ws, { t: 'hello', id, arena: { CX, CY, RX, RY } });
@@ -196,15 +239,19 @@ wss.on('connection', ws => {
     if (!p.joined) return;
     if (m.t === 'input') {
       p.dx = Math.sign(Number(m.dx) || 0); p.dy = Math.sign(Number(m.dy) || 0);
-      if (p.dx || p.dy) { p.ax = p.dx; p.ay = p.dy; }   // aim = last move direction
+      if (m.a !== undefined) setAim(p, Number(m.a));
+    } else if (m.t === 'aim') {
+      setAim(p, Number(m.a));
     } else if (m.t === 'chat') {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
       if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'atk') {
+      if (m.a !== undefined) setAim(p, Number(m.a));
       doAttack(p);
     } else if (m.t === 'skill') {
+      if (m.a !== undefined) setAim(p, Number(m.a));
       doSkill(p, String(m.k));
     } else if (m.t === 'ready') {
       if (phase !== 'lobby' || joinedList().length < 2) return;     // needs 2+ players
@@ -229,10 +276,11 @@ setInterval(() => {
     let { dx, dy } = p;
     if (p.role === 2 || now < p.stunUntil) dx = dy = 0;
     if (dx || dy) {
-      const l = Math.hypot(dx, dy); dx /= l; dy /= l;
+      const l = Math.hypot(dx, dy), fwd = -dy / l, str = dx / l;       // W = forward, D = strafe right
+      const c = Math.cos(p.aim), sn = Math.sin(p.aim);
+      const wx = fwd * c - str * sn, wy = fwd * sn + str * c;           // move direction on the ground plane
       const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1);
-      p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
-      if (dx) p.face = dx > 0 ? 1 : -1;
+      p.x += wx * spd * dt; p.y += wy * spd * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
     }
@@ -247,11 +295,12 @@ setInterval(() => {
     for (const { p } of dying) killPlayer(p);
     checkRoundEnd();
   }
+  stepArrows(dt, now);
   const list = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
     list.push({ id: p.id, name: p.name, hue: p.hue, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
-      f: p.face, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role,
+      f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role,
       hp: Math.max(0, Math.round(p.hp)), mh: p.mh, su: Math.max(0, p.stunUntil - now), gd: now < p.guardUntil ? 1 : 0, sl: now < p.slowUntil ? 1 : 0 });
   }
   broadcast({ t: 'state', ph: phase, z: phase === 'round' ? z : 1, p: list });
