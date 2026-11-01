@@ -70,7 +70,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 </head><body>
 <canvas id="c"></canvas>
 <div id="hud">Connecting…</div>
-<div id="hint">Move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Chat <kbd>Enter</kbd> · Attack <kbd>Space</kbd> · Skills <kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd></div>
+<div id="hint">Move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Chat <kbd>Enter</kbd> · Attack <kbd>F</kbd> · Skills <kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd></div>
 <input id="chat" maxlength="60" placeholder="Type a message and press Enter" autocomplete="off">
 <button id="classBtn" aria-label="class"></button>
 <button id="readyBtn">0/2</button>
@@ -86,6 +86,7 @@ const cv=document.getElementById('c'), ctx=cv.getContext('2d'), hud=document.get
 const chatEl=document.getElementById('chat'), login=document.getElementById('login');
 const bg=new Image(); bg.src='bg.jpg';
 const spImg=new Image(); spImg.src='player.png';
+const swordImg=new Image();swordImg.src='sword.png';
 const clsImg={};for(const c of ['Knight','Archer','Shielder','Assassin']){const i=new Image();i.src=c.toLowerCase()+'.png';clsImg[c]=i}
 let vw,vh,scale,ox,oy,dpr;
 function resize(){dpr=devicePixelRatio||1;vw=innerWidth;vh=innerHeight;cv.width=vw*dpr;cv.height=vh*dpr;
@@ -159,7 +160,8 @@ function connect(){
   else if(m.t==='tp'){snapNext=true;flash()}
   else if(m.t==='winner'){winnerText='🏆 '+m.name+' wins!';winnerUntil=performance.now()+5000}
   else if(m.t==='cd'){skCd[m.k]=performance.now()+m.ms}
-  else if(m.t==='fx'){m.t0=performance.now();fxs.push(m)}
+  else if(m.t==='fx'){m.t0=performance.now();fxs.push(m);
+   if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
   else if(m.t==='hit'){hits.push({id:m.id,dmg:m.dmg,t0:performance.now()})}
   else if(m.t==='full')hud.textContent='Server full – try again later';
  };
@@ -171,8 +173,9 @@ connect();
 
 // ---- input ----
 const keys={},map={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',ArrowUp:'w',ArrowLeft:'a',ArrowDown:'s',ArrowRight:'d'};
-let lastSent='';
+let lastSent='',aimX=1,aimY=0,atkLocal=0;
 function sendInput(){const dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0),k=dx+','+dy;
+ if(dx||dy){aimX=dx;aimY=dy}
  if(k!==lastSent&&ws.readyState===1){lastSent=k;ws.send(JSON.stringify({t:'input',dx,dy}))}}
 addEventListener('keydown',e=>{
  if(document.activeElement===chatEl){
@@ -182,10 +185,9 @@ addEventListener('keydown',e=>{
  if(csIsOpen()){if(e.key==='Escape')csClose();return}
  if(!joined)return;
  if(e.key==='Enter'){chatEl.style.display='block';chatEl.focus();for(const k in keys)keys[k]=false;sendInput();e.preventDefault();return}
- if(e.code==='Space')e.preventDefault();
  if(!e.repeat){
-  if(e.code==='Space'){tx({t:'atk'});return}
-  if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyR'){tx({t:'skill',k:e.code.slice(3)});return}}
+  if(e.code==='KeyF'){tx({t:'atk'});const n=performance.now();if(n>=atkLocal){atkLocal=n+600;localSwing(100*Math.PI/180,220)}return}
+  if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyR'){tx({t:'skill',k:e.code.slice(3)});if(e.code==='KeyQ'&&performance.now()>=skCd.Q)localSwing(120*Math.PI/180,380);return}}
  if(map[e.code]){keys[map[e.code]]=true;sendInput();e.preventDefault()}});
 addEventListener('keyup',e=>{if(map[e.code]){keys[map[e.code]]=false;sendInput()}});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;sendInput()});
@@ -203,7 +205,7 @@ const CHARS=[
    {icon:'🛡️',name:'Armor',key:'PASSIVE',desc:'Reduces all damage taken by 20%.'},
    {icon:'⚔️',name:'Sword Strike',key:'Q · 8s',desc:'Wide cone slash (2x basic range): 250 dmg and 1s knock-up.'},
    {icon:'💨',name:'Guard Rush',key:'E · 12s',desc:'Take 70% less damage and gain +40% move speed for 3s.'},
-   {icon:'🗡️',name:'Judgment',key:'R · 30s',desc:'8 swords ring you: 200 AoE dmg each, slows enemies 30% for 2s.'}]},
+   {icon:'🗡️',name:'Judgment',key:'R · 25s',desc:'8 swords ring you: 200 AoE dmg each, slows enemies 30% for 2s.'}]},
  {id:'Archer',img:'archer.png',soon:1},
  {id:'Shielder',img:'shielder.png',soon:1},
  {id:'Assassin',img:'assassin.png',soon:1},
@@ -252,6 +254,23 @@ function csIsOpen(){return csScreen.style.display==='flex'}
 const CLS={Knight:['⚔️','#ffb3a7'],Archer:['🏹','#b6f0a8'],Shielder:['🛡️','#a9d4ff'],Assassin:['🗡️','#d9b3ff']};
 
 // ---- rendering ----
+function startSwing(o,a,span,dur){o.sw={t0:performance.now(),dur,a,span}}
+function localSwing(span,dur){const o=others.get(myId);if(o&&myCls==='Knight'&&myRole!==2)startSwing(o,Math.atan2(aimY,aimX),span,dur)}
+function drawSword(o,h,lift){
+ if(!(swordImg.complete&&swordImg.naturalWidth))return;
+ const now=performance.now(),sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,cx=o.x,cy=o.y-h*.5-lift;
+ ctx.save();
+ if(sw&&k<1){                                   // swing: the blade sweeps across the attack cone
+  const base=Math.atan2(.8*Math.sin(sw.a),Math.cos(sw.a)),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2,th=base+(e-.5)*sw.span*1.15;
+  ctx.translate(cx+Math.cos(th)*14,cy+Math.sin(th)*11);ctx.rotate(th+Math.PI/2);
+  ctx.drawImage(swordImg,0,0,7,15,-3.5*PX,-15*PX,7*PX,15*PX);
+ }else{                                         // floating "hand" sword beside the body
+  const side=o.face,bob=Math.sin(now/260+o.x*.05)*3+(o.moving?Math.sin(o.phase*2)*2:0);
+  ctx.translate(cx+side*32,cy+8+bob);ctx.rotate(side*.25);
+  ctx.drawImage(swordImg,0,0,7,15,-3.5*PX,-11*PX,7*PX,15*PX);
+ }
+ ctx.restore();
+}
 function drawPlayer(o,isMe){
  const lift=o.su>0?Math.sin((1-Math.min(1,o.su/1000))*Math.PI)*55:0;
  const s=Math.sin(o.phase),step=o.moving?s:0,bob=o.moving&&Math.abs(s)>.6?1:0;
@@ -266,6 +285,7 @@ function drawPlayer(o,isMe){
  ctx.drawImage(sp,0,12,8,3,x0,yb+12*PX-lL*PX,8*PX,3*PX);
  ctx.drawImage(sp,8,12,7,3,x0+8*PX,yb+12*PX-lR*PX,7*PX,3*PX);
  ctx.restore();
+ if(o.cls==='Knight')drawSword(o,h,lift);
  // name tag
  ctx.font='bold 15px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(10,20,50,.85)';
  ctx.fillStyle=isMe?'#ffe066':'#fff';ctx.strokeText(o.name||'',o.x,yb-8);ctx.fillText(o.name||'',o.x,yb-8);
@@ -291,9 +311,8 @@ function drawFx(t){
     ctx.globalAlpha=(1-k)*.4;ctx.beginPath();ctx.arc(Math.cos(a)*f.r,Math.sin(a)*f.r,f.ar*Math.min(1,.4+k*3),0,6.2832);ctx.fillStyle='#8fd0ff';ctx.fill()}
    ctx.restore();
    for(let n=0;n<f.n;n++){const a=n*Math.PI*2/f.n,drop=Math.max(0,1-k*5)*70,bx=f.x+Math.cos(a)*f.r,by=f.y+Math.sin(a)*f.r*.8-drop;
-    ctx.save();ctx.globalAlpha=Math.min(1,(1-k)*2.2);
-    ctx.fillStyle='#dfe8ff';ctx.beginPath();ctx.moveTo(bx-4,by-34);ctx.lineTo(bx+4,by-34);ctx.lineTo(bx,by);ctx.fill();
-    ctx.fillStyle='#ffd66b';ctx.fillRect(bx-9,by-38,18,5);ctx.fillStyle='#8a5a2b';ctx.fillRect(bx-2,by-50,4,12);ctx.restore()}
+    ctx.save();ctx.globalAlpha=Math.min(1,(1-k)*2.2);ctx.translate(bx,by);ctx.scale(1,-1);   // blade down, hilt up
+    ctx.drawImage(swordImg,0,0,7,15,-3.5*4,-6,7*4,15*4);ctx.restore()}
   }
  }
 }
