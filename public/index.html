@@ -403,7 +403,6 @@ function frame(t){
    if(o.moving){
     const l=Math.hypot(dx,dy),spd=300*(o.gd?1.4:1)*(o.sl?.7:1);
     o.x+=dx/l*spd*dt;o.y+=dy/l*spd*dt*0.8;
-    o.x+=wx*spd*dt;o.y+=wy*spd*dt*0.8;
     const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=Math.hypot(nx,ny);
     if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}
    }
