@@ -124,7 +124,7 @@ setInterval(()=>{const lim=Date.now()-CHAT_TTL;while(logs.length&&logs[0].at<lim
 function flash(){fade.style.transition='none';fade.style.opacity=.9;requestAnimationFrame(()=>requestAnimationFrame(()=>{fade.style.transition='opacity .6s';fade.style.opacity=0}))}
 // ---- networking ----
 let ws,myId=null,joined=false,snapUntil=0,arena=null;
-let phase='lobby',zone=1,myRole=0,snapNext=false,cdEnd=0,winnerText='',winnerUntil=0,myCls='';
+let phase='lobby',roundLeft=0,myRole=0,snapNext=false,cdEnd=0,winnerText='',winnerUntil=0,myCls='';
 const skCd={Q:0,E:0,R:0},fxs=[],hits=[];
 const others=new Map(),bubbles=new Map();
 function connect(){
@@ -135,7 +135,7 @@ function connect(){
   if(m.t==='hello'){myId=m.id;arena=m.arena}
   else if(m.t==='history'){clBody.innerHTML='';logs.length=0;for(const c of m.log)addLog(c.name,c.text,c.sys,c.age)}
   else if(m.t==='state'){
-   phase=m.ph;zone=m.z;
+   phase=m.ph;roundLeft=m.left;
    const seen=new Set();
    for(const p of m.p){
     seen.add(p.id);
@@ -168,7 +168,7 @@ function connect(){
    if(m.by===myId){const i=arrowsC.findIndex(a=>a.local);if(i>=0)arrowsC.splice(i,1)}   // replace the instant local arrow with the server's
    arrowsC.push(m);const o=others.get(m.by);if(o&&m.by!==myId)o.shot=m.t0}
   else if(m.t==='arrowEnd'){const i=arrowsC.findIndex(a=>a.id===m.id);if(i>=0)arrowsC.splice(i,1)}
-  else if(m.t==='winner'){winnerText='🏆 '+m.name+' wins!';winnerUntil=performance.now()+5000}
+  else if(m.t==='winner'){winnerText=m.second?'⏱ 시간 제한! 2nd place: '+m.name:'🏆 '+m.name+' 승리!';winnerUntil=performance.now()+5000}
   else if(m.t==='cd'){skCd[m.k]=performance.now()+m.ms}
   else if(m.t==='fx'){m.t0=performance.now();if(!(m.by===myId&&m.type==='cone'))fxs.push(m);   // my own cones are drawn instantly on key press
    if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
@@ -393,7 +393,7 @@ let bannerTxt='';
 function updateBanner(t){
  let b='';
  if(phase==='countdown'&&cdEnd){const r=Math.ceil((cdEnd-t)/1000);if(r>0)b='⚔️ Round starts in '+r+'…'}
- else if(phase==='round')b=myRole===2?'👁 Spectating':'Stay inside the zone!';
+ eelse if(phase==='round'){const s=Math.ceil(roundLeft/1000);b=(myRole===2?'👁 관전자 수  ':'')+'⏱ '+(s/60|0)+':'+String(s%60).padStart(2,'0')}
  else if(t<winnerUntil)b=winnerText;
  if(b!==bannerTxt){bannerTxt=b;banner.textContent=b;banner.style.display=b?'block':'none'}
 }
