@@ -33,12 +33,11 @@ const broadcast = o => { const m = JSON.stringify(o); for (const p of players.va
 
 // ================= game state =================
 const CHAT_TTL = 10 * 60 * 1000;          // chat logs older than 10 min are deleted
-const GRACE = 5000, SHRINK = 40000;        // round: 5s full arena, then a 40s shrinking safe zone
+const ROUND_MS = 4 * 60 * 1000;           // a round lasts 4 minutes      // round: 5s full arena, then a 40s shrinking safe zone
 const chatLog = [];                        // {name,text,ts,sys}
 let phase = 'lobby', roundStart = 0, deathCounter = 0;
 
 const joinedList = () => [...players.values()].filter(p => p.joined);
-const zoneScale = el => el < GRACE ? 1 : Math.max(0, 1 - (el - GRACE) / SHRINK);
 
 function addChat(e) {
   e.ts = Date.now();
@@ -88,7 +87,7 @@ function checkRoundEnd() {
   if (!winner) winner = [...players.values()].filter(p => p.inRound).sort((a, b) => b.deathOrder - a.deathOrder)[0];
   endRound(winner);
 }
-function endRound(winner) {
+function endRound(winner, tied) {
   phase = 'lobby'; arrows.clear();
   for (const p of players.values()) {
     if (p.inRound) { p.x = p.lx; p.y = p.ly; }      // back to where they were in the lobby
@@ -96,7 +95,8 @@ function endRound(winner) {
     resetCombat(p);
   }
   broadcast({ t: 'tp' });
-  if (winner) { sysChat('🏆 1st place: ' + winner.name); broadcast({ t: 'winner', name: winner.name }); }
+  if (tied && tied.length) { const names = tied.join(', '); sysChat('⏱ Time is up! 2nd place: ' + names); broadcast({ t: 'winner', name: names, second: true }); }
+  else if (winner) { sysChat('🏆 1st place: ' + winner.name); broadcast({ t: 'winner', name: winner.name }); }
   else sysChat('Round ended with no winner.');
 }
 
@@ -258,6 +258,12 @@ function doSkill(p, k, m) {
   checkRoundEnd();
 }
 
+function checkTimeout(now) {
+  if (phase !== 'round' || now - roundStart < ROUND_MS) return;
+  endRound(null, [...players.values()].filter(p => p.role === 1).map(p => p.name));
+}
+
+
 // ================= connections =================
 wss.on('connection', ws => {
   if (players.size >= MAX_PLAYERS) { send(ws, { t: 'full' }); return ws.close(); }
@@ -314,8 +320,6 @@ wss.on('connection', ws => {
 let last = Date.now();
 setInterval(() => {
   const now = Date.now(), dt = Math.min((now - last) / 1000, 0.1); last = now;
-  const z = phase === 'round' ? zoneScale(now - roundStart) : 1;
-  const dying = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
     let { dx, dy } = p;
@@ -330,16 +334,8 @@ setInterval(() => {
     p.moving = !!(dx || dy);
     p.hist.push({ t: now, x: p.x, y: p.y });
     while (p.hist.length && p.hist[0].t < now - HIST_MS) p.hist.shift();
-    if (phase === 'round' && p.role === 1) {
-      const out = z <= 0 || Math.hypot((p.x - CX) / (RX * z), (p.y - CY) / (RY * z)) > 1;
-      if (out) dying.push({ p, d: Math.hypot((p.x - CX) / RX, (p.y - CY) / RY) });
-    }
   }
-  if (dying.length) {                       // farthest from the center dies first
-    dying.sort((a, b) => b.d - a.d);
-    for (const { p } of dying) killPlayer(p);
-    checkRoundEnd();
-  }
+  checkTimeout(now);
   stepArrows(dt, now);
   const list = [];
   for (const p of players.values()) {
@@ -348,7 +344,7 @@ setInterval(() => {
       f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role,
       hp: Math.max(0, Math.round(p.hp)), mh: p.mh, su: Math.max(0, p.stunUntil - now), gd: now < p.guardUntil ? 1 : 0, sl: now < p.slowUntil ? 1 : 0 });
   }
-  broadcast({ t: 'state', ph: phase, z: phase === 'round' ? z : 1, p: list });
+  broadcast({ t: 'state', ph: phase, left: phase === 'round' ? Math.max(0, ROUND_MS - (now - roundStart)) : 0, p: list });
 }, 1000 / TICK);
 
 // Drop dead connections
