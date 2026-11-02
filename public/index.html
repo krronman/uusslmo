@@ -354,7 +354,7 @@ function drawFx(t){
    ctx.restore();
   }else{
    for(let n=0;n<f.n;n++){const a=n*Math.PI*2/f.n;
-    ctx.fillStyle='#8fd0ff';ctx.fill()}ctx.arc(Math.cos(a)*f.r,Math.sin(a)*f.r,f.ar*Math.min(1,.4+k*3),0,6.2832);ctx.fillStyle='#8fd0ff';ctx.fill()}
+    ctx.globalAlpha=(1-k)*.6;ctx.beginPath();ctx.arc(Math.cos(a)*f.r,Math.sin(a)*f.r,f.ar*Math.min(1,.4+k*3),0,6.2832);ctx.fillStyle='#1f4fa0';ctx.fill()}
    ctx.restore();
    for(let n=0;n<f.n;n++){const a=n*Math.PI*2/f.n,drop=Math.max(0,1-k*5)*70,bx=f.x+Math.cos(a)*f.r,by=f.y+Math.sin(a)*f.r*.8-drop;
     ctx.save();ctx.globalAlpha=Math.min(1,(1-k)*2.2);ctx.translate(bx,by);ctx.scale(1,-1);   // blade down, hilt up
