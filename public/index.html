@@ -393,7 +393,7 @@ let bannerTxt='';
 function updateBanner(t){
  let b='';
  if(phase==='countdown'&&cdEnd){const r=Math.ceil((cdEnd-t)/1000);if(r>0)b='⚔️ Round starts in '+r+'…'}
- eelse if(phase==='round'){const s=Math.ceil(roundLeft/1000);b=(myRole===2?'👁 관전자 수  ':'')+'⏱ '+(s/60|0)+':'+String(s%60).padStart(2,'0')}
+ else if(phase==='round'){const s=Math.ceil(roundLeft/1000);b=(myRole===2?'👁 관전자 수  ':'')+'⏱ '+(s/60|0)+':'+String(s%60).padStart(2,'0')}
  else if(t<winnerUntil)b=winnerText;
  if(b!==bannerTxt){bannerTxt=b;banner.textContent=b;banner.style.display=b?'block':'none'}
 }
@@ -429,7 +429,6 @@ function frame(t){
  }
  list.sort((a,b)=>a[1].y-b[1].y);
  const vis=phase==='round'?list.filter(([id,o])=>o.role===1):list;
- if(phase==='round')drawZone();
  drawFx(t);
  for(const [id,o] of vis)drawPlayer(o,id===myId);
  for(const [id,o] of vis){const b=bubbles.get(id);if(b){if(t>b.until)bubbles.delete(id);else drawBubble(o,b)}}
