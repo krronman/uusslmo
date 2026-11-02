@@ -73,7 +73,7 @@ function startRound() {
     const a = -Math.PI / 2 + i * 2 * Math.PI / parts.length;   // evenly spaced on the outer edge
     p.lx = p.x; p.ly = p.y;
     p.x = CX + Math.cos(a) * RX * 0.92; p.y = CY + Math.sin(a) * RY * 0.92;
-    p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0;
+    p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0; p.hist = [];
     resetCombat(p);
   });
   joinedList().forEach(p => { if (!p.inRound) p.role = 2; });  // late joiners spectate
@@ -92,7 +92,7 @@ function endRound(winner) {
   phase = 'lobby'; arrows.clear();
   for (const p of players.values()) {
     if (p.inRound) { p.x = p.lx; p.y = p.ly; }      // back to where they were in the lobby
-    p.role = 0; p.inRound = false; p.ready = false; p.dx = p.dy = 0;
+    p.role = 0; p.inRound = false; p.ready = false; p.dx = p.dy = 0; p.hist = [];
     resetCombat(p);
   }
   broadcast({ t: 'tp' });
@@ -121,32 +121,69 @@ function setAim(p, a) {
   p.aim = Math.atan2(Math.sin(a), Math.cos(a));
   if (Math.abs(Math.cos(p.aim)) > 0.2) p.face = Math.cos(p.aim) > 0 ? 1 : -1;   // sprite faces the cursor side
 }
-const arrows = new Map(); let arrowSeq = 0;
-function spawnArrow(p, dmg) {
-  const id = ++arrowSeq;
-  arrows.set(id, { id, owner: p.id, x: p.x, gy: p.y / 0.8, a: p.aim, dmg, left: ARROW.range });
-  broadcast({ t: 'arrow', id, by: p.id, x: p.x, y: p.y, a: p.aim, spd: ARROW.speed, range: ARROW.range });
+// ---- lag compensation ----
+// The attacker sees targets ~(RTT + smoothing) in the past, and their own character at its predicted position.
+// So hits are judged from the position the attacker reports (within a tolerance) against where targets WERE.
+const HIST_MS = 700, TOL = 110, MAX_LAG = 300, VIEW_DELAY = 50;
+function posAt(t, time) {
+  const h = t.hist;
+  if (!h.length || time >= h[h.length - 1].t) return { x: t.x, y: t.y };
+  if (time <= h[0].t) return { x: h[0].x, y: h[0].y };
+  for (let i = h.length - 1; i > 0; i--) {
+    if (h[i - 1].t <= time) {
+      const a = h[i - 1], b = h[i], f = (time - a.t) / ((b.t - a.t) || 1);
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+    }
+  }
+  return { x: h[0].x, y: h[0].y };
 }
+const lagOf = m => Math.min(MAX_LAG, Math.max(0, (Number(m && m.rt) || 0) + VIEW_DELAY));
+function originOf(p, m) {
+  const x = Number(m && m.x), y = Number(m && m.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || Math.hypot(x - p.x, y - p.y) > TOL) return { x: p.x, y: p.y };
+  return { x, y };
+}
+
+// ---- arrows ----
+const arrows = new Map(); let arrowSeq = 0;
 function segDist(px, py, ax, ay, bx, by) {
   const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy;
   const k = l2 ? Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / l2)) : 0;
   return Math.hypot(px - (ax + k * vx), py - (ay + k * vy));
 }
 function endArrow(ar) { arrows.delete(ar.id); broadcast({ t: 'arrowEnd', id: ar.id }); }
+function moveArrow(ar, step, time) {          // advances the arrow; returns the target it hit (judged at `time`)
+  const nx = ar.x + Math.cos(ar.a) * step, ngy = ar.gy + Math.sin(ar.a) * step;
+  let hit = null, best = 1e9;
+  if (phase === 'round') for (const t of players.values()) {
+    if (t.id === ar.owner || !t.joined || t.role !== 1) continue;
+    const tp = posAt(t, time);
+    if (segDist(tp.x, tp.y / 0.8, ar.x, ar.gy, nx, ngy) > ARROW.radius) continue;
+    const d = Math.hypot(tp.x - ar.x, tp.y / 0.8 - ar.gy);
+    if (d < best) { best = d; hit = t; }
+  }
+  if (!hit) { ar.x = nx; ar.gy = ngy; ar.left -= step; }
+  return hit;
+}
+function spawnArrow(p, dmg, o, lag, now) {
+  const id = ++arrowSeq;
+  const ar = { id, owner: p.id, x: o.x, gy: o.y / 0.8, a: p.aim, dmg, left: ARROW.range };
+  let adv = 0, hit = null;
+  const steps = lag > 0 ? Math.ceil(lag / 33) : 0, stepMs = steps ? lag / steps : 0;
+  for (let i = 1; i <= steps && !hit; i++) {         // replay the time the shooter already "lived" against old target positions
+    const step = Math.min(ARROW.speed * stepMs / 1000, ar.left);
+    hit = moveArrow(ar, step, now - lag + i * stepMs);
+    if (!hit) adv += step;
+  }
+  broadcast({ t: 'arrow', id, by: p.id, x: o.x, y: o.y, a: p.aim, spd: ARROW.speed, range: ARROW.range, adv });
+  if (hit) { dmgTo(hit, dmg, now); broadcast({ t: 'arrowEnd', id }); checkRoundEnd(); return; }
+  arrows.set(id, ar);
+}
 function stepArrows(dt, now) {
   let any = false;
   for (const ar of arrows.values()) {
-    const step = Math.min(ARROW.speed * dt, ar.left);
-    const nx = ar.x + Math.cos(ar.a) * step, ngy = ar.gy + Math.sin(ar.a) * step;
-    let hit = null, best = 1e9;
-    if (phase === 'round') for (const t of players.values()) {
-      if (t.id === ar.owner || !t.joined || t.role !== 1) continue;
-      if (segDist(t.x, t.y / 0.8, ar.x, ar.gy, nx, ngy) > ARROW.radius) continue;
-      const d = Math.hypot(t.x - ar.x, t.y / 0.8 - ar.gy);
-      if (d < best) { best = d; hit = t; }
-    }
+    const hit = moveArrow(ar, Math.min(ARROW.speed * dt, ar.left), now);
     if (hit) { dmgTo(hit, ar.dmg, now); endArrow(ar); any = true; continue; }
-    ar.x = nx; ar.gy = ngy; ar.left -= step;
     const ex = (ar.x - CX) / RX, ey = (ar.gy * 0.8 - CY) / RY;
     if (ar.left <= 0 || ex * ex + ey * ey > 1.15) endArrow(ar);
   }
@@ -169,43 +206,50 @@ function dmgTo(t, amount, now) {
   if (t.hp <= 0) killPlayer(t);
 }
 const targetsOf = p => phase !== 'round' ? [] : [...players.values()].filter(t => t !== p && t.joined && t.role === 1);
-function inCone(a, t, range, span) {                 // ground plane: y is stretched by 1/0.8
-  const dx = t.x - a.x, dy = (t.y - a.y) / 0.8, d = Math.hypot(dx, dy);
+function inConeAt(ox, oy, aim, tx, ty, range, span) {   // ground plane: y is stretched by 1/0.8
+  const dx = tx - ox, dy = (ty - oy) / 0.8, d = Math.hypot(dx, dy);
   if (d > range + 10) return false;
   if (d < 10) return true;
-  let diff = Math.abs(Math.atan2(dy, dx) - a.aim);
+  let diff = Math.abs(Math.atan2(dy, dx) - aim);
   if (diff > Math.PI) diff = 2 * Math.PI - diff;
   return diff <= span / 2;
 }
 const canAct = (p, now) => p.joined && p.role !== 2 && now >= p.stunUntil;
 
-function doAttack(p) {
+function doAttack(p, m) {
   const now = Date.now();
   if (!canAct(p, now) || now < p.atkReady) return;
-  const st = statsOf(p);
+  const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd;
-  if (p.cls === 'Archer') { spawnArrow(p, st.dmg); return; }
-  broadcast({ t: 'fx', type: 'cone', by: p.id, x: p.x, y: p.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
-  for (const t of targetsOf(p)) if (inCone(p, t, ATK.range, ATK.span)) dmgTo(t, st.dmg, now);
+  if (p.cls === 'Archer') { spawnArrow(p, st.dmg, o, lag, now); return; }
+  broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
+  for (const t of targetsOf(p)) {
+    const tp = posAt(t, now - lag);
+    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span)) dmgTo(t, st.dmg, now);
+  }
   checkRoundEnd();
 }
-function doSkill(p, k) {
+function doSkill(p, k, m) {
   const now = Date.now();
   if (p.cls !== 'Knight' || !KNIGHT[k] || !canAct(p, now) || now < p['cd' + k]) return;
-  const S = KNIGHT[k];
+  const S = KNIGHT[k], o = originOf(p, m), lag = lagOf(m);
   p['cd' + k] = now + S.cd; send(p.ws, { t: 'cd', k, ms: S.cd });
   if (k === 'Q') {
-    broadcast({ t: 'fx', type: 'cone', by: p.id, x: p.x, y: p.y, a: p.aim, span: S.span, r: S.range, c: 'rgba(255,214,107,.65)', dur: 380 });
-    for (const t of targetsOf(p)) if (inCone(p, t, S.range, S.span)) { dmgTo(t, S.dmg, now); if (t.role === 1) t.stunUntil = now + S.stun; }
+    broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: S.span, r: S.range, c: 'rgba(255,214,107,.65)', dur: 380 });
+    for (const t of targetsOf(p)) {
+      const tp = posAt(t, now - lag);
+      if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, S.range, S.span)) { dmgTo(t, S.dmg, now); if (t.role === 1) t.stunUntil = now + S.stun; }
+    }
   } else if (k === 'E') {
     p.guardUntil = now + S.dur;
   } else {
-    broadcast({ t: 'fx', type: 'swords', x: p.x, y: p.y, r: S.ring, ar: S.radius, n: S.swords, dur: 900 });
-    const gy = p.y / 0.8;
+    broadcast({ t: 'fx', type: 'swords', x: o.x, y: o.y, r: S.ring, ar: S.radius, n: S.swords, dur: 900 });
+    const gy = o.y / 0.8;
     for (let n = 0; n < S.swords; n++) {
-      const a = n * 2 * Math.PI / S.swords, sx = p.x + Math.cos(a) * S.ring, sy = gy + Math.sin(a) * S.ring;
+      const a = n * 2 * Math.PI / S.swords, sx = o.x + Math.cos(a) * S.ring, sy = gy + Math.sin(a) * S.ring;
       for (const t of targetsOf(p)) {
-        if (t.role !== 1 || Math.hypot(t.x - sx, t.y / 0.8 - sy) > S.radius + 10) continue;
+        const tp = posAt(t, now - lag);
+        if (t.role !== 1 || Math.hypot(tp.x - sx, tp.y / 0.8 - sy) > S.radius + 10) continue;
         dmgTo(t, S.dmg, now);
         if (t.role === 1) t.slowUntil = now + S.slowMs;
       }
@@ -222,7 +266,7 @@ wss.on('connection', ws => {
   const p = { id, ws, name: 'Player' + id, hue: Math.floor(Math.random() * 360),
     x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
     joined: false, cls: '', ready: false, role: 0, inRound: false, lx: 0, ly: 0, deathOrder: 0,
-    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, aim: 0 };
+    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, aim: 0, hist: [] };
   players.set(id, p);
   pruneChat();
   send(ws, { t: 'hello', id, arena: { CX, CY, RX, RY } });
@@ -236,6 +280,7 @@ wss.on('connection', ws => {
       if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }   // joined mid-round -> spectate
       return;
     }
+    if (m.t === 'ping') { send(ws, { t: 'pong', c: m.c }); return; }
     if (!p.joined) return;
     if (m.t === 'input') {
       p.dx = Math.sign(Number(m.dx) || 0); p.dy = Math.sign(Number(m.dy) || 0);
@@ -249,10 +294,10 @@ wss.on('connection', ws => {
       if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'atk') {
       if (m.a !== undefined) setAim(p, Number(m.a));
-      doAttack(p);
+      doAttack(p, m);
     } else if (m.t === 'skill') {
       if (m.a !== undefined) setAim(p, Number(m.a));
-      doSkill(p, String(m.k));
+      doSkill(p, String(m.k), m);
     } else if (m.t === 'ready') {
       if (phase !== 'lobby' || joinedList().length < 2) return;     // needs 2+ players
       p.ready = !p.ready; checkReady();
@@ -283,6 +328,8 @@ setInterval(() => {
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
     }
     p.moving = !!(dx || dy);
+    p.hist.push({ t: now, x: p.x, y: p.y });
+    while (p.hist.length && p.hist[0].t < now - HIST_MS) p.hist.shift();
     if (phase === 'round' && p.role === 1) {
       const out = z <= 0 || Math.hypot((p.x - CX) / (RX * z), (p.y - CY) / (RY * z)) > 1;
       if (out) dying.push({ p, d: Math.hypot((p.x - CX) / RX, (p.y - CY) / RY) });
