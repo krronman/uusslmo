@@ -33,7 +33,7 @@ const broadcast = o => { const m = JSON.stringify(o); for (const p of players.va
 
 // ================= game state =================
 const CHAT_TTL = 10 * 60 * 1000;          // chat logs older than 10 min are deleted
-const ROUND_MS = 4 * 60 * 1000;           // a round lasts 4 minutes      // round: 5s full arena, then a 40s shrinking safe zone
+const ROUND_MS = 4 * 60 * 1000;           // a round lasts 4 minutes
 const chatLog = [];                        // {name,text,ts,sys}
 let phase = 'lobby', roundStart = 0, deathCounter = 0;
 
@@ -260,9 +260,8 @@ function doSkill(p, k, m) {
 
 function checkTimeout(now) {
   if (phase !== 'round' || now - roundStart < ROUND_MS) return;
-  endRound(null, [...players.values()].filter(p => p.role === 1).map(p => p.name));
+  endRound(null, [...players.values()].filter(p => p.role === 1).map(p => p.name));   // everyone still alive shares 2nd place
 }
-
 
 // ================= connections =================
 wss.on('connection', ws => {
