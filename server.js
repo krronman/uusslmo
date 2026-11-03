@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
@@ -104,7 +105,7 @@ function endRound(winner, tied) {
 const RAD = Math.PI / 180;
 const BASE = { hp: 1000, dmg: 150, reduce: 0, atkCd: 600 };                          // every class without custom stats
 const CLASS_STATS = {
-  Knight: { hp: 1000, dmg: 150, reduce: 0.2, atkCd: 700 },   // passive [Armor]: -20% damage taken; attack every 0.7s
+  Knight: { hp: 1200, dmg: 150, reduce: 0.2, atkCd: 700 },   // passive [Armor]: -20% damage taken; attack every 0.7s
   Archer: { hp: 1000, dmg: 180, reduce: 0, atkCd: 800 }     // shoots an arrow every 0.8s for 180
 };
 const statsOf = p => CLASS_STATS[p.cls] || BASE;
@@ -119,7 +120,7 @@ const ATK = { range: 75, span: 100 * RAD };                            // melee 
 const KNIGHT = {
   Q: { cd: 8000, range: 150, span: 120 * RAD, dmg: 250, stun: 1000 },   // range = 2x basic attack
   E: { cd: 12000, dur: 3000, reduce: 0.7, speed: 1.4 },                 // -70% damage taken, +40% speed
-  R: { cd: 25000, swords: 8, ring: 130, radius: 55, dmg: 200, slow: 0.7, slowMs: 2000 }
+  R: { cd: 25000, swords: 8, ring: 195, radius: 82.5, dmg: 200, slow: 0.7, slowMs: 2000 }   // ring & per-sword radius = 1.5x (was 130 / 55)
 };
 
 function setAim(p, a) {
@@ -319,8 +320,111 @@ function checkTimeout(now) {
   endRound(null, [...players.values()].filter(p => p.role === 1).map(p => p.name));   // everyone still alive shares 2nd place
 }
 
+// ================= accounts (Upstash Redis REST; in-memory fallback for local testing only) =================
+const UP_URL = process.env.UPSTASH_REDIS_REST_URL, UP_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const KEY = 'mpvp:', SESSION_TTL = 30 * 24 * 3600, LOCK_FAILS = 8, LOCK_SEC = 600;
+async function upstash(...cmd) {
+  const r = await fetch(UP_URL, { method: 'POST', headers: { Authorization: 'Bearer ' + UP_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(cmd), signal: AbortSignal.timeout(8000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error('upstash: ' + (j.error || r.status));
+  return j.result;
+}
+const mem = new Map();
+const memGet = k => { const e = mem.get(k); if (!e) return null; if (e.exp && e.exp < Date.now()) { mem.delete(k); return null; } return e; };
+const db = (UP_URL && UP_TOKEN) ? {
+  get: k => upstash('GET', KEY + k),
+  setnx: async (k, v) => (await upstash('SET', KEY + k, v, 'NX')) === 'OK',
+  setex: (k, sec, v) => upstash('SET', KEY + k, v, 'EX', sec),
+  del: k => upstash('DEL', KEY + k),
+  incr: k => upstash('INCR', KEY + k),
+  expire: (k, sec) => upstash('EXPIRE', KEY + k, sec)
+} : {
+  get: async k => { const e = memGet(k); return e ? e.v : null; },
+  setnx: async (k, v) => { if (memGet(k)) return false; mem.set(k, { v }); return true; },
+  setex: async (k, sec, v) => { mem.set(k, { v, exp: Date.now() + sec * 1000 }); },
+  del: async k => { mem.delete(k); },
+  incr: async k => { const e = memGet(k), n = (e ? Number(e.v) : 0) + 1; mem.set(k, { v: String(n), exp: e && e.exp }); return n; },
+  expire: async (k, sec) => { const e = memGet(k); if (e) e.exp = Date.now() + sec * 1000; }
+};
+console.log((UP_URL && UP_TOKEN) ? 'Accounts: Upstash Redis' : 'WARNING: UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set - accounts live in memory and are LOST on restart');
+
+const scryptHex = (pw, salt) => new Promise((res, rej) => crypto.scrypt(pw, salt, 64, (e, k) => e ? rej(e) : res(k.toString('hex'))));
+const sha = s => crypto.createHash('sha256').update(s).digest('hex');
+const safeEq = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
+const DUMMY_SALT = '0'.repeat(32);
+const normId = s => { s = String(s || '').trim().toLowerCase(); return /^[a-z0-9_]{4,16}$/.test(s) ? s : ''; };
+const isToken = t => typeof t === 'string' && /^[0-9a-f]{64}$/.test(t);
+
+const rates = new Map();                                   // per-IP limits (in memory): key -> {n, t}
+function rateOk(key, max, windowMs) {
+  const now = Date.now(); let h = rates.get(key);
+  if (!h || now - h.t > windowMs) { h = { n: 0, t: now }; rates.set(key, h); }
+  return ++h.n <= max;
+}
+setInterval(() => { const lim = Date.now() - 3600 * 1000; for (const [k, h] of rates) if (h.t < lim) rates.delete(k); }, 60000);
+
+const authFail = (p, err, extra) => send(p.ws, Object.assign({ t: 'auth', ok: 0, err }, extra));
+function kickOld(userId, except) {                          // one live session per account: the newest login wins
+  for (const q of [...players.values()]) if (q !== except && q.user === userId) {
+    q.user = null; q.joined = false; send(q.ws, { t: 'kicked' }); try { q.ws.close(); } catch {}
+  }
+}
+function loginOk(p, rec, token) {
+  kickOld(rec.id, p);
+  p.user = rec.id; p.name = rec.nick;
+  if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }   // joined mid-round -> spectate
+  send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token });
+}
+async function newSession(id) {
+  const token = crypto.randomBytes(32).toString('hex');
+  await db.setex('sess:' + sha(token), SESSION_TTL, id);   // only a hash of the token is stored
+  return token;
+}
+async function handleAuth(p, m, ip) {
+  if (p.user || p.authBusy) return;
+  p.authBusy = true;
+  try {
+    if (!rateOk('a:' + ip, 40, 60000)) return authFail(p, '시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.');
+    if (m.t === 'resume') {                                  // automatic login with the saved session token
+      const tk = m.token;
+      const id = isToken(tk) ? await db.get('sess:' + sha(tk)) : null;
+      const raw = id ? await db.get('user:' + id) : null;
+      if (!raw) return authFail(p, '', { resume: 1 });
+      await db.expire('sess:' + sha(tk), SESSION_TTL);
+      return loginOk(p, JSON.parse(raw), tk);
+    }
+    const id = normId(m.id), pw = String(m.pw || '');
+    if (!id) return authFail(p, '아이디는 영문 소문자·숫자·_ 4~16자로 입력해 주세요.');
+    if (pw.length < 6 || pw.length > 64) return authFail(p, '비밀번호는 6~64자로 입력해 주세요.');
+    if (m.t === 'signup') {
+      const nick = clean(m.name, 14);
+      if (nick.length < 2) return authFail(p, '닉네임은 2~14자로 입력해 주세요.');
+      if (nick.toLowerCase() === 'system') return authFail(p, '사용할 수 없는 닉네임입니다.');
+      if (!rateOk('s:' + ip, 30, 3600 * 1000)) return authFail(p, '가입 시도가 너무 많습니다. 나중에 다시 시도해 주세요.');
+      const salt = crypto.randomBytes(16).toString('hex');
+      const rec = { id, nick, salt, hash: await scryptHex(pw, salt), created: Date.now() };
+      if (!await db.setnx('user:' + id, JSON.stringify(rec))) return authFail(p, '이미 사용 중인 아이디입니다.');
+      if (!await db.setnx('nick:' + nick.toLowerCase(), id)) { await db.del('user:' + id); return authFail(p, '이미 사용 중인 닉네임입니다.'); }
+      return loginOk(p, rec, await newSession(id));
+    }
+    // login
+    const fk = 'fail:' + id;
+    if ((Number(await db.get(fk)) || 0) >= LOCK_FAILS) return authFail(p, '로그인 시도가 너무 많습니다. 10분 후 다시 시도해 주세요.');
+    const raw = await db.get('user:' + id), rec = raw && JSON.parse(raw);
+    const h = await scryptHex(pw, rec ? rec.salt : DUMMY_SALT);   // same work whether or not the account exists
+    if (!rec || !safeEq(h, rec.hash)) {
+      if (await db.incr(fk) === 1) await db.expire(fk, LOCK_SEC);
+      return authFail(p, '아이디 또는 비밀번호가 올바르지 않습니다.');
+    }
+    await db.del(fk);
+    return loginOk(p, rec, await newSession(id));
+  } finally { p.authBusy = false; }
+}
+
 // ================= connections =================
-wss.on('connection', ws => {
+wss.on('connection', (ws, req) => {
+  const ip = String((req && req.headers && req.headers['x-forwarded-for']) || (req && req.socket && req.socket.remoteAddress) || '?').split(',')[0].trim();
   if (players.size >= MAX_PLAYERS) { send(ws, { t: 'full' }); return ws.close(); }
   const id = nextId++;
   const a = Math.random() * Math.PI * 2, r = Math.random() * 0.5;
@@ -336,9 +440,14 @@ wss.on('connection', ws => {
   ws.on('pong', () => { p.alive = true; });
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
-    if (m.t === 'join') {
-      p.name = clean(m.name, 14) || p.name;
-      if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }   // joined mid-round -> spectate
+    if (!m || typeof m !== 'object') return;
+    if (m.t === 'signup' || m.t === 'login' || m.t === 'resume') {
+      handleAuth(p, m, ip).catch(err => { console.error('auth error:', err.message); authFail(p, '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'); });
+      return;
+    }
+    if (m.t === 'logout') {
+      if (isToken(m.token)) db.del('sess:' + sha(m.token)).catch(() => {});
+      try { ws.close(); } catch {}
       return;
     }
     if (m.t === 'ping') { send(ws, { t: 'pong', c: m.c }); return; }
