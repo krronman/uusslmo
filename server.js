@@ -109,16 +109,17 @@ const CLASS_STATS = {
   Archer: { hp: 1000, dmg: 180, reduce: 0, atkCd: 800 }     // shoots an arrow every 0.8s for 180
 };
 const statsOf = p => CLASS_STATS[p.cls] || BASE;
+const MAP = 1254;                                          // background image size (the whole map)
 const ARROW = { speed: 800, range: 700, radius: 28 };      // ground px/s, ground px, hit radius
 const ARCHER = {
   charge: { maxMs: 2000, min: 0.5, max: 1.5 },                          // passive [Bowstring]: dmg & speed 50% -> 150% over 0-2s of charge
   Q: { cd: 11000, arrows: 7, step: 10 * RAD, dmg: 130, invis: 1500 },   // [Arrow Rain]: 7-arrow fan + 1.5s invisibility
   E: { cd: 15000, dur: 4000 },                                          // [Haste]: 4s of instant (no-charge) 100% arrows
-  R: { cd: 25000, dmg: 380, stun: 1000, scale: 8, radius: 90, range: 1000 }   // [Dragon Slayer]: 8x piercing arrow
+  R: { cd: 25000, dmg: 380, stun: 1000, scale: 8, radius: 90 }   // [Dragon Slayer]: 8x piercing arrow that flies until it is completely off the map
 };
-const ATK = { range: 75, span: 100 * RAD };                            // melee basic attack (F)
+const ATK = { range: 112.5, span: 100 * RAD };                         // melee basic attack (F) - every non-Archer class (75 x 1.5)
 const KNIGHT = {
-  Q: { cd: 8000, range: 150, span: 120 * RAD, dmg: 250, stun: 1000 },   // range = 2x basic attack
+  Q: { cd: 8000, range: 225, span: 120 * RAD, dmg: 250, stun: 1000 },   // range = 2x basic attack (150 x 1.5)
   E: { cd: 12000, dur: 3000, reduce: 0.7, speed: 1.4 },                 // -70% damage taken, +40% speed
   R: { cd: 25000, swords: 8, ring: 195, radius: 82.5, dmg: 200, slow: 0.7, slowMs: 2000 }   // ring & per-sword radius = 1.5x (was 130 / 55)
 };
@@ -158,6 +159,16 @@ function segDist(px, py, ax, ay, bx, by) {
   const k = l2 ? Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / l2)) : 0;
   return Math.hypot(px - (ax + k * vx), py - (ay + k * vy));
 }
+function offMapRange(x, y, a, sc) {      // ground distance an arrow must fly until its whole sprite is outside the map image
+  const L = 14 * 5 * sc, half = 3 * 5 * sc / 2;           // sprite length / half thickness on screen (PX = 5), same maths as the client
+  const th = Math.atan2(0.8 * Math.sin(a), Math.cos(a)), ux = Math.cos(th), uy = Math.sin(th), nx = -uy, ny = ux;
+  for (let d = 0; d < 4000; d += 10) {
+    const tx = x + Math.cos(a) * (d + 28), ty = y + Math.sin(a) * (d + 28) * 0.8 - 30;   // arrow tip on screen
+    const cs = [[0, 1], [L, 1], [0, -1], [L, -1]].map(([l, sd]) => [tx - ux * l + nx * sd * half, ty - uy * l + ny * sd * half]);
+    if (cs.every(c => c[0] < 0) || cs.every(c => c[0] > MAP) || cs.every(c => c[1] < 0) || cs.every(c => c[1] > MAP)) return d;
+  }
+  return 4000;
+}
 function endArrow(ar) { arrows.delete(ar.id); broadcast({ t: 'arrowEnd', id: ar.id }); }
 function moveArrow(ar, step, time) {          // advances the arrow; returns the targets it hit (judged at `time`)
   const nx = ar.x + Math.cos(ar.a) * step, ngy = ar.gy + Math.sin(ar.a) * step;
@@ -186,7 +197,7 @@ function arrowHit(ar, t, now) {
 function spawnArrow(p, o, lag, now, spec) {
   const id = ++arrowSeq;
   const ar = { id, owner: p.id, x: o.x, gy: o.y / 0.8, a: spec.a, dmg: spec.dmg, spd: spec.spd, radius: spec.radius || ARROW.radius,
-    pierce: !!spec.pierce, stun: spec.stun || 0, hitIds: new Set(), left: spec.range || ARROW.range };
+    pierce: !!spec.pierce, noArena: !!spec.noArena, stun: spec.stun || 0, hitIds: new Set(), left: spec.range || ARROW.range };
   let adv = 0, ended = false;
   const pending = [];
   const steps = lag > 0 ? Math.ceil(lag / 33) : 0, stepMs = steps ? lag / steps : 0;
@@ -208,7 +219,7 @@ function stepArrows(dt, now) {
     for (const t of hits) { arrowHit(ar, t, now); any = true; }
     if (!ar.pierce && hits.length) { endArrow(ar); continue; }
     const ex = (ar.x - CX) / RX, ey = (ar.gy * 0.8 - CY) / RY;
-    if (ar.left <= 0 || ex * ex + ey * ey > 1.15) endArrow(ar);
+    if (ar.left <= 0 || (!ar.noArena && ex * ex + ey * ey > 1.15)) endArrow(ar);
   }
   if (any) checkRoundEnd();
 }
@@ -285,7 +296,7 @@ function archerSkill(p, k, m, now) {
   } else if (k === 'E') {
     p.hasteUntil = now + S.dur; p.chargeStart = 0;
   } else {
-    spawnArrow(p, o, lag, now, { a: p.aim, dmg: S.dmg, spd: ARROW.speed, range: S.range, radius: S.radius, pierce: true, stun: S.stun, sc: S.scale, kind: 'R' });
+    spawnArrow(p, o, lag, now, { a: p.aim, dmg: S.dmg, spd: ARROW.speed, range: offMapRange(o.x, o.y, p.aim, S.scale), noArena: true, radius: S.radius, pierce: true, stun: S.stun, sc: S.scale, kind: 'R' });
   }
 }
 function knightSkill(p, k, m, now) {
@@ -334,6 +345,7 @@ const mem = new Map();
 const memGet = k => { const e = mem.get(k); if (!e) return null; if (e.exp && e.exp < Date.now()) { mem.delete(k); return null; } return e; };
 const db = (UP_URL && UP_TOKEN) ? {
   get: k => upstash('GET', KEY + k),
+  set: (k, v) => upstash('SET', KEY + k, v),
   setnx: async (k, v) => (await upstash('SET', KEY + k, v, 'NX')) === 'OK',
   setex: (k, sec, v) => upstash('SET', KEY + k, v, 'EX', sec),
   del: k => upstash('DEL', KEY + k),
@@ -341,6 +353,7 @@ const db = (UP_URL && UP_TOKEN) ? {
   expire: (k, sec) => upstash('EXPIRE', KEY + k, sec)
 } : {
   get: async k => { const e = memGet(k); return e ? e.v : null; },
+  set: async (k, v) => { mem.set(k, { v }); },
   setnx: async (k, v) => { if (memGet(k)) return false; mem.set(k, { v }); return true; },
   setex: async (k, sec, v) => { mem.set(k, { v, exp: Date.now() + sec * 1000 }); },
   del: async k => { mem.delete(k); },
@@ -370,11 +383,72 @@ function kickOld(userId, except) {                          // one live session 
     q.user = null; q.joined = false; send(q.ws, { t: 'kicked' }); try { q.ws.close(); } catch {}
   }
 }
-function loginOk(p, rec, token) {
+// ---- titles (granted by the admin account, equipped by the owner; stored in Upstash) ----
+const ADMIN_ID = 'admin', MAX_TITLES = 15;
+const isHex = c => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c);
+async function loadTitles(id) {
+  try {
+    const raw = await db.get('titles:' + id); let list = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(list)) list = [];
+    const eq = await db.get('eqtitle:' + id);
+    return { list, eq: list.some(t => t.id === eq) ? eq : null };
+  } catch (e) { console.error('titles load failed:', e.message); return { list: [], eq: null }; }
+}
+const titleOf = p => { const t = p.titles.find(t => t.id === p.eq); return t ? { x: t.text, c: t.color } : null; };
+const pushTitle = p => broadcast({ t: 'ttl', id: p.id, tt: titleOf(p) || 0 });       // everybody learns what p wears
+const sendTinfo = p => send(p.ws, { t: 'tinfo', list: p.titles, eq: p.eq });
+async function equipTitle(p, id) {
+  const now = Date.now();
+  if (!p.user) return;
+  if (now - p.lastEquip < 300 || (id !== null && (typeof id !== 'string' || !p.titles.some(t => t.id === id)))) return sendTinfo(p);   // refused: resync the client
+  p.lastEquip = now;
+  if (id) await db.set('eqtitle:' + p.user, id); else await db.del('eqtitle:' + p.user);
+  p.eq = id; sendTinfo(p); pushTitle(p);
+}
+let admLock = Promise.resolve();                           // admin edits run one after another
+const adminTitle = (p, m) => { const run = admLock.then(() => adminTitleRun(p, m)); admLock = run.catch(() => {}); return run; };
+async function adminTitleRun(p, m) {
+  const reply = (ok, msg, extra) => send(p.ws, Object.assign({ t: 'tadmin', ok, msg }, extra));
+  const target = normId(m.target);
+  if (!target) return reply(0, '대상 아이디가 올바르지 않습니다.');
+  const raw = await db.get('user:' + target);
+  if (!raw) return reply(0, '존재하지 않는 아이디입니다.');
+  const rec = JSON.parse(raw), lraw = await db.get('titles:' + target);
+  let list = lraw ? JSON.parse(lraw) : [], msg = '조회했습니다.';
+  if (m.t === 'tgrant') {
+    const text = clean(m.text, 12), color = isHex(m.color) ? m.color.toLowerCase() : null;
+    if (!text) return reply(0, '칭호를 입력해 주세요.');
+    if (!color) return reply(0, '색상이 올바르지 않습니다.');
+    if (list.length >= MAX_TITLES) return reply(0, '칭호는 최대 ' + MAX_TITLES + '개까지 부여할 수 있습니다.');
+    list.push({ id: crypto.randomBytes(4).toString('hex'), text, color });
+    await db.set('titles:' + target, JSON.stringify(list));
+    msg = '[' + text + '] 칭호를 ' + rec.nick + '님에게 부여했습니다.';
+  } else if (m.t === 'trevoke') {
+    const i = list.findIndex(t => t.id === m.id);
+    if (i < 0) return reply(0, '해당 칭호가 없습니다.');
+    const [gone] = list.splice(i, 1);
+    await db.set('titles:' + target, JSON.stringify(list));
+    if (await db.get('eqtitle:' + target) === gone.id) await db.del('eqtitle:' + target);
+    msg = '[' + gone.text + '] 칭호를 삭제했습니다.';
+  }
+  for (const q of players.values()) if (q.user === target) {   // update the target right away if they are online
+    q.titles = list; if (!list.some(t => t.id === q.eq)) q.eq = null;
+    sendTinfo(q); pushTitle(q);
+  }
+  reply(1, msg, { target, nick: rec.nick, list });
+}
+async function loginOk(p, rec, token) {
   kickOld(rec.id, p);
   p.user = rec.id; p.name = rec.nick;
+  const ti = await loadTitles(rec.id);
+  p.titles = ti.list; p.eq = ti.eq;
   if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }   // joined mid-round -> spectate
-  send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token });
+  send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token, admin: rec.id === ADMIN_ID ? 1 : 0 });
+  sendTinfo(p);
+  const all = {};                                          // what everybody else is wearing
+  for (const q of players.values()) if (q.joined && q !== p) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
+  send(p.ws, { t: 'ttls', m: all });
+  if (titleOf(p)) pushTitle(p);
 }
 async function newSession(id) {
   const token = crypto.randomBytes(32).toString('hex');
@@ -392,7 +466,7 @@ async function handleAuth(p, m, ip) {
       const raw = id ? await db.get('user:' + id) : null;
       if (!raw) return authFail(p, '', { resume: 1 });
       await db.expire('sess:' + sha(tk), SESSION_TTL);
-      return loginOk(p, JSON.parse(raw), tk);
+      return await loginOk(p, JSON.parse(raw), tk);
     }
     const id = normId(m.id), pw = String(m.pw || '');
     if (!id) return authFail(p, '아이디는 영문 소문자·숫자·_ 4~16자로 입력해 주세요.');
@@ -406,7 +480,7 @@ async function handleAuth(p, m, ip) {
       const rec = { id, nick, salt, hash: await scryptHex(pw, salt), created: Date.now() };
       if (!await db.setnx('user:' + id, JSON.stringify(rec))) return authFail(p, '이미 사용 중인 아이디입니다.');
       if (!await db.setnx('nick:' + nick.toLowerCase(), id)) { await db.del('user:' + id); return authFail(p, '이미 사용 중인 닉네임입니다.'); }
-      return loginOk(p, rec, await newSession(id));
+      return await loginOk(p, rec, await newSession(id));
     }
     // login
     const fk = 'fail:' + id;
@@ -418,7 +492,7 @@ async function handleAuth(p, m, ip) {
       return authFail(p, '아이디 또는 비밀번호가 올바르지 않습니다.');
     }
     await db.del(fk);
-    return loginOk(p, rec, await newSession(id));
+    return await loginOk(p, rec, await newSession(id));
   } finally { p.authBusy = false; }
 }
 
@@ -431,7 +505,7 @@ wss.on('connection', (ws, req) => {
   const p = { id, ws, name: 'Player' + id, hue: Math.floor(Math.random() * 360),
     x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
     joined: false, cls: '', ready: false, role: 0, inRound: false, lx: 0, ly: 0, deathOrder: 0,
-    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, aim: 0, hist: [] };
+    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
   players.set(id, p);
   pruneChat();
   send(ws, { t: 'hello', id, arena: { CX, CY, RX, RY } });
@@ -462,6 +536,10 @@ wss.on('connection', (ws, req) => {
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
       if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+    } else if (m.t === 'tequip') {
+      equipTitle(p, m.id === null ? null : m.id).catch(e => console.error('equip:', e.message));
+    } else if (m.t === 'tgrant' || m.t === 'tlist' || m.t === 'trevoke') {
+      if (p.user === ADMIN_ID) adminTitle(p, m).catch(e => { console.error('admin title:', e.message); send(ws, { t: 'tadmin', ok: 0, msg: '서버 오류가 발생했습니다.' }); });
     } else if (m.t === 'charge') {                       // Archer starts pulling the bowstring
       const now = Date.now();
       if (p.cls === 'Archer' && canAct(p, now) && now >= p.hasteUntil && now >= p.atkReady - 60) p.chargeStart = now;
