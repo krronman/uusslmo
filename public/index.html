@@ -28,6 +28,8 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #readyBtn.on{color:#9dffb0;filter:drop-shadow(0 0 8px #5dff8a) brightness(1.08)}
 #classBtn{position:fixed;right:12px;top:50%;margin-top:-34px;width:150px;height:69px;padding:0;border:0;cursor:pointer;background:url(class-btn-rpg.png) 0 0/150px 69px no-repeat;z-index:4}
 #classBtn:hover{filter:brightness(1.12)}
+#titleBtn{position:fixed;right:12px;top:50%;margin-top:42px;width:150px;height:65px;padding:0;border:0;cursor:pointer;background:url(title-btn.png) 0 0/150px 65px no-repeat;z-index:4}
+#titleBtn:hover{filter:brightness(1.12)}
 #chatLog{position:fixed;left:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));width:min(300px,60vw);background:rgba(20,30,60,.72);color:#fff;border:2px solid #fff;border-radius:10px;font-size:13px;z-index:3;overflow:hidden}
 #clHead{padding:6px 10px;font-weight:700;cursor:pointer;background:rgba(255,255,255,.12);user-select:none;display:flex;justify-content:space-between}
 #clBody{height:170px;overflow-y:auto;padding:6px 10px;line-height:1.35;word-break:break-word}
@@ -68,6 +70,31 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #csOk:disabled{cursor:default;color:#c9c4ff;opacity:.75}
 #csClose{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:14px;width:36px;height:36px;border-radius:50%;border:2px solid #fff;background:rgba(20,30,60,.8);color:#fff;font-size:16px;cursor:pointer;z-index:8;display:none}
 #csScreen[style*="flex"] #csClose{display:block}
+#ttScreen,#admScreen{position:fixed;inset:0;background:rgba(10,12,30,.74);display:none;align-items:center;justify-content:center;z-index:7}
+#ttBox{position:relative;width:min(92vw,calc(88vh * 1000 / 793));aspect-ratio:1000/793;--u:1px;font-family:'Galmuri11','Press Start 2P','DotGothic16',monospace;color:#e9e6ff}
+#ttBg{position:absolute;inset:0;width:100%;height:100%;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none}
+.ttSlot{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;background:none;border:0;padding:calc(var(--u)*10);cursor:pointer;font-family:inherit;font-size:calc(var(--u)*19);line-height:1.25;word-break:break-all;overflow:hidden;border-radius:calc(var(--u)*8);text-shadow:calc(var(--u)*2) calc(var(--u)*2) 0 #0b0b25}
+.ttSlot:hover:not(.empty){background:rgba(255,255,255,.08)}
+.ttSlot.empty{cursor:default}
+.ttSlot.sel{outline:calc(var(--u)*4) solid #ffd66b;outline-offset:calc(var(--u)*-4);background:rgba(255,214,107,.13);box-shadow:0 0 calc(var(--u)*18) rgba(255,214,107,.5)}
+.xBtn{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:14px;width:36px;height:36px;border-radius:50%;border:2px solid #fff;background:rgba(20,30,60,.8);color:#fff;font-size:16px;cursor:pointer;z-index:8;display:none}
+#ttScreen[style*="flex"] #ttClose,#admScreen[style*="flex"] #admClose{display:block}
+#admBox{width:min(400px,92vw);max-height:90vh;overflow:auto;box-sizing:border-box;padding:18px 20px;background:#1b1d40;border:4px solid #7b72e8;box-shadow:0 0 0 3px #0e0f26,inset 0 0 0 3px #2c2e66;border-radius:6px;font:14px/1.4 'Galmuri11','Press Start 2P',monospace;color:#e9e6ff}
+#admBox h2{margin:0 0 6px;font:inherit;font-size:18px;color:#ffd66b;text-align:center}
+#admBox label{display:block;margin:10px 0 4px;color:#b9b3ff;font-size:13px}
+.admRow{display:flex;gap:8px;align-items:center}
+.admIn{flex:1;min-width:0;box-sizing:border-box;padding:8px;background:#0f1030;color:#fff;border:2px solid #5b55a8;border-radius:4px;font:inherit}
+#admColor{flex:none;width:56px;height:36px;padding:0;background:#0f1030;border:2px solid #5b55a8;border-radius:4px;cursor:pointer}
+#admPrev{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-shadow:2px 2px 0 #0b0b25}
+.admBtn{flex:none;padding:8px 14px;background:#4a3fa8;color:#fff;border:2px solid #9a90ff;border-radius:4px;font:inherit;cursor:pointer}
+.admBtn:hover{filter:brightness(1.2)}
+#admGrant{display:block;width:100%;margin-top:14px}
+#admMine{display:block;width:100%;margin-top:14px;background:#2c2e66}
+#admMsg{min-height:20px;margin-top:10px;font-size:13px;line-height:1.3}
+#admList{margin-top:6px}
+#admList .who{color:#b9b3ff;font-size:13px;margin-bottom:4px}
+#admList .row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-top:1px solid #2c2e66;text-shadow:2px 2px 0 #0b0b25}
+#admList .row button{flex:none;padding:3px 8px;font-size:12px;background:#6b2f3c;border-color:#d27a8c}
 #skillbar{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:none;gap:8px;z-index:3}
 .sk{position:relative;width:52px;height:52px;background:rgba(20,30,60,.8);border:2px solid #fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px}
 .sk b{position:absolute;left:4px;top:1px;font-size:11px;color:#ffe066}
@@ -83,10 +110,19 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <div id="hint">Aim 🖱 · Move <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Chat <kbd>Enter</kbd> · Attack <kbd>F</kbd> · Skills <kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd></div>
 <input id="chat" maxlength="60" placeholder="Type a message and press Enter" autocomplete="off">
 <button id="classBtn" aria-label="class"></button>
+<button id="titleBtn" aria-label="title"></button>
 <button id="readyBtn">0/2</button>
 <div id="chatLog"><div id="clHead"><span>💬 Chat</span><span id="clArrow">▾</span></div><div id="clBody"></div></div>
 <div id="skillbar"><div class="sk" data-k="Q"><b>Q</b><span>⚔️</span><i></i></div><div class="sk" data-k="E"><b>E</b><span>💨</span><i></i></div><div class="sk" data-k="R"><b>R</b><span>🗡️</span><i></i></div></div>
 <div id="csScreen"><div id="csBox"><img id="csBg" src="cs-frame.png" alt="" draggable="false"></div><button id="csClose" aria-label="close">✕</button></div>
+<div id="ttScreen"><div id="ttBox"><img id="ttBg" src="title-inv.png" alt="" draggable="false"></div><button id="ttClose" class="xBtn" aria-label="close">✕</button></div>
+<div id="admScreen"><div id="admBox"><h2>칭호 관리</h2>
+<label for="admTarget">대상 아이디</label><div class="admRow"><input id="admTarget" class="admIn" maxlength="16" placeholder="대상 아이디" autocomplete="off" autocapitalize="none" spellcheck="false"><button id="admLook" class="admBtn" type="button">조회</button></div>
+<label for="admText">칭호</label><input id="admText" class="admIn" style="width:100%" maxlength="12" placeholder="칭호 (최대 12자)" autocomplete="off">
+<label for="admColor">색상</label><div class="admRow"><input id="admColor" type="color" value="#ffd66b"><span id="admPrev"></span></div>
+<button id="admGrant" class="admBtn" type="button">칭호 부여</button>
+<div id="admMsg"></div><div id="admList"></div>
+<button id="admMine" class="admBtn" type="button">내 칭호 장착하기</button></div><button id="admClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="banner"></div><div id="fade"></div>
 <button id="logoutBtn" style="display:none">로그아웃</button>
 <div id="login"><form id="lf"><h1>🏛️ Sky Colosseum</h1>
@@ -143,11 +179,12 @@ function flash(){fade.style.transition='none';fade.style.opacity=.9;requestAnima
 let ws,myId=null,joined=false,snapUntil=0,arena=null;
 let phase='lobby',roundLeft=0,myRole=0,snapNext=false,cdEnd=0,winnerText='',winnerUntil=0,myCls='';
 const skCd={Q:0,E:0,R:0},fxs=[],hits=[];
+let isAdmin=false,myTitles=[],myEq=null;const titleMap=new Map();   // titles: mine (list + equipped id) and what every player wears
 const others=new Map(),bubbles=new Map();
 function connect(){
  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
  ws.onopen=()=>{hud.textContent='Connected';const tk=lsGet();if(tk&&!kicked){authBusy=true;authErr.textContent='자동 로그인 중…';ws.send(JSON.stringify({t:'resume',token:tk}))}};
- ws.onclose=()=>{hud.textContent='Disconnected – reconnecting…';others.clear();authBusy=false;authGo.disabled=false;setTimeout(connect,1500)};
+ ws.onclose=()=>{hud.textContent='Disconnected – reconnecting…';others.clear();titleMap.clear();authBusy=false;authGo.disabled=false;setTimeout(connect,1500)};
  ws.onmessage=e=>{const m=JSON.parse(e.data);
   if(m.t==='hello'){myId=m.id;arena=m.arena}
   else if(m.t==='history'){clBody.innerHTML='';logs.length=0;for(const c of m.log)addLog(c.name,c.text,c.sys,c.age)}
@@ -165,6 +202,7 @@ function connect(){
    }
    snapNext=false;
    for(const id of others.keys())if(!seen.has(id))others.delete(id);
+   for(const id of titleMap.keys())if(!seen.has(id))titleMap.delete(id);
    const me=m.p.find(p=>p.id===myId),total=m.p.length,rc=m.p.filter(p=>p.r).length;
    myRole=me?me.o:0;
    hud.textContent=phase==='round'?'Round in progress · alive: '+m.p.filter(p=>p.o===1).length:'Players online: '+total;
@@ -173,8 +211,8 @@ function connect(){
    readyBtn.classList.toggle('off',total<2);
    readyBtn.classList.toggle('on',!!(me&&me.r));
    if(myCls!==(me?me.c:'')){myCls=me?me.c:'';csRender();skIcons()}
-   classBtn.style.display=phase==='lobby'?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
-   if(phase!=='lobby'&&csIsOpen())csClose();
+   classBtn.style.display=titleBtn.style.display=phase==='lobby'?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
+   if(phase!=='lobby'){if(csIsOpen())csClose();ttClose();admClose()}
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
   }
   else if(m.t==='chat'){addLog(m.name,m.text,m.sys,0);if(m.id)bubbles.set(m.id,{text:m.text,until:performance.now()+4000})}
@@ -190,10 +228,14 @@ function connect(){
   else if(m.t==='fx'){m.t0=performance.now();if(!(m.by===myId&&m.type==='cone'))fxs.push(m);   // my own cones are drawn instantly on key press
    if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
   else if(m.t==='hit'){hits.push({id:m.id,dmg:m.dmg,t0:performance.now()})}
+  else if(m.t==='tinfo'){myTitles=m.list||[];myEq=m.eq||null;ttRender()}
+  else if(m.t==='ttl'){if(m.tt)titleMap.set(m.id,m.tt);else titleMap.delete(m.id)}
+  else if(m.t==='ttls'){titleMap.clear();for(const k in m.m)titleMap.set(+k,m.m[k])}
+  else if(m.t==='tadmin')admReply(m);
   else if(m.t==='auth'){authBusy=false;authGo.disabled=false;
-   if(m.ok){joined=true;if(m.token)lsSet(m.token);login.style.display='none';pwEl.value='';authErr.textContent=''}
-   else{joined=false;login.style.display='flex';if(m.resume){lsDel();authErr.textContent=''}else authErr.textContent=m.err||'오류가 발생했습니다.'}}
-  else if(m.t==='kicked'){kicked=true;joined=false;others.clear();logoutBtn.style.display='none';login.style.display='flex';authErr.textContent='다른 곳에서 로그인하여 접속이 종료되었습니다.'}
+   if(m.ok){joined=true;isAdmin=!!m.admin;if(m.token)lsSet(m.token);login.style.display='none';pwEl.value='';authErr.textContent=''}
+   else{joined=false;resetTitles();login.style.display='flex';if(m.resume){lsDel();authErr.textContent=''}else authErr.textContent=m.err||'오류가 발생했습니다.'}}
+  else if(m.t==='kicked'){kicked=true;joined=false;resetTitles();others.clear();logoutBtn.style.display='none';login.style.display='flex';authErr.textContent='다른 곳에서 로그인하여 접속이 종료되었습니다.'}
   else if(m.t==='full')hud.textContent='Server full – try again later';
  };
 }
@@ -240,13 +282,13 @@ addEventListener('keydown',e=>{
   if(e.key==='Enter'){const t=chatEl.value.trim();if(t&&ws.readyState===1)ws.send(JSON.stringify({t:'chat',text:t}));chatEl.value='';chatEl.style.display='none';chatEl.blur()}
   else if(e.key==='Escape'){chatEl.style.display='none';chatEl.blur()}
   return}
- if(csIsOpen()){if(e.key==='Escape')csClose();return}
+ if(csIsOpen()||ttIsOpen()||admIsOpen()){if(e.key==='Escape'){csClose();ttClose();admClose()}return}
  if(!joined)return;
  if(e.key==='Enter'){chatEl.style.display='block';chatEl.focus();for(const k in keys)keys[k]=false;sendInput();cancelCharge();e.preventDefault();return}
  if(!e.repeat){
   if(e.code==='KeyF'){if(myCls==='Archer'){archerPress();return}
    tx(Object.assign({t:'atk',a:+myAim.toFixed(3)},atkInfo()));const n=performance.now();if(n>=atkLocal){atkLocal=n+(ATK_CD[myCls]||600);localAttack()}return}
-  if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyR'){tx(Object.assign({t:'skill',k:e.code.slice(3),a:+myAim.toFixed(3)},atkInfo()));if(e.code==='KeyQ'&&myCls==='Knight'&&performance.now()>=skCd.Q)localCone(150,120*Math.PI/180,'rgba(255,214,107,.65)',380);
+  if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyR'){tx(Object.assign({t:'skill',k:e.code.slice(3),a:+myAim.toFixed(3)},atkInfo()));if(e.code==='KeyQ'&&myCls==='Knight'&&performance.now()>=skCd.Q)localCone(225,120*Math.PI/180,'rgba(255,214,107,.65)',380);
    if(e.code==='KeyE'&&myCls==='Archer'&&performance.now()>=skCd.E){const o=others.get(myId);if(o&&myRole!==2&&!(o.su>0)){hasteLocal=performance.now()+4000;chargeT0=0}}
    return}}
  if(map[e.code]){keys[map[e.code]]=true;sendInput();e.preventDefault()}});
@@ -261,7 +303,7 @@ function atkInfo(){const o=others.get(myId);return o?{x:+o.x.toFixed(1),y:+o.y.t
 function localCone(r,span,c,dur){const o=others.get(myId);if(!o||myRole===2||o.su>0)return;
  fxs.push({type:'cone',by:myId,x:o.x,y:o.y,a:myAim,span,r,c,dur,t0:performance.now()});startSwing(o,myAim,span,dur)}
 function localAttack(){const o=others.get(myId);if(!o||myRole===2||o.su>0)return;
- localCone(75,100*Math.PI/180,'rgba(255,255,255,.6)',220)}
+ localCone(112.5,100*Math.PI/180,'rgba(255,255,255,.6)',220)}
 // ---- Archer: hold F to pull the bowstring, release to shoot (Haste: instant shot) ----
 function localArrow(f){const o=others.get(myId);if(!o||myRole===2||o.su>0)return;const n=performance.now();
  arrowsC.push({id:'L'+n,local:true,by:myId,x:o.x,y:o.y,a:myAim,spd:800*f,range:700,t0:n,adv:0});o.shot=n}
@@ -333,10 +375,61 @@ function csRender(){
 csOk.onclick=()=>{const c=CHARS[csSel];if(c){tx({t:'class',cls:c.id});csClose()}};
 csScreen.onclick=e=>{if(e.target===csScreen)csClose()};
 document.getElementById('csClose').onclick=()=>csClose();
-function csOpen(){for(const k in keys)keys[k]=false;sendInput();cancelCharge();csScreen.style.display='flex';csFit();
+function csOpen(){ttClose();admClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();csScreen.style.display='flex';csFit();
  const i=CHARS.findIndex(c=>c&&c.id===myCls);csSel=i>=0?i:0;csRender()}
 function csClose(){csScreen.style.display='none'}
 function csIsOpen(){return csScreen.style.display==='flex'}
+
+// ---- titles: inventory panel (equip) and admin panel (grant) ----
+const TT_W=1000,TT_H=793,TT_SLOTS=[[93,138,172,125],[301,138,176,125],[516,138,174,125],[731,138,173,125],[93,274,172,124],[301,274,176,124],[516,274,174,124],[731,274,173,124],
+ [93,410,172,122],[301,410,176,122],[516,410,174,122],[731,410,173,122],[93,545,172,126],[301,545,176,126],[516,545,174,126],[731,545,173,126]];
+const titleBtn=document.getElementById('titleBtn'),ttScreen=document.getElementById('ttScreen'),ttBox=document.getElementById('ttBox');
+const ttSlots=TT_SLOTS.map((r,i)=>{const b=document.createElement('button');b.className='ttSlot';
+ b.style.left=r[0]/TT_W*100+'%';b.style.top=r[1]/TT_H*100+'%';b.style.width=r[2]/TT_W*100+'%';b.style.height=r[3]/TT_H*100+'%';
+ b.onclick=()=>ttPick(i);ttBox.appendChild(b);return b});
+function ttPick(i){                                 // slot 1 = no title, slots 2.. = granted titles
+ const t=i>0?myTitles[i-1]:null;if(i>0&&!t)return;
+ myEq=t?t.id:null;ttRender();tx({t:'tequip',id:myEq})}
+function ttRender(){
+ if(!myTitles.some(t=>t.id===myEq))myEq=null;       // no titles (or the equipped one is gone) -> "none"
+ ttSlots.forEach((b,i)=>{const t=i>0?myTitles[i-1]:null;
+  b.classList.toggle('empty',i>0&&!t);b.classList.toggle('sel',i===0?myEq===null:!!t&&t.id===myEq);
+  b.textContent=i===0?'없음':t?t.text:'';b.style.color=i===0?'#b9b3ff':t?t.color:'';b.title=t?t.text:''})}
+function ttFit(){ttBox.style.setProperty('--u',ttBox.clientWidth/TT_W+'px')}
+addEventListener('resize',ttFit);
+function ttOpen(){csClose();admClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();ttScreen.style.display='flex';ttFit();ttRender()}
+function ttClose(){ttScreen.style.display='none'}
+function ttIsOpen(){return ttScreen.style.display==='flex'}
+document.getElementById('ttClose').onclick=()=>ttClose();
+ttScreen.onclick=e=>{if(e.target===ttScreen)ttClose()};
+const admScreen=document.getElementById('admScreen'),admTarget=document.getElementById('admTarget'),admText=document.getElementById('admText'),admColor=document.getElementById('admColor');
+const admPrev=document.getElementById('admPrev'),admMsg=document.getElementById('admMsg'),admList=document.getElementById('admList');
+function admPrevUpd(){admPrev.textContent=admText.value||'미리보기';admPrev.style.color=admColor.value}
+admText.oninput=admColor.oninput=admPrevUpd;admTarget.oninput=()=>{admList.textContent='';admMsg.textContent=''};
+function admOpen(){csClose();ttClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();admScreen.style.display='flex';admPrevUpd()}
+function admClose(){admScreen.style.display='none'}
+function admIsOpen(){return admScreen.style.display==='flex'}
+function admSay(msg,ok){admMsg.textContent=msg;admMsg.style.color=ok?'#9dffb0':'#ff8a8a'}
+function admSend(t){const target=admTarget.value.trim().toLowerCase();
+ if(!target)return admSay('대상 아이디를 입력해 주세요.',0);
+ if(t==='tgrant'&&!admText.value.trim())return admSay('칭호를 입력해 주세요.',0);
+ tx({t,target,text:admText.value,color:admColor.value})}
+function admReply(m){admSay(m.msg,m.ok);
+ if(!m.ok||!m.list)return;
+ admList.textContent='';
+ const who=document.createElement('div');who.className='who';who.textContent=m.nick+' ('+m.target+') · 칭호 '+m.list.length+'개';admList.appendChild(who);
+ for(const t of m.list){const r=document.createElement('div');r.className='row';
+  const n=document.createElement('span');n.textContent=t.text;n.style.color=t.color;
+  const d=document.createElement('button');d.className='admBtn';d.type='button';d.textContent='삭제';d.onclick=()=>tx({t:'trevoke',target:m.target,id:t.id});
+  r.append(n,d);admList.appendChild(r)}}
+document.getElementById('admLook').onclick=()=>admSend('tlist');
+document.getElementById('admGrant').onclick=()=>admSend('tgrant');
+document.getElementById('admMine').onclick=()=>{admClose();ttOpen()};
+document.getElementById('admClose').onclick=()=>admClose();
+admScreen.onclick=e=>{if(e.target===admScreen)admClose()};
+titleBtn.onclick=()=>{if(isAdmin)admOpen();else ttOpen();titleBtn.blur()};
+function resetTitles(){isAdmin=false;myTitles=[];myEq=null;titleMap.clear();ttRender();admClose();ttClose()}
+try{document.fonts.load("13px 'Galmuri11'","칭호가나다")}catch(e){}   // make sure the pixel font is ready for the canvas
 
 const CLS={Knight:['⚔️','#ffb3a7'],Archer:['🏹','#b6f0a8'],Shielder:['🛡️','#a9d4ff'],Assassin:['🗡️','#d9b3ff']};
 
@@ -401,6 +494,9 @@ function drawPlayer(o,isMe){
  ctx.fillStyle=isMe?'#ffe066':'#fff';ctx.strokeText(o.name||'',o.x,yb-8);ctx.fillText(o.name||'',o.x,yb-8);
  if(o.cls&&CLS[o.cls]){const t=CLS[o.cls][0]+' '+o.cls;ctx.font='bold 13px system-ui,sans-serif';ctx.lineWidth=3;
   ctx.fillStyle=CLS[o.cls][1];ctx.strokeText(t,o.x,yb-26);ctx.fillText(t,o.x,yb-26)}
+ if(o.tt){const ty=(o.cls&&CLS[o.cls])?yb-44:yb-26;                       // title above the name, in the pixel font
+  ctx.font="13px 'Galmuri11','DotGothic16',system-ui,sans-serif";ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(10,20,50,.85)';
+  ctx.fillStyle=o.tt.c;ctx.strokeText(o.tt.x,o.x,ty);ctx.fillText(o.tt.x,o.x,ty)}
  if(phase==='round'&&o.mh){const bw=46,bx=o.x-bw/2,by=o.y+8,r=Math.max(0,o.hp/o.mh);
   ctx.fillStyle='rgba(10,20,50,.85)';ctx.fillRect(bx-2,by-2,bw+4,10);
   ctx.fillStyle=r>.35?'#4cd964':'#ff5a4a';ctx.fillRect(bx,by,bw*r,6);
@@ -444,7 +540,7 @@ function updateSkillbar(t){
  for(const el of skillbar.children){el.classList.toggle('on',hs&&el.dataset.k==='E');const rem=Math.max(0,skCd[el.dataset.k]-t);el.classList.toggle('cd',rem>0);el.lastChild.textContent=rem>0?Math.ceil(rem/1000):''}
 }
 function drawBubble(o,b){
- ctx.font='14px system-ui,sans-serif';const tw=ctx.measureText(b.text).width+16,bx=o.x-tw/2,by=o.y-15*PX-68;
+ ctx.font='14px system-ui,sans-serif';const tw=ctx.measureText(b.text).width+16,bx=o.x-tw/2,by=o.y-15*PX-68-(o.tt?18:0);
  ctx.fillStyle='#fff';ctx.strokeStyle='#345';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(bx,by,tw,24,8);ctx.fill();ctx.stroke();
  ctx.fillStyle='#123';ctx.textAlign='center';ctx.fillText(b.text,o.x,by+17);
 }
@@ -494,6 +590,7 @@ function frame(t){
   }else if(o.tx!==undefined){o.x+=(o.tx-o.x)*k;o.y+=(o.ty-o.y)*k}
   o.chg=o.cls!=='Archer'?-1:id===myId?(chargeT0?Math.min(1,(t-chargeT0)/CHARGE_MS):-1):(o.cg>0?Math.min(1,o.cg/CHARGE_MS):-1);
   if(id===myId&&chargeT0&&myRole===2)chargeT0=0;
+  o.tt=titleMap.get(id)||null;
   o.da=id===myId?myAim:lerpAng(o.da===undefined?(o.aim||0):o.da,o.aim||0,k);
   if(o.moving)o.phase+=dt*11;else o.phase=0;
   list.push([id,o]);
