@@ -10,11 +10,19 @@ canvas{display:block;width:100%;height:100%}
 kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;font-weight:700}
 #chat{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(58px + env(safe-area-inset-bottom,0px));width:min(360px,86vw);display:none;padding:8px 12px;border-radius:10px;border:2px solid #fff;font-size:15px;outline:none}
 #login{position:fixed;inset:0;background:rgba(15,25,55,.55);display:flex;align-items:center;justify-content:center;z-index:5}
-#login form{background:#fff;color:#123;padding:24px;border-radius:14px;text-align:center;width:min(300px,80vw)}
+#login form{background:#fff;color:#123;padding:24px;border-radius:14px;text-align:center;width:min(320px,84vw);box-sizing:border-box}
 #login h1{margin:0 0 12px;font-size:20px}
 #login input{width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:2px solid #9ab;border-radius:8px;margin-bottom:12px}
-#login button{display:block;margin:0 auto;width:min(240px,100%);aspect-ratio:400/180;padding:0;border:0;background:url(btn-frame.png) 0 0/100% 100% no-repeat;color:#fff;font:700 16px 'Galmuri11','Press Start 2P',system-ui,sans-serif;text-shadow:2px 2px 0 #1b1850;cursor:pointer}
-#login button:hover{filter:brightness(1.12)}
+#authGo{display:block;margin:0 auto;width:min(240px,100%);aspect-ratio:400/180;padding:0;border:0;background:url(btn-frame.png) 0 0/100% 100% no-repeat;color:#fff;font:700 16px 'Galmuri11','Press Start 2P',system-ui,sans-serif;text-shadow:2px 2px 0 #1b1850;cursor:pointer}
+#authGo:hover:not(:disabled){filter:brightness(1.12)}
+#authGo:disabled{opacity:.6;cursor:default}
+#authTabs{display:flex;gap:6px;margin-bottom:12px}
+#authTabs button{flex:1;padding:8px 0;font:700 14px 'Galmuri11',system-ui,sans-serif;border:2px solid #9ab;border-radius:8px;background:#fff;color:#456;cursor:pointer}
+#authTabs button.on{background:#4a3fa8;border-color:#4a3fa8;color:#fff}
+#authHint{margin:-4px 0 10px;font-size:12px;line-height:1.4;color:#567}
+#authErr{min-height:18px;margin:-4px 0 8px;font-size:13px;line-height:1.3;color:#d33}
+#logoutBtn{position:fixed;top:calc(46px + env(safe-area-inset-top,0px));left:12px;background:rgba(20,30,60,.65);color:#fff;border:0;padding:5px 12px;border-radius:999px;font:13px 'Galmuri11',system-ui,sans-serif;cursor:pointer;z-index:4}
+#logoutBtn:hover{background:rgba(20,30,60,.9)}
 #readyBtn{position:fixed;left:50%;top:60%;transform:translateX(-50%);width:180px;height:81px;padding:0;border:0;background:url(btn-frame.png) 0 0/100% 100% no-repeat;color:#fff;font:700 22px 'Galmuri11','Press Start 2P',system-ui,sans-serif;text-shadow:2px 2px 0 #1b1850;cursor:pointer}
 #readyBtn:not(.on):not(.off):hover{filter:brightness(1.12)}
 #readyBtn.on{color:#9dffb0;filter:drop-shadow(0 0 8px #5dff8a) brightness(1.08)}
@@ -80,8 +88,15 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <div id="skillbar"><div class="sk" data-k="Q"><b>Q</b><span>⚔️</span><i></i></div><div class="sk" data-k="E"><b>E</b><span>💨</span><i></i></div><div class="sk" data-k="R"><b>R</b><span>🗡️</span><i></i></div></div>
 <div id="csScreen"><div id="csBox"><img id="csBg" src="cs-frame.png" alt="" draggable="false"></div><button id="csClose" aria-label="close">✕</button></div>
 <div id="banner"></div><div id="fade"></div>
+<button id="logoutBtn" style="display:none">로그아웃</button>
 <div id="login"><form id="lf"><h1>🏛️ Sky Colosseum</h1>
-<input id="name" maxlength="14" placeholder="Your name" autocomplete="off"><button>Enter the arena</button></form></div>
+<div id="authTabs"><button type="button" id="tabLogin">로그인</button><button type="button" id="tabSignup">회원가입</button></div>
+<input id="uid" maxlength="16" placeholder="아이디" autocomplete="username" autocapitalize="none" spellcheck="false">
+<input id="upw" type="password" maxlength="64" placeholder="비밀번호" autocomplete="current-password">
+<input id="name" maxlength="14" placeholder="닉네임" autocomplete="off">
+<div id="authHint">아이디: 영문 소문자·숫자·_ 4~16자<br>비밀번호: 6자 이상 · 닉네임: 2~14자</div>
+<div id="authErr"></div>
+<button id="authGo">로그인</button></form></div>
 <script>
 const W=1254, PX=5;
 const cv=document.getElementById('c'), ctx=cv.getContext('2d'), hud=document.getElementById('hud');
@@ -131,8 +146,8 @@ const skCd={Q:0,E:0,R:0},fxs=[],hits=[];
 const others=new Map(),bubbles=new Map();
 function connect(){
  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
- ws.onopen=()=>{hud.textContent='Connected';if(joined)ws.send(JSON.stringify({t:'join',name:nameEl.value}))};
- ws.onclose=()=>{hud.textContent='Disconnected – reconnecting…';others.clear();setTimeout(connect,1500)};
+ ws.onopen=()=>{hud.textContent='Connected';const tk=lsGet();if(tk&&!kicked){authBusy=true;authErr.textContent='자동 로그인 중…';ws.send(JSON.stringify({t:'resume',token:tk}))}};
+ ws.onclose=()=>{hud.textContent='Disconnected – reconnecting…';others.clear();authBusy=false;authGo.disabled=false;setTimeout(connect,1500)};
  ws.onmessage=e=>{const m=JSON.parse(e.data);
   if(m.t==='hello'){myId=m.id;arena=m.arena}
   else if(m.t==='history'){clBody.innerHTML='';logs.length=0;for(const c of m.log)addLog(c.name,c.text,c.sys,c.age)}
@@ -158,7 +173,7 @@ function connect(){
    readyBtn.classList.toggle('off',total<2);
    readyBtn.classList.toggle('on',!!(me&&me.r));
    if(myCls!==(me?me.c:'')){myCls=me?me.c:'';csRender();skIcons()}
-   classBtn.style.display=phase==='lobby'?'':'none';
+   classBtn.style.display=phase==='lobby'?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
    if(phase!=='lobby'&&csIsOpen())csClose();
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
   }
@@ -175,12 +190,33 @@ function connect(){
   else if(m.t==='fx'){m.t0=performance.now();if(!(m.by===myId&&m.type==='cone'))fxs.push(m);   // my own cones are drawn instantly on key press
    if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
   else if(m.t==='hit'){hits.push({id:m.id,dmg:m.dmg,t0:performance.now()})}
+  else if(m.t==='auth'){authBusy=false;authGo.disabled=false;
+   if(m.ok){joined=true;if(m.token)lsSet(m.token);login.style.display='none';pwEl.value='';authErr.textContent=''}
+   else{joined=false;login.style.display='flex';if(m.resume){lsDel();authErr.textContent=''}else authErr.textContent=m.err||'오류가 발생했습니다.'}}
+  else if(m.t==='kicked'){kicked=true;joined=false;others.clear();logoutBtn.style.display='none';login.style.display='flex';authErr.textContent='다른 곳에서 로그인하여 접속이 종료되었습니다.'}
   else if(m.t==='full')hud.textContent='Server full – try again later';
  };
 }
-const nameEl=document.getElementById('name');
-document.getElementById('lf').onsubmit=e=>{e.preventDefault();joined=true;login.style.display='none';
- if(ws.readyState===1)ws.send(JSON.stringify({t:'join',name:nameEl.value}))};
+// ---- login / sign-up (accounts are stored server-side in Upstash; the browser only keeps a session token) ----
+const TOKEN_KEY='mpvp_token',nameEl=document.getElementById('name'),uidEl=document.getElementById('uid'),pwEl=document.getElementById('upw');
+const authErr=document.getElementById('authErr'),authHint=document.getElementById('authHint'),authGo=document.getElementById('authGo');
+const tabLogin=document.getElementById('tabLogin'),tabSignup=document.getElementById('tabSignup'),logoutBtn=document.getElementById('logoutBtn');
+let authMode='login',authBusy=false,kicked=false;
+const lsGet=()=>{try{return localStorage.getItem(TOKEN_KEY)}catch(e){return null}};
+const lsSet=v=>{try{localStorage.setItem(TOKEN_KEY,v)}catch(e){}};
+const lsDel=()=>{try{localStorage.removeItem(TOKEN_KEY)}catch(e){}};
+function setAuthMode(m){authMode=m;const su=m==='signup';
+ nameEl.style.display=authHint.style.display=su?'':'none';authGo.textContent=su?'회원가입':'로그인';
+ pwEl.autocomplete=su?'new-password':'current-password';tabLogin.classList.toggle('on',!su);tabSignup.classList.toggle('on',su);authErr.textContent=''}
+tabLogin.onclick=()=>setAuthMode('login');tabSignup.onclick=()=>setAuthMode('signup');setAuthMode('login');
+document.getElementById('lf').onsubmit=e=>{e.preventDefault();if(authBusy)return;
+ const id=uidEl.value.trim().toLowerCase(),pw=pwEl.value,su=authMode==='signup';
+ if(!id||!pw){authErr.textContent='아이디와 비밀번호를 입력해 주세요.';return}
+ if(su&&nameEl.value.trim().length<2){authErr.textContent='닉네임은 2자 이상 입력해 주세요.';return}
+ if(ws.readyState!==1){authErr.textContent='서버에 연결 중입니다. 잠시 후 다시 시도해 주세요.';return}
+ kicked=false;authBusy=true;authGo.disabled=true;authErr.textContent='';
+ ws.send(JSON.stringify(su?{t:'signup',id,pw,name:nameEl.value}:{t:'login',id,pw}))};
+logoutBtn.onclick=()=>{const tk=lsGet();lsDel();joined=false;if(ws.readyState===1)ws.send(JSON.stringify({t:'logout',token:tk}));setTimeout(()=>location.reload(),150)};
 connect();
 
 // ---- input ----
@@ -244,7 +280,7 @@ readyBtn.onclick=()=>{tx({t:'ready'});readyBtn.blur()};
 // ---- character select screen (image-based UI) ----
 const IMG_W=1482,IMG_H=1002,SLOT_X=[78,261,439,619,799],SLOT_Y=[177,343,509,676],SLOT_W=157,SLOT_H=152;
 const CHARS=[
- {id:'Knight',ko:'기사',img:'knight.png',stats:{hp:1000,atk:150},
+ {id:'Knight',ko:'기사',img:'knight.png',stats:{hp:1200,atk:150},
   style:'최전선 브루저. 단단한 근접 전사로, 띄우기와 둔화로 적을 묶어둡니다.',
   skills:[
    {icon:'🛡️',name:'갑옷',key:'패시브',desc:'받는 모든 피해가 20% 감소합니다.'},
