@@ -37,6 +37,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #clBody div{margin-bottom:3px}
 #clBody .sys{color:#ffe066}
 #clBody .tm{opacity:.55;font-size:11px;margin-right:4px}
+#toast{position:fixed;bottom:calc(110px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);padding:7px 16px;border-radius:10px;background:rgba(20,30,60,.82);color:#fff;font:14px 'Galmuri11',system-ui,sans-serif;display:none;z-index:6;white-space:nowrap;border:2px solid #9a90ff}
 #banner{position:fixed;top:calc(52px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);padding:8px 20px;border-radius:12px;background:rgba(20,30,60,.75);color:#fff;font:700 20px system-ui,sans-serif;display:none;z-index:3;white-space:nowrap;border:2px solid #fff}
 #fade{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .6s;z-index:6}
 #readyBtn.off{opacity:.45;cursor:not-allowed}
@@ -56,7 +57,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 @keyframes csBob{0%,100%{transform:translateY(0)}50%{transform:translateY(calc(var(--u)*-8))}}
 #csName{display:flex;align-items:center;justify-content:space-between;padding:0 calc(var(--u)*22)}
 #csName b{font-size:calc(var(--u)*22);color:#fff;text-shadow:calc(var(--u)*2) calc(var(--u)*2) 0 #1b1850}
-#csName i{font-style:normal;font-size:calc(var(--u)*15);color:#ffd66b}
+#csName i{font-style:normal;font-size:calc(var(--u)*14);line-height:1.3;color:#ffd66b;white-space:pre-line;text-align:right}
 .csSk{display:flex;align-items:center;gap:calc(var(--u)*10);padding:0 calc(var(--u)*14);overflow:hidden}
 .csSk .ic{flex:none;width:calc(var(--u)*44);height:calc(var(--u)*44);display:flex;align-items:center;justify-content:center;font-size:calc(var(--u)*26);background:rgba(120,110,220,.18);border:calc(var(--u)*2) solid #5b55a8;border-radius:calc(var(--u)*6)}
 .csSk .tx{flex:1;min-width:0}
@@ -123,7 +124,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <button id="admGrant" class="admBtn" type="button">칭호 부여</button>
 <div id="admMsg"></div><div id="admList"></div>
 <button id="admMine" class="admBtn" type="button">내 칭호 장착하기</button></div><button id="admClose" class="xBtn" aria-label="close">✕</button></div>
-<div id="banner"></div><div id="fade"></div>
+<div id="banner"></div><div id="fade"></div><div id="toast"></div>
 <button id="logoutBtn" style="display:none">로그아웃</button>
 <div id="login"><form id="lf"><h1>🏛️ Sky Colosseum</h1>
 <div id="authTabs"><button type="button" id="tabLogin">로그인</button><button type="button" id="tabSignup">회원가입</button></div>
@@ -143,12 +144,19 @@ const swordImg=new Image();swordImg.src='sword.png';
 const arrowImg=new Image();arrowImg.src='arrow.png';
 const bowImg=new Image();bowImg.src='bow.png';
 const shieldImg=new Image();shieldImg.src='shield.png';
+const daggerImg=new Image();daggerImg.src='assassin-sword.png',slashImg=new Image(),orbImg=new Image(),fireImg=new Image(),charmImg=new Image();
+slashImg.src='slash.png';orbImg.src='orb.png';fireImg.src='foxfire.png';charmImg.src='charm.png';
 const RADPX=112.5,SHIELD_SPAN=100*Math.PI/180;   // 1 radpx = radius of the basic attack range (same as the server)
-const clsImg={};for(const c of ['Knight','Archer','Shielder','Assassin']){const i=new Image();i.src=c.toLowerCase()+'.png';clsImg[c]=i}
+const clsImg={};for(const c of ['Knight','Archer','Shielder','Assassin','Gumiho']){const i=new Image();i.src=c.toLowerCase()+'.png';clsImg[c]=i}
 let vw,vh,scale,ox,oy,dpr;
+const ZOOM_MIN=.5;let zoom=1;                       // 1 = the default view = the closest zoom; the mouse wheel only zooms OUT from there
+try{const z=parseFloat(localStorage.getItem('mpvp_zoom'));if(z>=ZOOM_MIN&&z<=1)zoom=z}catch(e){}
 function resize(){dpr=devicePixelRatio||1;vw=innerWidth;vh=innerHeight;cv.width=vw*dpr;cv.height=vh*dpr;
- scale=Math.min(vw,vh)/W*dpr;ox=(cv.width-W*scale)/2;oy=(cv.height-W*scale)/2}
+ scale=Math.min(vw,vh)/W*dpr*zoom;ox=(cv.width-W*scale)/2;oy=(cv.height-W*scale)/2}
 addEventListener('resize',resize);resize();
+cv.addEventListener('wheel',e=>{e.preventDefault();
+ zoom=Math.max(ZOOM_MIN,Math.min(1,zoom*(e.deltaY>0?.92:1/.92)));if(zoom>.98)zoom=1;
+ resize();try{localStorage.setItem('mpvp_zoom',String(zoom))}catch(err){}},{passive:false});
 
 // ---- per-player shirt colour ----
 const hsl=(h,s,l)=>{s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return[f(0)*255,f(8)*255,f(4)*255]};
@@ -191,7 +199,7 @@ function connect(){
   if(m.t==='hello'){myId=m.id;arena=m.arena}
   else if(m.t==='history'){clBody.innerHTML='';logs.length=0;for(const c of m.log)addLog(c.name,c.text,c.sys,c.age)}
   else if(m.t==='state'){
-   phase=m.ph;roundLeft=m.left;
+   phase=m.ph;roundLeft=m.left;foxes=m.ff||[];
    const seen=new Set();
    for(const p of m.p){
     seen.add(p.id);
@@ -200,7 +208,7 @@ function connect(){
     if(snapNext){o.x=p.x;o.y=p.y}
     const f0=o.face;
     if(p.su>0&&(p.su>(o.su||0)+60||!(o.su>0)))o.sMax=p.su;      // length of this stun, so the launch arc fits it (0.5s tackle vs 1s knock-up)
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as});
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn});
     if(p.id===myId)o.face=f0;   // own facing is driven by the cursor locally
    }
    snapNext=false;
@@ -224,7 +232,7 @@ function connect(){
   else if(m.t==='warp'){const o=others.get(myId);if(o){o.x=o.tx=m.x;o.y=o.ty=m.y}}      // Shield Tackle: my own dash is decided by the server
   else if(m.t==='pong'){rtt=rtt*.6+(performance.now()-m.c)*.4}
   else if(m.t==='arrow'){m.t0=performance.now();
-   if(m.by===myId&&m.kd==='atk'){const i=arrowsC.findIndex(a=>a.local);if(i>=0)arrowsC.splice(i,1)}   // replace the instant local arrow with the server's
+   if(m.by===myId&&(m.kd==='atk'||m.kd==='orb')){const i=arrowsC.findIndex(a=>a.local);if(i>=0)arrowsC.splice(i,1)}   // replace the instant local arrow with the server's
    arrowsC.push(m);const o=others.get(m.by);if(o&&(m.by!==myId||m.kd!=='atk'))o.shot=m.t0}
   else if(m.t==='arrowEnd'){const i=arrowsC.findIndex(a=>a.id===m.id);if(i>=0)arrowsC.splice(i,1)}
   else if(m.t==='winner'){winnerText=m.second?'⏱ 시간 제한! 2nd place: '+m.name:'🏆 '+m.name+' 승리!';winnerUntil=performance.now()+5000}
@@ -268,8 +276,10 @@ connect();
 // ---- input ----
 const keys={},map={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',ArrowUp:'w',ArrowLeft:'a',ArrowDown:'s',ArrowRight:'d'};
 let chargeT0=0,hasteLocal=0;const CHARGE_MS=2000;
+let foxes=[],ghosts=[],toastT=0;
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>{el.style.display='none'},1500)}
 let rtt=60,lastSent='',atkLocal=0,myAim=0,mWx=0,mWy=0,mouseOn=false,aimSent=0,aimSentT=0;
-const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600},arrowsC=[];
+const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700},arrowsC=[];
 const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b)),lerpAng=(a,b,t)=>a+angDiff(b,a)*t;
 addEventListener('mousemove',e=>{mWx=(e.clientX*dpr-ox)/scale;mWy=(e.clientY*dpr-oy)/scale;mouseOn=true});
 function updateAim(o){                          // aim = direction from the character's body to the cursor
@@ -292,28 +302,36 @@ addEventListener('keydown',e=>{
  if(!e.repeat){
   if(e.code==='KeyF'){if(myCls==='Archer'){archerPress();return}
    tx(Object.assign({t:'atk',a:+myAim.toFixed(3)},atkInfo()));const n=performance.now();if(n>=atkLocal){atkLocal=n+(ATK_CD[myCls]||600)/(1+((others.get(myId)||{}).as||0));localAttack()}return}
-  if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyR'){tx(Object.assign({t:'skill',k:e.code.slice(3),a:+myAim.toFixed(3)},atkInfo(),e.code==='KeyR'&&myCls==='Assassin'&&mouseOn?{cx:Math.round(mWx),cy:Math.round(mWy)}:{}));if(e.code==='KeyQ'&&myCls==='Knight'&&performance.now()>=skCd.Q)localCone(2*RADPX,120*Math.PI/180,'rgba(255,214,107,.65)',380);
+  if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyR'){if(myCls==='Gumiho'&&e.code==='KeyQ'&&foxes.some(f=>f.o===myId)&&!hoverFox()){toast('Q: 커서를 여우불 위에 올려 주세요');return}
+   if(myCls==='Gumiho'&&e.code==='KeyE'&&!foxes.some(f=>f.o===myId)){toast('끌어당길 여우불이 없습니다');return}
+   tx(Object.assign({t:'skill',k:e.code.slice(3),a:+myAim.toFixed(3)},atkInfo(),((e.code==='KeyR'&&myCls==='Assassin')||(e.code==='KeyQ'&&myCls==='Gumiho'))&&mouseOn?{cx:Math.round(mWx),cy:Math.round(mWy)}:{}));if(e.code==='KeyQ'&&myCls==='Knight'&&performance.now()>=skCd.Q)localCone(2*RADPX,120*Math.PI/180,'rgba(255,214,107,.65)',380);
    if(e.code==='KeyE'&&myCls==='Archer'&&performance.now()>=skCd.E){const o=others.get(myId);if(o&&myRole!==2&&!(o.su>0)){hasteLocal=performance.now()+4000;chargeT0=0}}
    return}}
  if(map[e.code]){keys[map[e.code]]=true;sendInput();e.preventDefault()}});
 addEventListener('keyup',e=>{if(e.code==='KeyF'&&chargeT0)archerRelease();if(map[e.code]){keys[map[e.code]]=false;sendInput()}});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;sendInput();cancelCharge()});
 const readyBtn=document.getElementById('readyBtn'),classBtn=document.getElementById('classBtn'),skillbar=document.getElementById('skillbar');
-const SKB={Knight:['⚔️','💨','🗡️'],Archer:['🌧️','⚡','🐉'],Shielder:['📣','💥','📯'],Assassin:['🔪','👻','🌀']};     // skill bar icons per class (Q, E, R)
+const SKB={Knight:['⚔️','💨','🗡️'],Archer:['🌧️','⚡','🐉'],Shielder:['📣','💥','📯'],Assassin:['🔪','👻','🌀'],Gumiho:['✨','💫','💗']};     // skill bar icons per class (Q, E, R)
 function skIcons(){const ic=SKB[myCls];if(!ic)return;skillbar.querySelectorAll('.sk').forEach((el,i)=>{el.querySelector('span').textContent=ic[i]})}
 const tx=o=>ws.readyState===1&&ws.send(JSON.stringify(o));
 setTimeout(()=>tx({t:'ping',c:performance.now()}),600);setInterval(()=>tx({t:'ping',c:performance.now()}),2000);
 function atkInfo(){const o=others.get(myId);return o?{x:+o.x.toFixed(1),y:+o.y.toFixed(1),rt:Math.round(rtt)}:{rt:Math.round(rtt)}}   // my on-screen position + round-trip time
-function localCone(r,span,c,dur){const o=others.get(myId);if(!o||myRole===2||o.su>0)return;
+function localCone(r,span,c,dur){const o=others.get(myId);if(!o||myRole===2||o.su>0||o.cm)return;
  fxs.push({type:'cone',by:myId,x:o.x,y:o.y,a:myAim,span,r,c,dur,t0:performance.now()});startSwing(o,myAim,span,dur)}
-function localAttack(){const o=others.get(myId);if(!o||myRole===2||o.su>0)return;
+function localAttack(){const o=others.get(myId);if(!o||myRole===2||o.su>0||o.cm)return;
+ if(myCls==='Gumiho'){localOrb(o);return}
  localCone(RADPX,100*Math.PI/180,'rgba(255,255,255,.6)',220)}
+function localOrb(o){const n=performance.now();                 // Gumiho: the orb leaves at once, the server's copy replaces it
+ arrowsC.push({id:'L'+n,local:true,by:myId,x:o.x,y:o.y,a:myAim,spd:600,range:3.5*RADPX,t0:n,adv:0,kd:'orb'});o.shot=n}
+const FOX_PICK=55,FOX_LIFT=25;
+function hoverFox(){if(!mouseOn)return null;let best=FOX_PICK,hit=null;      // my Foxfire under the cursor
+ for(const f of foxes){if(f.o!==myId)continue;const d=Math.hypot(mWx-f.x,mWy-(f.y-FOX_LIFT));if(d<=best){best=d;hit=f}}return hit}
 // ---- Archer: hold F to pull the bowstring, release to shoot (Haste: instant shot) ----
 function localArrow(f){const o=others.get(myId);if(!o||myRole===2||o.su>0)return;const n=performance.now();
  arrowsC.push({id:'L'+n,local:true,by:myId,x:o.x,y:o.y,a:myAim,spd:800*f,range:700,t0:n,adv:0});o.shot=n}
 function hasteOn(o){return !!o.hs||performance.now()<hasteLocal}
 function archerPress(){const o=others.get(myId),n=performance.now();
- if(!o||myRole===2||o.su>0||n<atkLocal||chargeT0)return;
+ if(!o||myRole===2||o.su>0||o.cm||n<atkLocal||chargeT0)return;
  if(hasteOn(o)){tx(Object.assign({t:'atk',a:+myAim.toFixed(3)},atkInfo()));atkLocal=n+ATK_CD.Archer;localArrow(1);return}
  chargeT0=n;tx({t:'charge'})}
 function archerRelease(){const o=others.get(myId),n=performance.now(),ch=Math.min(n-chargeT0,CHARGE_MS);chargeT0=0;
@@ -326,35 +344,42 @@ readyBtn.onclick=()=>{tx({t:'ready'});readyBtn.blur()};
 // ---- character select screen (image-based UI) ----
 const IMG_W=1482,IMG_H=1002,SLOT_X=[78,261,439,619,799],SLOT_Y=[177,343,509,676],SLOT_W=157,SLOT_H=152;
 const CHARS=[
- {id:'Knight',ko:'기사',img:'knight.png',stats:{hp:1200,atk:150},
+ {id:'Knight',ko:'기사',img:'knight.png',stats:{hp:1200,atk:150},rng:'1 radpx (근접)',
   style:'최전선 브루저. 단단한 근접 전사로, 띄우기와 둔화로 적을 묶어둡니다.',
   skills:[
    {icon:'🛡️',name:'갑옷',key:'패시브',desc:'받는 모든 피해가 20% 감소합니다.'},
-   {icon:'⚔️',name:'검격',key:'Q · 8초',desc:'넓은 부채꼴 베기(기본 공격 사거리 2배): 250 피해, 1초간 띄움.'},
+   {icon:'⚔️',name:'검격',key:'Q · 8초',desc:'넓은 부채꼴 베기(2 radpx): 250 피해, 1초간 띄움.'},
    {icon:'💨',name:'수호 돌진',key:'E · 12초',desc:'3초간 받는 피해 70% 감소, 이동 속도 40% 증가.'},
    {icon:'🗡️',name:'심판',key:'R · 25초',desc:'주변에 검 8자루 소환: 각 200 범위 피해, 적 2초간 30% 둔화.'}]},
- {id:'Archer',ko:'궁수',img:'archer.png',stats:{hp:1000,atk:180},
+ {id:'Archer',ko:'궁수',img:'archer.png',stats:{hp:1000,atk:180},rng:'5 radpx (원거리)',
   style:'원거리 딜러. 활시위를 당겨 화살을 강화하고, 투명화·속사·관통 저격으로 전장을 지배합니다.',
   skills:[
    {icon:'🏹',name:'활시위',key:'패시브',desc:'기본 공격 최대 2초 차지: 피해·속도 50%~150%. 최대 후에도 유지 가능.'},
    {icon:'🌧️',name:'애로우 레인',key:'Q · 11초',desc:'부채꼴로 화살 7발(각 130 피해) 발사, 1.5초간 투명화.'},
    {icon:'⚡',name:'헤이스트',key:'E · 15초',desc:'4초간 차지 없이 즉시 발사, 피해는 기본 공격력의 100%.'},
    {icon:'🐉',name:'멸룡궁',key:'R · 25초',desc:'8배 큰 관통 화살: 적중한 적에게 380 피해, 1초 기절.'}]},
- {id:'Shielder',ko:'방패병',img:'shielder.png',stats:{hp:1500,atk:120},
+ {id:'Shielder',ko:'방패병',img:'shielder.png',stats:{hp:1500,atk:120},rng:'1 radpx (근접)',
   style:'최전선 수호자. 방패로 정면의 공격을 막아내고, 도발과 돌진으로 전장의 흐름을 쥐고 흔듭니다.',
   skills:[
    {icon:'🔰',name:'방패',key:'패시브',desc:'방패가 향한 100° 방향의 공격은 받는 피해가 90% 감소.'},
-   {icon:'📣',name:'도발',key:'Q · 12초',desc:'기본 사거리 4배 안의 적을 3초간 끌어당김(이속 20% 감소).'},
-   {icon:'💥',name:'실드 태클',key:'E · 11초',desc:'기본 사거리 3.5배 돌진: 200 피해, 밀쳐내고 0.5초간 띄움.'},
+   {icon:'📣',name:'도발',key:'Q · 12초',desc:'4 radpx 안의 적을 3초간 끌어당김(이속 20% 감소).'},
+   {icon:'💥',name:'실드 태클',key:'E · 11초',desc:'3.5 radpx 돌진: 200 피해, 밀쳐내고 0.5초간 띄움.'},
    {icon:'📯',name:'혼 가드',key:'R · 25초',desc:'7초간 방어 못한 피해 -40%, 근접 40% 반사, 투사체 튕김 (이속 -15%).'}]},
- {id:'Assassin',ko:'암살자',img:'assassin.png',stats:{hp:1000,atk:135},
+ {id:'Assassin',ko:'암살자',img:'assassin.png',stats:{hp:1000,atk:135},rng:'1 radpx (근접)',
   style:'근접 암살형 딜러. 은신으로 접근해 모든 방어를 무시하는 일격을 꽂아 넣습니다.',
   skills:[
    {icon:'🎯',name:'피어스',key:'패시브',desc:'모든 공격이 대상의 피해 감소와 무적 효과를 무시합니다.'},
    {icon:'🔪',name:'소드 샤우트',key:'Q · 12초',desc:'검을 찔러 250 피해, 적중한 적이 받는 피해 20% 증가(3초).'},
    {icon:'👻',name:'은신',key:'E · 10초',desc:'2.5초간 투명화, 이동속도 15% 증가. 공격하면 해제.'},
-   {icon:'🌀',name:'암살',key:'R · 25초',desc:'커서로 순간이동, 주변 적에게 250 피해. 3초간 공격속도 +10%(적중당 +10%).'}]},
- ...new Array(16).fill(null)
+   {icon:'🌀',name:'암살',key:'R · 25초',desc:'커서로 순간이동, 1 radpx 내 적에게 250 피해. 3초간 공격속도 +10%(적중당 +10%).'}]},
+ {id:'Gumiho',ko:'구미호',img:'gumiho.png',stats:{hp:1100,atk:130},rng:'3.5 radpx (원거리)',
+  style:'원거리 마법사. 여우불을 깔았다 터뜨려 적을 불태우고, 매혹으로 전장을 휘어잡습니다.',
+  skills:[
+   {icon:'🔥',name:'여우불',key:'패시브',desc:'공격이 닿은 곳에 60% 확률로 여우불 생성(최대 5개, 초과 시 가장 오래된 것 소멸).'},
+   {icon:'✨',name:'요술',key:'Q · 8초',desc:'커서의 여우불로 순간이동, 가까운 여우불 폭발(2 radpx): 120 피해+화상.'},
+   {icon:'💫',name:'미수옥',key:'E · 12초',desc:'모든 여우불을 모아 0.5초 뒤 폭발: 개당 150 피해+화상.'},
+   {icon:'💗',name:'매혹',key:'R · 25초',desc:'2.5 radpx 안의 적을 3초간 매혹: 공격·이동 불가, 나에게 끌려옴.'}]},
+ ...new Array(15).fill(null)
 ];
 const csScreen=document.getElementById('csScreen'),csBox=document.getElementById('csBox');
 const csPlace=(el,x,y,w,h)=>{el.style.left=x/IMG_W*100+'%';el.style.top=y/IMG_H*100+'%';el.style.width=w/IMG_W*100+'%';el.style.height=h/IMG_H*100+'%'};
@@ -381,7 +406,7 @@ function csRender(){
  const c=CHARS[csSel];
  csImg.style.display=c?'block':'none';csQ.style.display=c?'none':'block';if(c)csImg.src=c.img;
  csNmL.textContent=c?c.id+(c.ko?' / '+c.ko:''):'???';
- csNmR.textContent=c&&c.stats?'HP '+c.stats.hp+'   ATK '+c.stats.atk:'HP ?   ATK ?';
+ csNmR.textContent=c&&c.stats?'HP '+c.stats.hp+'   ATK '+c.stats.atk+'\n사거리 '+c.rng:'HP ?   ATK ?\n사거리 ?';
  const sk=(c&&c.skills)||[0,1,2,3].map(()=>({icon:'❔',name:'???',key:'',desc:c?'상세 정보 준비 중입니다.':'잠긴 캐릭터입니다.'}));
  csRows.forEach((r,i)=>{const k=sk[i];r.ic.textContent=k.icon;r.nm.textContent=k.name;r.ky.textContent=k.key;r.ds.textContent=k.desc});
  csStyleEl.textContent=c?(c.style||'직업 정보 준비 중입니다.'):'잠겨 있는 칸입니다.';
@@ -447,7 +472,7 @@ titleBtn.onclick=()=>{if(isAdmin)admOpen();else ttOpen();titleBtn.blur()};
 function resetTitles(){isAdmin=false;myTitles=[];myEq=null;titleMap.clear();ttRender();admClose();ttClose()}
 try{document.fonts.load("13px 'Galmuri11'","칭호가나다")}catch(e){}   // make sure the pixel font is ready for the canvas
 
-const CLS={Knight:['⚔️','#ffb3a7'],Archer:['🏹','#b6f0a8'],Shielder:['🛡️','#a9d4ff'],Assassin:['🗡️','#d9b3ff']};
+const CLS={Knight:['⚔️','#ffb3a7'],Archer:['🏹','#b6f0a8'],Shielder:['🛡️','#a9d4ff'],Assassin:['🗡️','#d9b3ff'],Gumiho:['🦊','#9ff0ff']};
 
 // ---- rendering ----
 function startSwing(o,a,span,dur){o.sw={t0:performance.now(),dur,a,span}}
@@ -466,6 +491,15 @@ function drawSword(o,h,lift){
   ctx.drawImage(swordImg,0,0,7,15,-3.5*PX,-11*PX,7*PX,15*PX);
  }
  ctx.restore();
+}
+function drawBlade(o,h,lift){                       // Assassin: the 15x15 sword floats beside the body and slashes towards the cursor
+ if(!(daggerImg.complete&&daggerImg.naturalWidth))return;
+ const now=performance.now(),sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,cx=o.x,cy=o.y-h*.5-lift,S=3.6;
+ let th,px,py;
+ if(sw&&k<1){const base=Math.atan2(.8*Math.sin(sw.a),Math.cos(sw.a)),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;th=base+(e-.5)*sw.span*1.15;px=cx+Math.cos(th)*14;py=cy+Math.sin(th)*11}
+ else{const side=o.face,bob=Math.sin(now/260+o.x*.05)*3+(o.moving?Math.sin(o.phase*2)*2:0);th=side>0?-1.25:-Math.PI+1.25;px=cx+side*30;py=cy+10+bob}
+ ctx.save();ctx.translate(px,py);ctx.rotate(th+Math.PI/4);                          // the sprite's blade points up-right (-45 deg)
+ ctx.drawImage(daggerImg,0,0,15,15,-1.5*S,-12.5*S,15*S,15*S);ctx.restore();       // the hilt is the pivot
 }
 function drawBow(o,h,lift){
  if(!(bowImg.complete&&bowImg.naturalWidth))return;
@@ -487,11 +521,22 @@ function drawShield(o,h,lift){                      // floating shield beside th
  if(o.hn){ctx.shadowColor='#ffd66b';ctx.shadowBlur=18}
  ctx.drawImage(shieldImg,0,0,15,15,-7.5*4,-7.5*4,15*4,15*4);ctx.restore();
 }
+function drawFoxfires(t){
+ const hov=hoverFox(),S=3.4;
+ for(const f of foxes){
+  const bob=Math.sin(t/240+f.id)*3,cx=f.x,cy=f.y-FOX_LIFT+bob;
+  ctx.save();ctx.globalAlpha=.3;ctx.fillStyle='#0b2a40';ctx.beginPath();ctx.ellipse(f.x,f.y-2,20,7,0,0,7);ctx.fill();ctx.restore();       // shadow on the ground
+  ctx.save();ctx.translate(cx,cy);ctx.shadowColor='#7fe9ff';ctx.shadowBlur=14;ctx.drawImage(fireImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();
+  if(f.o===myId&&myCls==='Gumiho'){ctx.save();ctx.strokeStyle=hov===f?'#ffffff':'rgba(127,233,255,.55)';ctx.lineWidth=hov===f?4:2;ctx.setLineDash(hov===f?[]:[5,4]);ctx.beginPath();ctx.arc(cx,cy,hov===f?36:32,0,7);ctx.stroke();ctx.restore()}   // mine: ring, solid when the cursor is on it (Q)
+ }}
 function drawArrows(t){
- if(!(arrowImg.complete&&arrowImg.naturalWidth))return;
  for(let i=arrowsC.length-1;i>=0;i--){
   const r=arrowsC[i],d=(r.adv||0)+r.spd*(t-r.t0)/1000,sc=r.sc||1;
   if(d>=r.range+40||(r.local&&t-r.t0>rtt*2+250)){arrowsC.splice(i,1);continue}   // local arrows the server never confirmed fade out
+  if(r.kd==='orb'){if(!(orbImg.complete&&orbImg.naturalWidth))continue;       // Gumiho's magic orb
+   const S=3.2*(1+.06*Math.sin(t/70));ctx.save();ctx.translate(r.x+Math.cos(r.a)*d,r.y+Math.sin(r.a)*d*.8-30);ctx.shadowColor='#6f8fff';ctx.shadowBlur=16;
+   ctx.drawImage(orbImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();continue}
+  if(!(arrowImg.complete&&arrowImg.naturalWidth))continue;
   const dd=d+28,th=Math.atan2(.8*Math.sin(r.a),Math.cos(r.a));
   ctx.save();ctx.translate(r.x+Math.cos(r.a)*dd,r.y+Math.sin(r.a)*dd*.8-30);ctx.rotate(th+Math.PI);   // the arrow sprite points left
   if(sc>1){ctx.shadowColor='#ffd66b';ctx.shadowBlur=24}
@@ -511,6 +556,8 @@ function drawPlayer(o,isMe){
  if(o.hn){ctx.save();ctx.strokeStyle='#ffd66b';ctx.fillStyle='rgba(255,214,107,'+(.1+.06*Math.sin(performance.now()/160))+')';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.6,h*.7,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}   // Horn Guard aura
  if(o.mk){ctx.save();ctx.translate(o.x,o.y-4);ctx.scale(1,.8);const mp=1+.06*Math.sin(performance.now()/110);ctx.strokeStyle='#ff4b6e';ctx.lineWidth=3;ctx.setLineDash([5,4]);ctx.beginPath();ctx.arc(0,0,36*mp,0,7);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();for(let q=0;q<4;q++){const aa=q*Math.PI/2+Math.PI/4;ctx.moveTo(Math.cos(aa)*28*mp,Math.sin(aa)*28*mp);ctx.lineTo(Math.cos(aa)*46*mp,Math.sin(aa)*46*mp)}ctx.stroke();ctx.restore()}   // Sword Shout mark: takes +20% damage
  if(o.as>0){ctx.save();ctx.strokeStyle='#c98bff';ctx.fillStyle='rgba(201,139,255,.13)';ctx.lineWidth=3;ctx.setLineDash([8,6]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.56,h*.66,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}   // Assassinate attack-speed buff
+ if(o.bn){ctx.save();ctx.strokeStyle='#6fd8ff';ctx.fillStyle='rgba(111,216,255,.12)';ctx.lineWidth=3;ctx.setLineDash([4,5]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.5,h*.64,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}   // burning
+ if(o.qn){ctx.save();ctx.strokeStyle='#9ff0ff';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(o.x,o.y-4,30,11,0,0,7);ctx.stroke();ctx.restore()}   // next attack carries the Foxfire effect
  if(o.ta){ctx.save();ctx.strokeStyle='#ff5a4a';ctx.fillStyle='rgba(255,90,74,.12)';ctx.lineWidth=3;ctx.setLineDash([6,5]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.55,h*.68,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}   // taunted
  ctx.save();ctx.translate(o.x,0);ctx.scale(o.face,1);ctx.translate(-o.x,0);
  ctx.save();ctx.translate(o.x,yb+h);ctx.rotate((o.moving?step*PX*.4:0)*.012);ctx.translate(-o.x,-(yb+h));
@@ -521,8 +568,10 @@ function drawPlayer(o,isMe){
  ctx.drawImage(sp,8,12,7,3,x0+8*PX,yb+12*PX-lR*PX,7*PX,3*PX);
  ctx.restore();
  if(o.cls==='Knight')drawSword(o,h,lift);
+ if(o.cls==='Assassin')drawBlade(o,h,lift);
  if(o.cls==='Archer')drawBow(o,h,lift);
  if(o.cls==='Shielder')drawShield(o,h,lift);
+ if(o.cm&&charmImg.complete&&charmImg.naturalWidth){const bob=Math.sin(performance.now()/180)*3,top=o.tt?yb-57:yb-39;ctx.drawImage(charmImg,0,0,15,15,o.x-22,top-49+bob,45,45)}   // charmed: a heart above the head
  if(o.ta){ctx.font='bold 22px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(60,0,0,.9)';ctx.fillStyle='#ff5a4a';ctx.strokeText('!',o.x+36,yb+10);ctx.fillText('!',o.x+36,yb+10)}
  // name tag
  ctx.font='bold 15px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(10,20,50,.85)';
@@ -542,13 +591,25 @@ function drawPlayer(o,isMe){
 }
 function drawDash(f,k){                              // Shield Tackle streak (screen space, body height)
  ctx.save();ctx.globalAlpha=(1-k)*.85;ctx.lineCap='round';
- ctx.strokeStyle=f.c||'rgba(255,170,60,.55)';ctx.lineWidth=44*(1-k*.5);ctx.beginPath();ctx.moveTo(f.x,f.y-30);ctx.lineTo(f.x2,f.y2-30);ctx.stroke();
+ let x2=f.x2,y2=f.y2;if(f.follow){const o=others.get(f.by);if(o){x2=o.x;y2=o.y}}        // Shield Tackle: the streak grows behind the Shielder as it really moves
+ ctx.strokeStyle=f.c||'rgba(255,170,60,.55)';ctx.lineWidth=44*(1-k*.5);ctx.beginPath();ctx.moveTo(f.x,f.y-30);ctx.lineTo(x2,y2-30);ctx.stroke();
  ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=10;ctx.stroke();ctx.restore()}
+function drawGhosts(t){for(let i=ghosts.length-1;i>=0;i--){const g=ghosts[i],a=(t-g.t0)/300;if(a>=1){ghosts.splice(i,1);continue}
+ const sp=spriteFor(g.hue,g.cls);ctx.save();ctx.globalAlpha=(1-a)*.4;ctx.translate(g.x,0);ctx.scale(g.face,1);ctx.drawImage(sp,0,0,15,15,-37.5,g.y-75,75,75);ctx.restore()}}
+function drawSlash(f,k){                            // sword swing: the 15x15 arc, centred on the attacker, outer edge = attack range
+ const S=f.r/.9,al=k<.12?k/.12:1-(k-.12)/.88;
+ ctx.globalAlpha=Math.max(0,al)*.95;ctx.rotate(f.a+3*Math.PI/4+(k-.5)*.9);       // the arc's middle points up-left in the image: turn it onto the aim, sweep a little
+ ctx.drawImage(slashImg,0,0,15,15,-.967*S,-.967*S,S,S)}
+function drawPull(f,k){                             // Foxfires fly to the Gumiho
+ const e=k*k,tx=f.x,ty=f.y-30,S=3.4;
+ for(const q of f.pts){const sx=q[0],sy=q[1]-FOX_LIFT,x=sx+(tx-sx)*e,y=sy+(ty-sy)*e;
+  ctx.save();ctx.translate(x,y);ctx.shadowColor='#7fe9ff';ctx.shadowBlur=14;ctx.drawImage(fireImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore()}}
 function drawFx(t){
  for(let i=fxs.length-1;i>=0;i--){
   const f=fxs[i],k=(t-f.t0)/f.dur;
   if(k>=1){fxs.splice(i,1);continue}
   if(f.type==='dash'){drawDash(f,k);continue}
+  if(f.type==='pull'){drawPull(f,k);continue}
   ctx.save();ctx.translate(f.x,f.y);ctx.scale(1,.8);          // ground plane
   if(f.type==='ring'){                                       // Taunt: shockwave out to the full radius
    ctx.globalAlpha=(1-k)*.85;const rr=f.r*Math.min(1,k*3);
@@ -560,6 +621,8 @@ function drawFx(t){
    ctx.fillStyle='rgba(205,150,255,.5)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='rgba(255,255,255,.95)';ctx.stroke();
    ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(L,0);ctx.lineWidth=2;ctx.strokeStyle='rgba(255,255,255,.9)';ctx.stroke();ctx.restore();
   }else if(f.type==='cone'){
+   const fo=f.by?others.get(f.by):null;
+   if(fo&&(fo.cls==='Knight'||fo.cls==='Assassin')&&slashImg.complete&&slashImg.naturalWidth){drawSlash(f,k);ctx.restore();continue}   // Knight / Assassin swing = the arc image
    ctx.globalAlpha=(1-k)*.9;ctx.beginPath();ctx.moveTo(0,0);
    ctx.arc(0,0,f.r*(.6+.4*Math.min(1,k*4)),f.a-f.span/2,f.a+f.span/2);ctx.closePath();
    ctx.fillStyle=f.c;ctx.fill();ctx.fillStyle='rgba(15,15,45,.45)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='rgba(255,255,255,.85)';ctx.stroke();
@@ -620,7 +683,7 @@ function frame(t){
   if(id===myId&&arena&&myRole!==2){
    // 내 캐릭터: 서버를 기다리지 않고 즉시 이동 (클라이언트 예측)
    updateAim(o);
-   const stun=o.su>0,forced=stun||o.ta||o.kb||o.ds;if(chargeT0&&stun)chargeT0=0;      // taunted / knocked back / airborne / dashing: the server moves me
+   const stun=o.su>0,forced=stun||o.ta||o.kb||o.ds||o.cm;if(chargeT0&&stun)chargeT0=0;      // taunted / knocked back / airborne / dashing: the server moves me
    const dx=forced?0:(keys.d?1:0)-(keys.a?1:0),dy=forced?0:(keys.s?1:0)-(keys.w?1:0);
    o.moving=!!(dx||dy);
    if(Math.abs(Math.cos(myAim))>.2)o.face=Math.cos(myAim)>0?1:-1;       // face the cursor side
@@ -647,6 +710,9 @@ function frame(t){
  list.sort((a,b)=>a[1].y-b[1].y);
  const vis=(phase==='round'?list.filter(([id,o])=>o.role===1):list).filter(([id,o])=>!o.iv||id===myId);   // invisible archers are hidden from everyone but themselves
  drawFx(t);
+ drawFoxfires(t);
+ for(const [id,o] of vis)if(o.ds&&t-(o.ghT||0)>45){o.ghT=t;ghosts.push({x:o.x,y:o.y,face:o.face,hue:o.hue,cls:o.cls,t0:t})}   // after-images behind a dashing Shielder
+ drawGhosts(t);
  for(const [id,o] of vis){if(id===myId&&o.iv)ctx.globalAlpha=.4;drawPlayer(o,id===myId);ctx.globalAlpha=1}
  for(const [id,o] of vis){const b=bubbles.get(id);if(b){if(t>b.until)bubbles.delete(id);else drawBubble(o,b)}}
  drawArrows(t);drawHits(t);updateSkillbar(t);
