@@ -107,7 +107,8 @@ const BASE = { hp: 1000, dmg: 150, reduce: 0, atkCd: 600 };                     
 const CLASS_STATS = {
   Knight: { hp: 1200, dmg: 150, reduce: 0.2, atkCd: 700 },   // passive [Armor]: -20% damage taken; attack every 0.7s
   Archer: { hp: 1000, dmg: 180, reduce: 0, atkCd: 800 },    // shoots an arrow every 0.8s for 180
-  Shielder: { hp: 1500, dmg: 120, reduce: 0, atkCd: 800 }   // tank; its defence comes from the shield (see SHIELDER)
+  Shielder: { hp: 1500, dmg: 120, reduce: 0, atkCd: 800 },  // tank; its defence comes from the shield (see SHIELDER)
+  Assassin: { hp: 1000, dmg: 135, reduce: 0, atkCd: 600 }   // fast melee striker; see ASSASSIN
 };
 const statsOf = p => CLASS_STATS[p.cls] || BASE;
 const MAP = 1254;                                          // background image size (the whole map)
@@ -129,9 +130,17 @@ const KNIGHT = {
 const SHIELDER = {
   span: 100 * RAD, block: 0.9,                                           // passive [방패]: hits from the front 100 deg arc deal -90%
   Q: { cd: 12000, radius: 4 * RADPX, ms: 3000, slow: 0.8, stop: 45 },   // [도발]: taunt everyone within 4 radpx for 3s, they walk at 80% speed towards you
-  E: { cd: 11000, dist: 3.5 * RADPX, dmg: 200, hit: 55, kb: RADPX, kbMs: 300, stun: 500 },   // [실드 태클]: dash 3.5 radpx, 200 dmg, knock back + 0.5s airborne
+  E: { cd: 11000, dist: 3.5 * RADPX, dashMs: 300, dmg: 200, hit: 55, kb: RADPX, kbMs: 300, stun: 500 },   // [실드 태클]: dash 3.5 radpx in 0.3s (raise dashMs = slower), 200 dmg, knock back + 0.5s airborne
   R: { cd: 25000, dur: 7000, reduce: 0.4, reflect: 0.4, speed: 0.85 }   // [혼 가드]: 7s, unblocked dmg -40%, reflect melee 40%, deflect projectiles, own speed -15%
 };
+
+const ASSASSIN = {                                                       // passive [피어스]: every hit ignores the target's damage reduction (see dmgTo)
+  Q: { cd: 12000, range: 2 * RADPX, width: 45, dmg: 250, markMs: 3000, mark: 0.2 },   // [소드 샤우트]: thrust 2 radpx, 250 dmg, target takes +20% damage for 3s
+  E: { cd: 10000, dur: 2500, speed: 1.15 },                                           // [은신]: invisible 2.5s, +15% speed; attacking ends it
+  R: { cd: 25000, radius: RADPX, dmg: 250, asMs: 3000, as: 0.1, asPerHit: 0.1 }       // [암살]: blink to the cursor, 250 dmg within 1 radpx, then +10% attack speed (+10% per enemy hit) for 3s
+};
+const atkSpeed = (p, now) => now < p.asUntil ? 1 + p.asBonus : 1;           // attack speed multiplier (Assassin R buff)
+const breakStealth = p => { if (p.cls === 'Assassin') p.invisUntil = 0; };   // an Assassin's attack ends its invisibility
 
 function setAim(p, a) {
   if (!Number.isFinite(a)) return;
@@ -251,7 +260,8 @@ function resetCombat(p) {
   p.atkReady = p.cdQ = p.cdE = p.cdR = 0;
   p.stunUntil = p.guardUntil = p.slowUntil = 0;
   p.chargeStart = p.hasteUntil = p.invisUntil = 0;
-  p.tauntUntil = p.tauntBy = p.kbUntil = p.hornUntil = 0;
+  p.tauntUntil = p.tauntBy = p.kbUntil = p.hornUntil = 0; p.dash = null;
+  p.markUntil = p.asUntil = p.asBonus = 0;
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
 }
 function killPlayer(p) { p.hp = 0; p.role = 2; p.dx = p.dy = 0; p.moving = false; p.deathOrder = ++deathCounter; }
@@ -267,12 +277,18 @@ function shieldBlocks(t, src) {                      // does an attack from `src
 }
 // src (optional): { x, y, by } for melee/area attacks (by = the attacker), { dir } for projectiles. Without it nothing can be blocked.
 function dmgTo(t, amount, now, src) {
-  let cut = statsOf(t).reduce;                       // Armor: 20%
-  if (now < t.guardUntil) cut += KNIGHT.E.reduce;    // Guard Rush: +70% (added together -> 90% total)
-  const blocked = shieldBlocks(t, src);
-  if (blocked) cut += SHIELDER.block;                // [방패]: -90% from the front
-  else if (t.cls === 'Shielder' && now < t.hornUntil) cut += SHIELDER.R.reduce;   // [혼 가드]: unblocked damage -40%
-  const d = Math.max(1, Math.round(amount * (1 - Math.min(cut, 0.95))));
+  const pierce = !!(src && src.by && src.by.cls === 'Assassin');   // Assassin passive [피어스]: ignores every damage reduction and invincibility
+  if (!pierce && now < (t.invulnUntil || 0)) return;               // (hook for future invincibility skills - none exist yet)
+  let cut = 0, blocked = false;
+  if (!pierce) {
+    cut = statsOf(t).reduce;                         // Armor: 20%
+    if (now < t.guardUntil) cut += KNIGHT.E.reduce;  // Guard Rush: +70% (added together -> 90% total)
+    blocked = shieldBlocks(t, src);
+    if (blocked) cut += SHIELDER.block;              // [방패]: -90% from the front
+    else if (t.cls === 'Shielder' && now < t.hornUntil) cut += SHIELDER.R.reduce;   // [혼 가드]: unblocked damage -40%
+  }
+  let d = Math.max(1, Math.round(amount * (1 - Math.min(cut, 0.95))));
+  if (now < t.markUntil) d = Math.round(d * (1 + ASSASSIN.Q.mark));   // [소드 샤우트] mark: +20% damage taken (not a reduction, so it always applies)
   t.hp -= d;
   broadcast({ t: 'hit', id: t.id, dmg: d, bl: blocked ? 1 : 0 });
   if (blocked && src.by && now < t.hornUntil && src.by.role === 1) {              // [혼 가드]: a blocked melee hit hurts the attacker (40% of the attack's damage)
@@ -311,7 +327,8 @@ function doAttack(p, m) {
   if (p.cls === 'Archer') return archerAttack(p, m, now);
   if (now < p.atkReady) return;
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
-  p.atkReady = now + st.atkCd;
+  p.atkReady = now + st.atkCd / atkSpeed(p, now);
+  breakStealth(p);
   broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
@@ -325,6 +342,7 @@ function doSkill(p, k, m) {
   if (p.cls === 'Knight') knightSkill(p, k, m, now);
   else if (p.cls === 'Archer') archerSkill(p, k, m, now);
   else if (p.cls === 'Shielder') shielderSkill(p, k, m, now);
+  else if (p.cls === 'Assassin') assassinSkill(p, k, m, now);
 }
 function archerSkill(p, k, m, now) {
   const S = ARCHER[k], o = originOf(p, m), lag = lagOf(m);
@@ -340,6 +358,55 @@ function archerSkill(p, k, m, now) {
   } else {
     spawnArrow(p, o, lag, now, { a: p.aim, dmg: S.dmg, spd: ARROW.speed, range: offMapRange(o.x, o.y, p.aim, S.scale), noArena: true, radius: S.radius, pierce: true, stun: S.stun, sc: S.scale, kind: 'R' });
   }
+}
+function assassinSkill(p, k, m, now) {
+  const S = ASSASSIN[k], o = originOf(p, m), lag = lagOf(m);
+  p['cd' + k] = now + S.cd; send(p.ws, { t: 'cd', k, ms: S.cd });
+  if (k === 'E') { p.invisUntil = now + S.dur; return; }                // [은신]
+  breakStealth(p);                                                       // Q and R are attacks
+  if (k === 'Q') {                                                       // [소드 샤우트]: a long, narrow thrust
+    const a = p.aim, gx = o.x, gy = o.y / 0.8, ex = gx + Math.cos(a) * S.range, ey = gy + Math.sin(a) * S.range;
+    broadcast({ t: 'fx', type: 'thrust', x: o.x, y: o.y, a, len: S.range, w: S.width, dur: 320 });
+    for (const t of targetsOf(p)) {
+      const tp = posAt(t, now - lag);
+      if (segDist(tp.x, tp.y / 0.8, gx, gy, ex, ey) > S.width) continue;
+      dmgTo(t, S.dmg, now, { x: o.x, y: o.y, by: p });
+      if (t.role === 1) t.markUntil = now + S.markMs;
+    }
+  } else {                                                               // [암살]: blink to the cursor, then strike everything around the landing point
+    let tx = Number(m && m.cx), ty = Number(m && m.cy) + 30;            // the client sends the cursor; the body centre sits 30px above the feet
+    if (!Number.isFinite(tx) || !Number.isFinite(ty)) { tx = o.x + Math.cos(p.aim) * 2 * RADPX; ty = o.y + Math.sin(p.aim) * 2 * RADPX * 0.8; }
+    const nx = (tx - CX) / RX, ny = (ty - CY) / RY, d = Math.hypot(nx, ny);
+    if (d > 1) { tx = CX + nx / d * RX; ty = CY + ny / d * RY; }         // stay inside the arena
+    broadcast({ t: 'fx', type: 'dash', x: o.x, y: o.y, x2: tx, y2: ty, c: 'rgba(190,120,255,.6)', dur: 380 });
+    p.x = tx; p.y = ty;
+    send(p.ws, { t: 'warp', x: tx, y: ty });
+    broadcast({ t: 'fx', type: 'ring', x: tx, y: ty, r: S.radius, c: '#c98bff', dur: 500 });
+    let n = 0;
+    for (const t of targetsOf(p)) {
+      const tp = posAt(t, now - lag);
+      if (Math.hypot(tp.x - tx, (tp.y - ty) / 0.8) > S.radius) continue;
+      dmgTo(t, S.dmg, now, { x: tx, y: ty, by: p }); n++;
+    }
+    p.asUntil = now + S.asMs; p.asBonus = S.as + S.asPerHit * n;         // +10%, and +10% more for every enemy hit
+  }
+  checkRoundEnd();
+}
+function dashHits(p, D, px, py, now) {            // enemies touched by the dasher between its previous and current position
+  let any = false;
+  for (const t of targetsOf(p)) {
+    if (D.hit.has(t.id)) continue;
+    const tp = posAt(t, now - D.lag);
+    if (segDist(tp.x, tp.y / 0.8, px, py / 0.8, p.x, p.y / 0.8) > SHIELDER.E.hit) continue;
+    D.hit.add(t.id); any = true;
+    const S = SHIELDER.E;
+    dmgTo(t, S.dmg, now, { x: D.sx, y: D.sy, by: p });
+    if (t.role !== 1) continue;
+    t.stunUntil = Math.max(t.stunUntil, now + S.stun);                           // launched into the air
+    const v = S.kb / (S.kbMs / 1000);
+    t.kbUntil = now + S.kbMs; t.kbx = Math.cos(D.a) * v; t.kby = Math.sin(D.a) * v;   // ...and pushed along the dash
+  }
+  return any;
 }
 function shielderSkill(p, k, m, now) {
   const S = SHIELDER[k], o = originOf(p, m), lag = lagOf(m);
@@ -357,18 +424,9 @@ function shielderSkill(p, k, m, now) {
     while (len > 0 && !inside(len)) len -= 5;        // stop at the arena edge
     len = Math.max(0, len);
     const ex = gx + Math.cos(a) * len, egy = gy + Math.sin(a) * len;
-    broadcast({ t: 'fx', type: 'dash', by: p.id, x: o.x, y: o.y, x2: ex, y2: egy * 0.8, a, span: ATK.span, dur: 450 });
-    for (const t of targetsOf(p)) {
-      const tp = posAt(t, now - lag);
-      if (segDist(tp.x, tp.y / 0.8, gx, gy, ex, egy) > S.hit) continue;
-      dmgTo(t, S.dmg, now, { x: o.x, y: o.y, by: p });
-      if (t.role !== 1) continue;
-      t.stunUntil = Math.max(t.stunUntil, now + S.stun);                       // launched into the air
-      const v = S.kb / (S.kbMs / 1000);
-      t.kbUntil = now + S.kbMs; t.kbx = Math.cos(a) * v; t.kby = Math.sin(a) * v;   // ...and pushed along the dash
-    }
-    p.x = ex; p.y = egy * 0.8;
-    send(p.ws, { t: 'warp', x: p.x, y: p.y });
+    broadcast({ t: 'fx', type: 'dash', by: p.id, x: o.x, y: o.y, x2: ex, y2: egy * 0.8, a, span: ATK.span, dur: S.dashMs + 150 });
+    p.x = o.x; p.y = o.y;
+    p.dash = { sx: o.x, sy: o.y, ex, ey: egy * 0.8, a, t0: now, ms: S.dashMs, lag, hit: new Set() };   // moved a little every tick by the simulation
   } else {                                           // [혼 가드]
     p.hornUntil = now + S.dur;
   }
@@ -580,7 +638,7 @@ wss.on('connection', (ws, req) => {
   const p = { id, ws, name: 'Player' + id, hue: Math.floor(Math.random() * 360),
     x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
     joined: false, cls: '', ready: false, role: 0, inRound: false, lx: 0, ly: 0, deathOrder: 0,
-    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
+    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
   players.set(id, p);
   pruneChat();
   send(ws, { t: 'hello', id, arena: { CX, CY, RX, RY } });
@@ -642,10 +700,22 @@ wss.on('connection', (ws, req) => {
 let last = Date.now();
 setInterval(() => {
   const now = Date.now(), dt = Math.min((now - last) / 1000, 0.1); last = now;
+  let needEnd = false;
   for (const p of players.values()) {
     if (!p.joined) continue;
     let { dx, dy } = p;
     if (p.role === 2 || now < p.stunUntil) { dx = dy = 0; p.chargeStart = 0; }
+    if (p.dash) {                                                         // [실드 태클] in progress: no steering, the path is fixed
+      const D = p.dash;
+      if (p.role !== 1 || now < p.stunUntil) p.dash = null;
+      else {
+        const px = p.x, py = p.y, f = Math.min(1, (now - D.t0) / D.ms);
+        p.x = D.sx + (D.ex - D.sx) * f; p.y = D.sy + (D.ey - D.sy) * f;
+        if (dashHits(p, D, px, py, now)) needEnd = true;
+        if (f >= 1) p.dash = null;
+      }
+      dx = dy = 0;
+    }
     let tauntMul = 1;
     if (now < p.tauntUntil && p.role === 1 && now >= p.stunUntil) {      // [도발]: forced to walk towards the Shielder at 80% speed
       const src = players.get(p.tauntBy);
@@ -662,7 +732,7 @@ setInterval(() => {
     }
     if (dx || dy) {
       const l = Math.hypot(dx, dy); dx /= l; dy /= l;
-      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1);
+      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * (p.cls === 'Assassin' && now < p.invisUntil ? ASSASSIN.E.speed : 1);
       p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
@@ -671,17 +741,32 @@ setInterval(() => {
     p.hist.push({ t: now, x: p.x, y: p.y });
     while (p.hist.length && p.hist[0].t < now - HIST_MS) p.hist.shift();
   }
+  if (needEnd) checkRoundEnd();
   checkTimeout(now);
   stepArrows(dt, now);
-  const list = [];
+  const list = [], hidden = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
-    list.push({ id: p.id, name: p.name, hue: p.hue, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
+    const iv = now < p.invisUntil;
+    if (iv && !p.wasIv) { p.hideX = p.x; p.hideY = p.y; }                // remember where they vanished
+    p.wasIv = iv;
+    const e = { id: p.id, name: p.name, hue: p.hue, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
       f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role,
       hp: Math.max(0, Math.round(p.hp)), mh: p.mh, su: Math.max(0, p.stunUntil - now), gd: now < p.guardUntil ? 1 : 0, sl: now < p.slowUntil ? 1 : 0,
-      hs: now < p.hasteUntil ? 1 : 0, iv: now < p.invisUntil ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, cg: p.chargeStart ? Math.max(1, Math.min(now - p.chargeStart, ARCHER.charge.maxMs)) : 0 });
+      hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
+      mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0,
+      cg: p.chargeStart ? Math.max(1, Math.min(now - p.chargeStart, ARCHER.charge.maxMs)) : 0 };
+    list.push(e);
+    hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);   // what everybody ELSE gets: no live position of an invisible player
   }
-  broadcast({ t: 'state', ph: phase, left: phase === 'round' ? Math.max(0, ROUND_MS - (now - roundStart)) : 0, p: list });
+  const head = { t: 'state', ph: phase, left: phase === 'round' ? Math.max(0, ROUND_MS - (now - roundStart)) : 0 };
+  if (!list.some(e => e.iv)) { broadcast(Object.assign(head, { p: list })); return; }
+  const common = JSON.stringify(Object.assign({}, head, { p: hidden }));
+  for (const q of players.values()) {
+    if (q.ws.readyState !== 1) continue;
+    if (q.joined && now < q.invisUntil) q.ws.send(JSON.stringify(Object.assign({}, head, { p: hidden.map((e, i) => list[i].id === q.id ? list[i] : e) })));   // an invisible player still sees itself
+    else q.ws.send(common);
+  }
 }, 1000 / TICK);
 
 // Drop dead connections
