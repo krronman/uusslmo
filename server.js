@@ -125,7 +125,7 @@ const ATK = { range: 1 * RADPX, span: 100 * RAD };         // melee basic attack
 const KNIGHT = {
   Q: { cd: 8000, range: 2 * RADPX, span: 120 * RAD, dmg: 250, stun: 1000 },   // range = 2 radpx
   E: { cd: 12000, dur: 3000, reduce: 0.7, speed: 1.4 },                 // -70% damage taken, +40% speed
-  R: { cd: 25000, swords: 8, ring: 195, radius: 82.5, dmg: 200, slow: 0.7, slowMs: 2000 }   // ring & per-sword radius = 1.5x (was 130 / 55)
+  R: { cd: 25000, swords: 8, ring: 195, radius: 2 * RADPX, cRadius: 2.5 * RADPX, dmg: 220, slow: 0.7, slowMs: 2000 }   // ring & per-sword radius = 1.5x (was 130 / 55)
 };
 
 const SHIELDER = {
@@ -141,11 +141,11 @@ const ASSASSIN = {                                                       // pass
   R: { cd: 25000, radius: RADPX, dmg: 250, asMs: 3000, as: 0.1, asPerHit: 0.1 }       // [암살]: blink to the cursor, 250 dmg within 1 radpx, then +10% attack speed (+10% per enemy hit) for 3s
 };
 const GUMIHO = {
-  atk: { range: 3.5 * RADPX, speed: 600, radius: 30 },                    // basic attack: a magic orb, 3.5 radpx
+  atk: { range: 3.5 * RADPX, speed: 1020, radius: 30 },                  // basic attack: a magic orb, 3.5 radpx
   fire: { chance: 0.6, max: 5, pick: 55, lift: 25 },                      // passive [여우불]: 60% on every orb landing, at most 5, cursor pick radius, hover height
   eff: { dmg: 120, tick: 20, tickMs: 500, ms: 2000, radius: 2 * RADPX },  // the Foxfire "effect": 120 damage + 20 every 0.5s for 2s, blast radius 2 radpx
   Q: { cd: 8000 },                                                        // [요술]
-  E: { cd: 12000, pullMs: 500, dmg: 150 },                                // [미수옥]
+  E: { cd: 12000, pullMs: 500, dmg: 150, rad: 1.5 * RADPX },                             // [미수옥]
   R: { cd: 25000, radius: 2.5 * RADPX, ms: 3000, speed: 0.8, stop: 45 }   // [매혹]: charm for 3s, they walk towards you at 80% speed
 };
 const atkSpeed = (p, now) => now < p.asUntil ? 1 + p.asBonus : 1;           // attack speed multiplier (Assassin R buff)
@@ -235,7 +235,7 @@ function deflectArrow(ar, t) {                  // [혼 가드]: the arrow flies
 function spawnArrow(p, o, lag, now, spec) {
   const id = ++arrowSeq;
   const ar = { id, owner: p.id, x: o.x, gy: o.y / 0.8, a: spec.a, dmg: spec.dmg, spd: spec.spd, radius: spec.radius || ARROW.radius,
-    orb: !!spec.orb, eff: !!spec.eff, pierce: !!spec.pierce, noArena: !!spec.noArena, sc: spec.sc || 1, stun: spec.stun || 0, hitIds: new Set(), left: spec.range || ARROW.range };
+    orb: !!spec.orb, eff: !!spec.eff, boom: spec.boom || 0, pierce: !!spec.pierce, noArena: !!spec.noArena, sc: spec.sc || 1, stun: spec.stun || 0, hitIds: new Set(), left: spec.range || ARROW.range };
   let adv = 0, ended = false;
   const pending = [];
   const steps = lag > 0 ? Math.ceil(lag / 33) : 0, stepMs = steps ? lag / steps : 0;
@@ -245,7 +245,7 @@ function spawnArrow(p, o, lag, now, spec) {
     pending.push(...hits);
     if (!ar.pierce && hits.length) ended = true; else adv += step;
   }
-  broadcast({ t: 'arrow', id, by: p.id, x: o.x, y: o.y, a: spec.a, spd: ar.spd, range: ar.left + adv, adv, sc: spec.sc || 1, kd: spec.kind || 'atk' });
+  broadcast({ t: 'arrow', id, by: p.id, x: o.x, y: o.y, a: spec.a, spd: ar.spd, range: ar.left + adv, adv, sc: spec.sc || 1, kd: spec.kind || 'atk', bm: spec.boom || 0 });
   let deflected = false;
   for (const t of pending) if (arrowHit(ar, t, now)) { deflected = true; break; }
   if (ended && !deflected) { broadcast({ t: 'arrowEnd', id }); orbLand(ar, pending[0], now); } else arrows.set(id, ar);
@@ -272,7 +272,7 @@ function resetCombat(p) {
   p.chargeStart = p.hasteUntil = p.invisUntil = 0;
   p.tauntUntil = p.tauntBy = p.kbUntil = p.hornUntil = 0; p.dash = null;
   p.markUntil = p.asUntil = p.asBonus = 0;
-  p.fires = []; p.qNext = false; p.pull = null; p.charmUntil = p.charmBy = p.burnUntil = p.burnNext = 0;
+  p.fires = []; p.qNext = false; p.eNext = 0; p.pull = null; p.charmUntil = p.charmBy = p.burnUntil = p.burnNext = 0;
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
 }
 function killPlayer(p) { p.hp = 0; p.role = 2; p.dx = p.dy = 0; p.moving = false; p.deathOrder = ++deathCounter; }
@@ -280,6 +280,7 @@ function shieldBlocks(t, src) {                      // does an attack from `src
   if (t.cls !== 'Shielder' || !src) return false;    // src: {x,y} = where the attack comes from, or {dir} = incoming direction (ground plane)
   let dir = src.dir;
   if (dir === undefined) {
+    if (!src.basic) return false;
     const dx = src.x - t.x, dy = (src.y - t.y) / 0.8;
     if (Math.hypot(dx, dy) < 10) return false;
     dir = Math.atan2(dy, dx);
@@ -344,7 +345,7 @@ function doAttack(p, m) {
   broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
-    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span)) dmgTo(t, st.dmg, now, { x: o.x, y: o.y, by: p });
+    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span)) dmgTo(t, st.dmg, now, { x: o.x, y: o.y, by: p, basic: true });
   }
   checkRoundEnd();
 }
@@ -384,9 +385,15 @@ function orbLand(ar, hitT, now) {                     // passive [여우불]: wh
   if (!ar.orb || phase !== 'round') return;
   const g = players.get(ar.owner);
   if (!g || g.cls !== 'Gumiho' || g.role !== 1) return;
-  if (!hitT && Math.hypot((ar.x - CX) / RX, (ar.gy * 0.8 - CY) / RY) > 0.97) return;   // the orb ended at the wall: no Foxfire
-  if (Math.random() >= GUMIHO.fire.chance) return;
-  spawnFoxfire(g, hitT ? { x: hitT.x, y: hitT.y } : { x: ar.x, y: ar.gy * 0.8 });
+  if (ar.boom) {
+    const at = hitT ? { x: hitT.x, y: hitT.y } : { x: ar.x, y: ar.gy * 0.8 }, rad = ar.boom * GUMIHO.E.rad;
+    broadcast({ t: 'fx', type: 'ring', x: at.x, y: at.y, r: rad, c: '#7fe9ff', dur: 700 });
+    for (const t of targetsOf(g)) if (t !== hitT && Math.hypot(t.x - at.x, (t.y - at.y) / 0.8) <= rad) dmgTo(t, ar.dmg, now, { x: at.x, y: at.y });
+    checkRoundEnd();
+    if (phase !== 'round') return;
+  }
+  if (!hitT || Math.random() >= GUMIHO.fire.chance) return;
+  spawnFoxfire(g, { x: hitT.x, y: hitT.y });
 }
 function foxHit(t, now, by, dmg, src) {               // the Foxfire effect: damage now + burning (20 every 0.5s for 2s; re-applying refreshes it)
   dmgTo(t, dmg, now, src);
@@ -404,8 +411,8 @@ function gumihoAttack(p, m, now) {
   if (now < p.atkReady) return;
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd;
-  const eff = p.qNext; p.qNext = false;               // Q with no Foxfire left: this attack carries the effect
-  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg, spd: GUMIHO.atk.speed, range: GUMIHO.atk.range, radius: GUMIHO.atk.radius, kind: 'orb', orb: true, eff });
+  const eff = p.qNext, n = p.eNext || 0; p.qNext = false; p.eNext = 0;
+  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg + n * GUMIHO.E.dmg, boom: n, spd
 }
 function gumihoSkill(p, k, m, now) {
   const G = GUMIHO, o = originOf(p, m), lag = lagOf(m);
@@ -434,7 +441,7 @@ function gumihoSkill(p, k, m, now) {
     if (!p.fires.length) return;                      // nothing to pull (no cooldown)
     p.cdE = now + G.E.cd; send(p.ws, { t: 'cd', k, ms: G.E.cd });
     const list = p.fires.splice(0);
-    p.pull = { t0: now, x: o.x, y: o.y, n: list.length };
+    p.eNext = list.length;
     broadcast({ t: 'fx', type: 'pull', x: o.x, y: o.y, pts: list.map(f => [Math.round(f.x), Math.round(f.y)]), dur: G.E.pullMs });
   } else {                                            // [매혹]
     p.cdR = now + G.R.cd; send(p.ws, { t: 'cd', k, ms: G.R.cd });
@@ -532,15 +539,14 @@ function knightSkill(p, k, m, now) {
   } else if (k === 'E') {
     p.guardUntil = now + S.dur;
   } else {
-    broadcast({ t: 'fx', type: 'swords', x: o.x, y: o.y, r: S.ring, ar: S.radius, n: S.swords, dur: 900 });
-    const gy = o.y / 0.8;
-    for (let n = 0; n < S.swords; n++) {
-      const a = n * 2 * Math.PI / S.swords, sx = o.x + Math.cos(a) * S.ring, sy = gy + Math.sin(a) * S.ring;
+    broadcast({ t: 'fx', type: 'swords', x: o.x, y: o.y, r: S.ring, ar: S.radius, cr: S.cRadius, n: S.swords, dur: 900 });
+    const gy = o.y / 0.8, sw = [];
+    for (let n = 0; n < S.swords; n++) { const a = n * 2 * Math.PI / S.swords; sw.push({ x: o.x + Math.cos(a) * S.ring, y: gy + Math.sin(a) * S.ring, r: S.radius }); }
+    sw.push({ x: o.x, y: gy, r: S.cRadius });
+    for (const s of sw) {
       for (const t of targetsOf(p)) {
         const tp = posAt(t, now - lag);
-        if (t.role !== 1 || Math.hypot(tp.x - sx, tp.y / 0.8 - sy) > S.radius + 10) continue;
-        dmgTo(t, S.dmg, now, { x: o.x, y: o.y, by: p });
-        if (t.role === 1) t.slowUntil = now + S.slowMs;
+        if (t.role !== 1 || Math.hypot(tp.x - s.x, tp.y / 0.8 - s.y) > s.r + 10) continue;
       }
     }
   }
@@ -874,7 +880,7 @@ setInterval(() => {
       f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role,
       hp: Math.max(0, Math.round(p.hp)), mh: p.mh, su: Math.max(0, p.stunUntil - now), gd: now < p.guardUntil ? 1 : 0, sl: now < p.slowUntil ? 1 : 0,
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
-      mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: p.qNext ? 1 : 0,
+      mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.min(now - p.chargeStart, ARCHER.charge.maxMs)) : 0 };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);   // what everybody ELSE gets: no live position of an invisible player
