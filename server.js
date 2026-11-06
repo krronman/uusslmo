@@ -141,11 +141,11 @@ const ASSASSIN = {                                                       // pass
   R: { cd: 25000, radius: RADPX, dmg: 250, asMs: 3000, as: 0.1, asPerHit: 0.1 }       // [암살]: blink to the cursor, 250 dmg within 1 radpx, then +10% attack speed (+10% per enemy hit) for 3s
 };
 const GUMIHO = {
-  atk: { range: 3.5 * RADPX, speed: 1020, radius: 30 },                  // basic attack: a magic orb, 3.5 radpx
+  atk: { range: 3.5 * RADPX, speed: 1020, radius: 30 },                    // basic attack: a magic orb, 3.5 radpx
   fire: { chance: 0.6, max: 5, pick: 55, lift: 25 },                      // passive [여우불]: 60% on every orb landing, at most 5, cursor pick radius, hover height
   eff: { dmg: 120, tick: 20, tickMs: 500, ms: 2000, radius: 2 * RADPX },  // the Foxfire "effect": 120 damage + 20 every 0.5s for 2s, blast radius 2 radpx
   Q: { cd: 8000 },                                                        // [요술]
-  E: { cd: 12000, pullMs: 500, dmg: 150, rad: 1.5 * RADPX },                             // [미수옥]
+  E: { cd: 12000, pullMs: 500, dmg: 150, rad: 1.5 * RADPX },                                // [미수옥]
   R: { cd: 25000, radius: 2.5 * RADPX, ms: 3000, speed: 0.8, stop: 45 }   // [매혹]: charm for 3s, they walk towards you at 80% speed
 };
 const atkSpeed = (p, now) => now < p.asUntil ? 1 + p.asBonus : 1;           // attack speed multiplier (Assassin R buff)
@@ -280,7 +280,7 @@ function shieldBlocks(t, src) {                      // does an attack from `src
   if (t.cls !== 'Shielder' || !src) return false;    // src: {x,y} = where the attack comes from, or {dir} = incoming direction (ground plane)
   let dir = src.dir;
   if (dir === undefined) {
-    if (!src.basic) return false;
+    if (!src.basic) return false;                    // only basic melee attacks (src.basic) and projectiles (src.dir) can be blocked
     const dx = src.x - t.x, dy = (src.y - t.y) / 0.8;
     if (Math.hypot(dx, dy) < 10) return false;
     dir = Math.atan2(dy, dx);
@@ -385,14 +385,14 @@ function orbLand(ar, hitT, now) {                     // passive [여우불]: wh
   if (!ar.orb || phase !== 'round') return;
   const g = players.get(ar.owner);
   if (!g || g.cls !== 'Gumiho' || g.role !== 1) return;
-  if (ar.boom) {
+  if (ar.boom) {                                      // [미수옥]-empowered orb: blasts where it lands, radius +1.5 radpx and damage +150 per collected Foxfire
     const at = hitT ? { x: hitT.x, y: hitT.y } : { x: ar.x, y: ar.gy * 0.8 }, rad = ar.boom * GUMIHO.E.rad;
     broadcast({ t: 'fx', type: 'ring', x: at.x, y: at.y, r: rad, c: '#7fe9ff', dur: 700 });
     for (const t of targetsOf(g)) if (t !== hitT && Math.hypot(t.x - at.x, (t.y - at.y) / 0.8) <= rad) dmgTo(t, ar.dmg, now, { x: at.x, y: at.y });
     checkRoundEnd();
     if (phase !== 'round') return;
   }
-  if (!hitT || Math.random() >= GUMIHO.fire.chance) return;
+  if (!hitT || Math.random() >= GUMIHO.fire.chance) return;   // Foxfire only where the orb hit an enemy (never in mid-air / at max range)
   spawnFoxfire(g, { x: hitT.x, y: hitT.y });
 }
 function foxHit(t, now, by, dmg, src) {               // the Foxfire effect: damage now + burning (20 every 0.5s for 2s; re-applying refreshes it)
@@ -411,8 +411,8 @@ function gumihoAttack(p, m, now) {
   if (now < p.atkReady) return;
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd;
-  const eff = p.qNext, n = p.eNext || 0; p.qNext = false; p.eNext = 0;
-  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg + n * GUMIHO.E.dmg, boom: n, spd
+  const eff = p.qNext, n = p.eNext || 0; p.qNext = false; p.eNext = 0;   // Q with no Foxfire left: carries the effect; E: n collected Foxfires empower it
+  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg + n * GUMIHO.E.dmg, boom: n, spd: GUMIHO.atk.speed, range: GUMIHO.atk.range, radius: GUMIHO.atk.radius, kind: 'orb', orb: true, eff });
 }
 function gumihoSkill(p, k, m, now) {
   const G = GUMIHO, o = originOf(p, m), lag = lagOf(m);
@@ -441,7 +441,7 @@ function gumihoSkill(p, k, m, now) {
     if (!p.fires.length) return;                      // nothing to pull (no cooldown)
     p.cdE = now + G.E.cd; send(p.ws, { t: 'cd', k, ms: G.E.cd });
     const list = p.fires.splice(0);
-    p.eNext = list.length;
+    p.eNext = list.length;                            // the next basic attack is empowered
     broadcast({ t: 'fx', type: 'pull', x: o.x, y: o.y, pts: list.map(f => [Math.round(f.x), Math.round(f.y)]), dur: G.E.pullMs });
   } else {                                            // [매혹]
     p.cdR = now + G.R.cd; send(p.ws, { t: 'cd', k, ms: G.R.cd });
@@ -542,11 +542,13 @@ function knightSkill(p, k, m, now) {
     broadcast({ t: 'fx', type: 'swords', x: o.x, y: o.y, r: S.ring, ar: S.radius, cr: S.cRadius, n: S.swords, dur: 900 });
     const gy = o.y / 0.8, sw = [];
     for (let n = 0; n < S.swords; n++) { const a = n * 2 * Math.PI / S.swords; sw.push({ x: o.x + Math.cos(a) * S.ring, y: gy + Math.sin(a) * S.ring, r: S.radius }); }
-    sw.push({ x: o.x, y: gy, r: S.cRadius });
+    sw.push({ x: o.x, y: gy, r: S.cRadius });                           // the big sword in the centre
     for (const s of sw) {
       for (const t of targetsOf(p)) {
         const tp = posAt(t, now - lag);
         if (t.role !== 1 || Math.hypot(tp.x - s.x, tp.y / 0.8 - s.y) > s.r + 10) continue;
+        dmgTo(t, S.dmg, now, { x: o.x, y: o.y, by: p });
+        if (t.role === 1) t.slowUntil = now + S.slowMs;
       }
     }
   }
