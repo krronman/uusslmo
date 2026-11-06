@@ -162,13 +162,13 @@ slashImg.src='slash.png';orbImg.src='orb.png';fireImg.src='foxfire.png';charmImg
 const RADPX=112.5,SHIELD_SPAN=100*Math.PI/180;   // 1 radpx = radius of the basic attack range (same as the server)
 const clsImg={};for(const c of ['Knight','Archer','Shielder','Assassin','Gumiho']){const i=new Image();i.src=c.toLowerCase()+'.png';clsImg[c]=i}
 let vw,vh,scale,ox,oy,dpr;
-const ZOOM_MIN=.5;let zoom=1;                       // 1 = the default view = the closest zoom; the mouse wheel only zooms OUT from there
-try{const z=parseFloat(localStorage.getItem('mpvp_zoom'));if(z>=ZOOM_MIN&&z<=1)zoom=z}catch(e){}
+const ZOOM_MAX=2.5;let zoom=1;                   // 1 = the default view = the closest zoom; the mouse wheel only zooms OUT from there
+try{const z=parseFloat(localStorage.getItem('mpvp_zoom'));if(z>=1&&z<=ZOOM_MAX)zoom=z}catch(e){}
 function resize(){dpr=devicePixelRatio||1;vw=innerWidth;vh=innerHeight;cv.width=vw*dpr;cv.height=vh*dpr;
  scale=Math.min(vw,vh)/W*dpr*zoom;ox=(cv.width-W*scale)/2;oy=(cv.height-W*scale)/2}
 addEventListener('resize',resize);resize();
 cv.addEventListener('wheel',e=>{e.preventDefault();
- zoom=Math.max(ZOOM_MIN,Math.min(1,zoom*(e.deltaY>0?.92:1/.92)));if(zoom>.98)zoom=1;
+ zoom=Math.max(1,Math.min(ZOOM_MAX,zoom*(e.deltaY<0?1.08:1/1.08)));if(zoom<1.02)zoom=1;
  resize();try{localStorage.setItem('mpvp_zoom',String(zoom))}catch(err){}},{passive:false});
 
 // ---- per-player shirt colour ----
@@ -295,7 +295,8 @@ function toast(msg){const el=document.getElementById('toast');el.textContent=msg
 let rtt=60,lastSent='',atkLocal=0,myAim=0,mWx=0,mWy=0,mouseOn=false,aimSent=0,aimSentT=0;
 const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700},arrowsC=[];
 const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b)),lerpAng=(a,b,t)=>a+angDiff(b,a)*t;
-addEventListener('mousemove',e=>{mWx=(e.clientX*dpr-ox)/scale;mWy=(e.clientY*dpr-oy)/scale;mouseOn=true});
+let mcx=0,mcy=0,camX=W/2,camY=W/2;
+addEventListener('mousemove',e=>{mcx=e.clientX;mcy=e.clientY;mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale;mouseOn=true});
 function updateAim(o){                          // aim = direction from the character's body to the cursor
  if(!mouseOn)return;
  const dx=mWx-o.x,dy=(mWy-(o.y-30))/0.8;
@@ -336,7 +337,7 @@ function localAttack(){const o=others.get(myId);if(!o||myRole===2||o.su>0||o.cm)
  if(myCls==='Gumiho'){localOrb(o);return}
  localCone(RADPX,100*Math.PI/180,'rgba(255,255,255,.6)',220)}
 function localOrb(o){const n=performance.now();                 // Gumiho: the orb leaves at once, the server's copy replaces it
- arrowsC.push({id:'L'+n,local:true,by:myId,x:o.x,y:o.y,a:myAim,spd:600,range:3.5*RADPX,t0:n,adv:0,kd:'orb'});o.shot=n}
+ arrowsC.push({id:'L'+n,local:true,by:myId,x:o.x,y:o.y,a:myAim,spd:1020,range:3.5*RADPX,t0:n,adv:0,kd:'orb'});o.shot=n}
 const FOX_PICK=55,FOX_LIFT=25;
 function hoverFox(){if(!mouseOn)return null;let best=FOX_PICK,hit=null;      // my Foxfire under the cursor
  for(const f of foxes){if(f.o!==myId)continue;const d=Math.hypot(mWx-f.x,mWy-(f.y-FOX_LIFT));if(d<=best){best=d;hit=f}}return hit}
@@ -562,7 +563,7 @@ function drawArrows(t){
   const r=arrowsC[i],d=(r.adv||0)+r.spd*(t-r.t0)/1000,sc=r.sc||1;
   if(d>=r.range+40||(r.local&&t-r.t0>rtt*2+250)){arrowsC.splice(i,1);continue}   // local arrows the server never confirmed fade out
   if(r.kd==='orb'){if(!(orbImg.complete&&orbImg.naturalWidth))continue;       // Gumiho's magic orb
-   const S=3.2*(1+.06*Math.sin(t/70));ctx.save();ctx.translate(r.x+Math.cos(r.a)*d,r.y+Math.sin(r.a)*d*.8-30);ctx.shadowColor='#6f8fff';ctx.shadowBlur=16;
+   const S=(3.2+.6*(r.bm||0))*(1+.06*Math.sin(t/70));ctx.save();ctx.translate(r.x+Math.cos(r.a)*d,r.y+Math.sin(r.a)*d*.8-30);ctx.shadowColor='#6f8fff';ctx.shadowBlur=16;
    ctx.drawImage(orbImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();continue}
   if(!(arrowImg.complete&&arrowImg.naturalWidth))continue;
   const dd=d+28,th=Math.atan2(.8*Math.sin(r.a),Math.cos(r.a));
@@ -717,6 +718,11 @@ function frame(t){requestAnimationFrame(frame);          // always schedule the 
 function draw(t){
  const dt=Math.min((t-last)/1000,.05);last=t;
  ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.shadowBlur=0;ctx.setLineDash([]);ctx.fillStyle='#8fc4f5';ctx.fillRect(0,0,cv.width,cv.height);
+  {const me=others.get(myId),fx=me&&myRole!==2?me.x:W/2,fy=me&&myRole!==2?me.y-30:W/2,sw=W*scale,sh=W*scale,kc=Math.min(1,dt*10);
+  camX+=(fx-camX)*kc;camY+=(fy-camY)*kc;
+  ox=sw>cv.width+1?Math.max(cv.width-sw,Math.min(0,cv.width/2-camX*scale)):(cv.width-sw)/2;
+  oy=sh>cv.height+1?Math.max(cv.height-sh,Math.min(0,cv.height/2-camY*scale)):(cv.height-sh)/2;
+  mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale}
  ctx.setTransform(scale,0,0,scale,ox,oy);ctx.drawImage(bg,0,0,W,W);ctx.imageSmoothingEnabled=false;
  const k=1-Math.exp(-dt*18),list=[];
  for(const [id,o] of others){
