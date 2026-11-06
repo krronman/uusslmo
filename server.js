@@ -107,7 +107,7 @@ const BASE = { hp: 1000, dmg: 150, reduce: 0, atkCd: 600 };                     
 const CLASS_STATS = {
   Knight: { hp: 1200, dmg: 150, reduce: 0.2, atkCd: 700 },   // passive [Armor]: -20% damage taken; attack every 0.7s
   Archer: { hp: 1000, dmg: 180, reduce: 0, atkCd: 800 },    // shoots an arrow every 0.8s for 180
-  Shielder: { hp: 1500, dmg: 120, reduce: 0, atkCd: 800 },  // tank; its defence comes from the shield (see SHIELDER)
+  Shielder: { hp: 1600, dmg: 80, reduce: 0, atkCd: 800 },  // tank; its defence comes from the shield (see SHIELDER)
   Assassin: { hp: 1000, dmg: 135, reduce: 0, atkCd: 600 },  // fast melee striker; see ASSASSIN
   Gumiho: { hp: 1100, dmg: 130, reduce: 0, atkCd: 700 }     // ranged mage (3.5 radpx orb); see GUMIHO
 };
@@ -125,11 +125,11 @@ const ATK = { range: 1 * RADPX, span: 100 * RAD };         // melee basic attack
 const KNIGHT = {
   Q: { cd: 8000, range: 2 * RADPX, span: 120 * RAD, dmg: 250, stun: 1000 },   // range = 2 radpx
   E: { cd: 12000, dur: 3000, reduce: 0.7, speed: 1.4 },                 // -70% damage taken, +40% speed
-  R: { cd: 25000, swords: 8, ring: 195, radius: 2 * RADPX, cRadius: 2.5 * RADPX, dmg: 220, slow: 0.7, slowMs: 2000 }   // ring & per-sword radius = 1.5x (was 130 / 55)
+  R: { cd: 25000, swords: 8, ring: 195, radius: 1 * RADPX, cRadius: 2.5 * RADPX, dmg: 200, slow: 0.7, slowMs: 2000 }   // ring & per-sword radius = 1.5x (was 130 / 55)
 };
 
 const SHIELDER = {
-  span: 100 * RAD, block: 0.8,                                           // passive [방패]: hits from the front 100 deg arc deal -80%
+  span: 90 * RAD, block: 0.8,                                           // passive [방패]: hits from the front 100 deg arc deal -80%
   Q: { cd: 12000, radius: 2.5 * RADPX, ms: 3000, slow: 0.8, stop: 45 },   // [도발]: taunt everyone within 2.5 radpx for 3s, they walk at 80% speed towards you
   E: { cd: 11000, dist: 3.5 * RADPX, dashMs: 450, dmg: 200, hit: 55, kb: RADPX, kbMs: 300, stun: 500 },   // [실드 태클]: dash 3.5 radpx in 0.3s (raise dashMs = slower; 0.45s = a clearly visible dash, not a teleport), 200 dmg, knock back + 0.5s airborne
   R: { cd: 25000, dur: 7000, reduce: 0.3, reflect: 0.4, speed: 0.85 }   // [혼 가드]: 7s, unblocked dmg -30%, blocked dmg 0, reflect melee 40%, deflect projectiles, own speed -15%
@@ -142,10 +142,10 @@ const ASSASSIN = {                                                       // pass
 };
 const GUMIHO = {
   atk: { range: 3.5 * RADPX, speed: 1020, radius: 30 },                    // basic attack: a magic orb, 3.5 radpx
-  fire: { chance: 0.6, max: 5, pick: 55, lift: 25 },                      // passive [여우불]: 60% on every orb landing, at most 5, cursor pick radius, hover height
+  fire: { chance: 0.75, max: 5, pick: 55, lift: 25 },                      // passive [여우불]: 60% on every orb landing, at most 5, cursor pick radius, hover height
   eff: { dmg: 120, tick: 20, tickMs: 500, ms: 2000, radius: 2 * RADPX },  // the Foxfire "effect": 120 damage + 20 every 0.5s for 2s, blast radius 2 radpx
   Q: { cd: 8000 },                                                        // [요술]
-  E: { cd: 12000, pullMs: 500, dmg: 150, rad: 1.5 * RADPX },                                // [미수옥]
+  E: { cd: 12000, pullMs: 500, dmg: 120, rad: 0.5 * RADPX },                                // [미수옥]
   R: { cd: 25000, radius: 2.5 * RADPX, ms: 3000, speed: 0.8, stop: 45 }   // [매혹]: charm for 3s, they walk towards you at 80% speed
 };
 const atkSpeed = (p, now) => now < p.asUntil ? 1 + p.asBonus : 1;           // attack speed multiplier (Assassin R buff)
@@ -219,9 +219,9 @@ function moveArrow(ar, step, time) {          // advances the arrow; returns the
 function arrowHit(ar, t, now) {                  // returns true when a Horn Guard shield turned the arrow around
   const inDir = ar.a + Math.PI;                 // direction (from the target) the arrow came from
   if (t.cls === 'Shielder' && now < t.hornUntil && shieldBlocks(t, { dir: inDir })) { deflectArrow(ar, t); return true; }
-  dmgTo(t, ar.dmg, now, { dir: inDir });
+  dmgTo(t, ar.dmg, now, { dir: inDir, kill: players.get(ar.owner) });
   if (ar.stun && t.role === 1) t.stunUntil = now + ar.stun;
-  if (ar.orb && ar.eff) { const g = players.get(ar.owner); if (g) foxHit(t, now, g, GUMIHO.eff.dmg, { dir: inDir }); }   // the empowered orb also carries the Foxfire effect
+  if (ar.orb && ar.eff) { const g = players.get(ar.owner); if (g) foxHit(t, now, g, GUMIHO.eff.dmg, { dir: inDir, kill: g }); }   // the empowered orb also carries the Foxfire effect
   return false;
 }
 function deflectArrow(ar, t) {                  // [혼 가드]: the arrow flies back the way it came and now belongs to the Shielder
@@ -272,10 +272,14 @@ function resetCombat(p) {
   p.chargeStart = p.hasteUntil = p.invisUntil = 0;
   p.tauntUntil = p.tauntBy = p.kbUntil = p.hornUntil = 0; p.dash = null;
   p.markUntil = p.asUntil = p.asBonus = 0;
-  p.fires = []; p.qNext = false; p.eNext = 0; p.pull = null; p.charmUntil = p.charmBy = p.burnUntil = p.burnNext = 0;
+  p.fires = []; p.qNext = false; p.eNext = 0; p.pull = null; p.lastBy = 0; p.charmUntil = p.charmBy = p.burnUntil = p.burnNext = 0;
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
 }
-function killPlayer(p) { p.hp = 0; p.role = 2; p.dx = p.dy = 0; p.moving = false; p.deathOrder = ++deathCounter; }
+function killPlayer(p) {
+  const was = p.role === 1, k = was && p.lastBy && Date.now() - p.lastByT < 10000 ? players.get(p.lastBy) : null;
+  p.hp = 0; p.role = 2; p.dx = p.dy = 0; p.moving = false; p.deathOrder = ++deathCounter;
+  if (was) broadcast({ t: 'kill', k: k ? k.id : 0, kn: k ? k.name : '', kc: k ? k.cls : '', v: p.id, vn: p.name, vc: p.cls });
+}
 function shieldBlocks(t, src) {                      // does an attack from `src` hit the Shielder's shield?
   if (t.cls !== 'Shielder' || !src) return false;    // src: {x,y} = where the attack comes from, or {dir} = incoming direction (ground plane)
   let dir = src.dir;
@@ -302,10 +306,11 @@ function dmgTo(t, amount, now, src) {
   let d = (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount * (1 - Math.min(cut, 0.95))));   // [혼 가드]: damage the shield blocks is fully nullified
   if (d > 0 && now < t.markUntil) d = Math.round(d * (1 + ASSASSIN.Q.mark));   // [소드 샤우트] mark: +20% damage taken (not a reduction, so it always applies)
   t.hp -= d;
+  if (src && (src.by || src.kill)) { t.lastBy = (src.by || src.kill).id; t.lastByT = now; }
   broadcast({ t: 'hit', id: t.id, dmg: d, bl: blocked ? 1 : 0 });
   if (blocked && src.by && now < t.hornUntil && src.by.role === 1) {              // [혼 가드]: a blocked melee hit hurts the attacker (40% of the attack's damage)
     const back = Math.round(amount * SHIELDER.R.reflect);
-    if (back > 0) dmgTo(src.by, back, now, null);
+    if (back > 0) dmgTo(src.by, back, now, { kill: t });
   }
   if (t.hp <= 0) killPlayer(t);
 }
@@ -388,7 +393,7 @@ function orbLand(ar, hitT, now) {                     // passive [여우불]: wh
   if (ar.boom) {                                      // [미수옥]-empowered orb: blasts where it lands, radius +1.5 radpx and damage +150 per collected Foxfire
     const at = hitT ? { x: hitT.x, y: hitT.y } : { x: ar.x, y: ar.gy * 0.8 }, rad = ar.boom * GUMIHO.E.rad;
     broadcast({ t: 'fx', type: 'ring', x: at.x, y: at.y, r: rad, c: '#7fe9ff', dur: 700 });
-    for (const t of targetsOf(g)) if (t !== hitT && Math.hypot(t.x - at.x, (t.y - at.y) / 0.8) <= rad) dmgTo(t, ar.dmg, now, { x: at.x, y: at.y });
+    for (const t of targetsOf(g)) if (t !== hitT && Math.hypot(t.x - at.x, (t.y - at.y) / 0.8) <= rad) dmgTo(t, ar.dmg, now, { x: at.x, y: at.y, kill: g });
     checkRoundEnd();
     if (phase !== 'round') return;
   }
@@ -404,7 +409,7 @@ function foxBlast(p, at, now, lag, dmg) {
   broadcast({ t: 'fx', type: 'ring', x: at.x, y: at.y, r: GUMIHO.eff.radius, c: '#7fe9ff', dur: 600 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
-    if (Math.hypot(tp.x - at.x, (tp.y - at.y) / 0.8) <= GUMIHO.eff.radius) foxHit(t, now, p, dmg, { x: at.x, y: at.y });
+    if (Math.hypot(tp.x - at.x, (tp.y - at.y) / 0.8) <= GUMIHO.eff.radius) foxHit(t, now, p, dmg, { x: at.x, y: at.y, kill: p });
   }
 }
 function gumihoAttack(p, m, now) {
@@ -843,7 +848,7 @@ setInterval(() => {
       } else p.charmUntil = 0;
     }
     if (p.role === 1 && p.burnUntil) {                                    // burning: 20 damage every 0.5s (the last tick lands exactly when the effect ends)
-      while (p.role === 1 && p.burnNext <= p.burnUntil && now >= p.burnNext) { dmgTo(p, GUMIHO.eff.tick, now, null); p.burnNext += GUMIHO.eff.tickMs; needEnd = true; }
+      while (p.role === 1 && p.burnNext <= p.burnUntil && now >= p.burnNext) { dmgTo(p, GUMIHO.eff.tick, now, { kill: players.get(p.burnBy) }); p.burnNext += GUMIHO.eff.tickMs; needEnd = true; }
     }
     if (p.pull && now >= p.pull.t0 + GUMIHO.E.pullMs) {                   // [미수옥]: the pulled Foxfires explode together
       const P = p.pull; p.pull = null;
