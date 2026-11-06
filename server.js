@@ -6,7 +6,7 @@ const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8' };
 
 // Arena floor (in background-image pixel coordinates, 1254x1254)
 const CX = 630, CY = 640, RX = 410, RY = 335;
@@ -129,10 +129,10 @@ const KNIGHT = {
 };
 
 const SHIELDER = {
-  span: 100 * RAD, block: 0.9,                                           // passive [방패]: hits from the front 100 deg arc deal -90%
-  Q: { cd: 12000, radius: 4 * RADPX, ms: 3000, slow: 0.8, stop: 45 },   // [도발]: taunt everyone within 4 radpx for 3s, they walk at 80% speed towards you
+  span: 100 * RAD, block: 0.8,                                           // passive [방패]: hits from the front 100 deg arc deal -80%
+  Q: { cd: 12000, radius: 2.5 * RADPX, ms: 3000, slow: 0.8, stop: 45 },   // [도발]: taunt everyone within 2.5 radpx for 3s, they walk at 80% speed towards you
   E: { cd: 11000, dist: 3.5 * RADPX, dashMs: 450, dmg: 200, hit: 55, kb: RADPX, kbMs: 300, stun: 500 },   // [실드 태클]: dash 3.5 radpx in 0.3s (raise dashMs = slower; 0.45s = a clearly visible dash, not a teleport), 200 dmg, knock back + 0.5s airborne
-  R: { cd: 25000, dur: 7000, reduce: 0.4, reflect: 0.4, speed: 0.85 }   // [혼 가드]: 7s, unblocked dmg -40%, reflect melee 40%, deflect projectiles, own speed -15%
+  R: { cd: 25000, dur: 7000, reduce: 0.3, reflect: 0.4, speed: 0.85 }   // [혼 가드]: 7s, unblocked dmg -30%, blocked dmg 0, reflect melee 40%, deflect projectiles, own speed -15%
 };
 
 const ASSASSIN = {                                                       // passive [피어스]: every hit ignores the target's damage reduction (see dmgTo)
@@ -295,11 +295,11 @@ function dmgTo(t, amount, now, src) {
     cut = statsOf(t).reduce;                         // Armor: 20%
     if (now < t.guardUntil) cut += KNIGHT.E.reduce;  // Guard Rush: +70% (added together -> 90% total)
     blocked = shieldBlocks(t, src);
-    if (blocked) cut += SHIELDER.block;              // [방패]: -90% from the front
-    else if (t.cls === 'Shielder' && now < t.hornUntil) cut += SHIELDER.R.reduce;   // [혼 가드]: unblocked damage -40%
+    if (blocked) cut += SHIELDER.block;              // [방패]: -80% from the front
+    else if (t.cls === 'Shielder' && now < t.hornUntil) cut += SHIELDER.R.reduce;   // [혼 가드]: unblocked damage -30%
   }
-  let d = Math.max(1, Math.round(amount * (1 - Math.min(cut, 0.95))));
-  if (now < t.markUntil) d = Math.round(d * (1 + ASSASSIN.Q.mark));   // [소드 샤우트] mark: +20% damage taken (not a reduction, so it always applies)
+  let d = (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount * (1 - Math.min(cut, 0.95))));   // [혼 가드]: damage the shield blocks is fully nullified
+  if (d > 0 && now < t.markUntil) d = Math.round(d * (1 + ASSASSIN.Q.mark));   // [소드 샤우트] mark: +20% damage taken (not a reduction, so it always applies)
   t.hp -= d;
   broadcast({ t: 'hit', id: t.id, dmg: d, bl: blocked ? 1 : 0 });
   if (blocked && src.by && now < t.hornUntil && src.by.role === 1) {              // [혼 가드]: a blocked melee hit hurts the attacker (40% of the attack's damage)
@@ -383,7 +383,9 @@ function spawnFoxfire(g, pos) {                       // at most 5; a 6th remove
 function orbLand(ar, hitT, now) {                     // passive [여우불]: where the orb lands (on an enemy or at the end of its range) 60% to leave a Foxfire
   if (!ar.orb || phase !== 'round') return;
   const g = players.get(ar.owner);
-  if (!g || g.cls !== 'Gumiho' || g.role !== 1 || Math.random() >= GUMIHO.fire.chance) return;
+  if (!g || g.cls !== 'Gumiho' || g.role !== 1) return;
+  if (!hitT && Math.hypot((ar.x - CX) / RX, (ar.gy * 0.8 - CY) / RY) > 0.97) return;   // the orb ended at the wall: no Foxfire
+  if (Math.random() >= GUMIHO.fire.chance) return;
   spawnFoxfire(g, hitT ? { x: hitT.x, y: hitT.y } : { x: ar.x, y: ar.gy * 0.8 });
 }
 function foxHit(t, now, by, dmg, src) {               // the Foxfire effect: damage now + burning (20 every 0.5s for 2s; re-applying refreshes it)
@@ -440,7 +442,7 @@ function gumihoSkill(p, k, m, now) {
     for (const t of targetsOf(p)) {
       const tp = posAt(t, now - lag);
       if (Math.hypot(tp.x - o.x, (tp.y - o.y) / 0.8) > G.R.radius) continue;
-      t.charmUntil = now + G.R.ms; t.charmBy = p.id; t.chargeStart = 0; t.dash = null;
+      t.charmUntil = now + G.R.ms; t.charmBy = p.id; t.chargeStart = 0;
     }
   }
   checkRoundEnd();
@@ -603,7 +605,7 @@ function kickOld(userId, except) {                          // one live session 
   }
 }
 // ---- titles (granted by the admin account, equipped by the owner; stored in Upstash) ----
-const ADMIN_ID = 'admin', MAX_TITLES = 15;
+const ADMIN_ID = 'admin', OBS_ID = 'server', MAX_TITLES = 15;   // OBS_ID: viewer-only account (no character, not counted, never affects the game)
 const isHex = c => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c);
 async function loadTitles(id) {
   try {
@@ -613,7 +615,7 @@ async function loadTitles(id) {
     return { list, eq: list.some(t => t.id === eq) ? eq : null };
   } catch (e) { console.error('titles load failed:', e.message); return { list: [], eq: null }; }
 }
-const titleOf = p => { const t = p.titles.find(t => t.id === p.eq); return t ? { x: t.text, c: t.color } : null; };
+const titleOf = p => { const t = p.titles.find(t => t.id === p.eq); return t ? { x: t.text, c: t.color, cs: t.cols || 0 } : null; };
 const pushTitle = p => broadcast({ t: 'ttl', id: p.id, tt: titleOf(p) || 0 });       // everybody learns what p wears
 const sendTinfo = p => send(p.ws, { t: 'tinfo', list: p.titles, eq: p.eq });
 async function equipTitle(p, id) {
@@ -635,11 +637,17 @@ async function adminTitleRun(p, m) {
   const rec = JSON.parse(raw), lraw = await db.get('titles:' + target);
   let list = lraw ? JSON.parse(lraw) : [], msg = '조회했습니다.';
   if (m.t === 'tgrant') {
-    const text = clean(m.text, 12), color = isHex(m.color) ? m.color.toLowerCase() : null;
+    const text = Array.from(clean(m.text, 24)).slice(0, 12).join(''), chars = Array.from(text);
+    let cols = null;
+    if (m.cols !== undefined && m.cols !== null) {                       // per-character colours: one hex colour for every character
+      if (!Array.isArray(m.cols) || m.cols.length !== chars.length || !m.cols.every(isHex)) return reply(0, '글자별 색상이 올바르지 않습니다.');
+      cols = m.cols.map(c => c.toLowerCase());
+    }
+    const color = isHex(m.color) ? m.color.toLowerCase() : cols ? cols[0] : null;
     if (!text) return reply(0, '칭호를 입력해 주세요.');
     if (!color) return reply(0, '색상이 올바르지 않습니다.');
     if (list.length >= MAX_TITLES) return reply(0, '칭호는 최대 ' + MAX_TITLES + '개까지 부여할 수 있습니다.');
-    list.push({ id: crypto.randomBytes(4).toString('hex'), text, color });
+    list.push(cols ? { id: crypto.randomBytes(4).toString('hex'), text, color, cols } : { id: crypto.randomBytes(4).toString('hex'), text, color });
     await db.set('titles:' + target, JSON.stringify(list));
     msg = '[' + text + '] 칭호를 ' + rec.nick + '님에게 부여했습니다.';
   } else if (m.t === 'trevoke') {
@@ -659,6 +667,13 @@ async function adminTitleRun(p, m) {
 async function loginOk(p, rec, token) {
   kickOld(rec.id, p);
   p.user = rec.id; p.name = rec.nick;
+  if (rec.id === OBS_ID) {                                  // observer: stays joined=false -> not in the state list, online count, ready check or targets
+    p.obs = true; p.titles = []; p.eq = null;
+    send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token, admin: 0, obs: 1 });
+    const all = {};
+    for (const q of players.values()) if (q.joined) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
+    return send(p.ws, { t: 'ttls', m: all });
+  }
   const ti = await loadTitles(rec.id);
   p.titles = ti.list; p.eq = ti.eq;
   if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }   // joined mid-round -> spectate
@@ -793,7 +808,7 @@ setInterval(() => {
     if (p.role === 2 || now < p.stunUntil || now < p.charmUntil) { dx = dy = 0; p.chargeStart = 0; }
     if (p.dash) {                                                         // [실드 태클] in progress: no steering, the path is fixed
       const D = p.dash;
-      if (p.role !== 1 || now < p.stunUntil) p.dash = null;
+      if (p.role !== 1) p.dash = null;                                    // only death/spectating stops it (stun & charm do not)
       else {
         const px = p.x, py = p.y, f = Math.min(1, (now - D.t0) / D.ms);
         p.x = D.sx + (D.ex - D.sx) * f; p.y = D.sy + (D.ey - D.sy) * f;
@@ -803,7 +818,7 @@ setInterval(() => {
       dx = dy = 0;
     }
     let tauntMul = 1;
-    if (now < p.tauntUntil && p.role === 1 && now >= p.stunUntil) {      // [도발]: forced to walk towards the Shielder at 80% speed
+    if (!p.dash && now < p.tauntUntil && p.role === 1 && now >= p.stunUntil) {      // [도발]: forced to walk towards the Shielder at 80% speed
       const src = players.get(p.tauntBy);
       if (src && src.joined && src.role === 1) {
         const vx = src.x - p.x, vy = (src.y - p.y) / 0.8, d = Math.hypot(vx, vy);
@@ -811,7 +826,7 @@ setInterval(() => {
         tauntMul = SHIELDER.Q.slow;
       } else p.tauntUntil = 0;
     }
-    if (now < p.charmUntil && p.role === 1 && now >= p.stunUntil) {      // [매혹]: walks towards the Gumiho, cannot attack
+    if (!p.dash && now < p.charmUntil && p.role === 1 && now >= p.stunUntil) {      // [매혹]: walks towards the Gumiho, cannot attack
       const src = players.get(p.charmBy);
       if (src && src.joined && src.role === 1) {
         const vx = src.x - p.x, vy = (src.y - p.y) / 0.8, d = Math.hypot(vx, vy);
@@ -884,4 +899,4 @@ setInterval(() => {
   }
 }, 30000);
 
-server.listen(PORT, () => console.log('Sky Colosseum running on port ' + PORT));
+server.listen(PORT, () => console.log('Geolgani PvP running on port ' + PORT));
