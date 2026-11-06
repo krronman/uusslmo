@@ -106,6 +106,9 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #admCols{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .admCh{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px;color:#fff}
 .admCh input{width:30px;height:26px;padding:0;background:#0f1030;border:2px solid #5b55a8;border-radius:4px;cursor:pointer}
+#killLog{position:fixed;right:12px;top:calc(10px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;align-items:flex-end;gap:4px;z-index:3;pointer-events:none;font:13px 'Galmuri11',system-ui,sans-serif}
+#killLog div{background:rgba(20,30,60,.75);color:#fff;padding:4px 10px;border-radius:8px;border:2px solid #fff;transition:opacity .5s}
+#killLog b{color:#ffe066}
 #skillbar{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:none;gap:8px;z-index:3}
 .sk{position:relative;width:52px;height:52px;background:rgba(20,30,60,.8);border:2px solid #fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px}
 .sk b{position:absolute;left:4px;top:1px;font-size:11px;color:#ffe066}
@@ -137,6 +140,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <div id="admMsg"></div><div id="admList"></div>
 <button id="admMine" class="admBtn" type="button">내 칭호 장착하기</button></div><button id="admClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="pnScreen"><div id="pnBox"><h2>밸런스 패치 노트</h2><div id="pnBody"></div></div><button id="pnClose" class="xBtn" aria-label="close">✕</button></div>
+<div id="killLog"></div>
 <div id="banner"></div><div id="fade"></div><div id="toast"></div>
 <button id="logoutBtn" style="display:none">로그아웃</button>
 <div id="login"><form id="lf"><h1>🏛️ Geolgani PvP</h1>
@@ -159,7 +163,7 @@ const bowImg=new Image();bowImg.src='bow.png';
 const shieldImg=new Image();shieldImg.src='shield.png';
 const daggerImg=new Image();daggerImg.src='assassin-sword.png',slashImg=new Image(),orbImg=new Image(),fireImg=new Image(),charmImg=new Image();
 slashImg.src='slash.png';orbImg.src='orb.png';fireImg.src='foxfire.png';charmImg.src='charm.png';
-const RADPX=112.5,SHIELD_SPAN=100*Math.PI/180;   // 1 radpx = radius of the basic attack range (same as the server)
+const RADPX=112.5,SHIELD_SPAN=90*Math.PI/180;   // 1 radpx = radius of the basic attack range (same as the server)
 const clsImg={};for(const c of ['Knight','Archer','Shielder','Assassin','Gumiho']){const i=new Image();i.src=c.toLowerCase()+'.png';clsImg[c]=i}
 let vw,vh,scale,ox,oy,dpr;
 const ZOOM_MAX=2.5;let zoom=1;                   // 1 = the default view = the closest zoom; the mouse wheel only zooms OUT from there
@@ -198,6 +202,12 @@ function addLog(name,text,sys,age){
 }
 setInterval(()=>{const lim=Date.now()-CHAT_TTL;while(logs.length&&logs[0].at<lim)logs.shift().el.remove()},5000);
 function flash(){fade.style.transition='none';fade.style.opacity=.9;requestAnimationFrame(()=>requestAnimationFrame(()=>{fade.style.transition='opacity .6s';fade.style.opacity=0}))}
+const killLogEl=document.getElementById('killLog');
+function addKill(m){const el=document.createElement('div'),ic=c=>CLS[c]?CLS[c][0]+' ':'';
+ if(m.k){el.append(ic(m.kc)+m.kn+' ');const s=document.createElement('b');s.textContent='⚔';el.append(s,' '+ic(m.vc)+m.vn)}else el.append(ic(m.vc)+m.vn+' 탈락');
+ if(m.k===myId||m.v===myId)el.style.borderColor='#ffe066';
+ killLogEl.appendChild(el);while(killLogEl.children.length>5)killLogEl.firstChild.remove();
+ setTimeout(()=>{el.style.opacity=0;setTimeout(()=>el.remove(),500)},6000)}
 // ---- networking ----
 let ws,myId=null,joined=false,snapUntil=0,arena=null;
 let phase='lobby',roundLeft=0,myRole=0,snapNext=false,cdEnd=0,winnerText='',winnerUntil=0,myCls='';
@@ -235,10 +245,10 @@ function connect(){
    readyBtn.classList.toggle('off',total<2);
    readyBtn.classList.toggle('on',!!(me&&me.r));
    if(myCls!==(me?me.c:'')){myCls=me?me.c:'';csRender();skIcons()}
-   classBtn.style.display=titleBtn.style.display=phase==='lobby'?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
-   if(phase!=='lobby'){if(csIsOpen())csClose();ttClose();admClose()}
+   titleBtn.style.display=phase==='lobby'?'':'none';classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
+   if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose()}
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
-   if(obs){readyBtn.style.display=classBtn.style.display=titleBtn.style.display=skillbar.style.display='none';logoutBtn.style.display='block'}   // viewer account: lobby / spectate only
+   if(obs){readyBtn.style.display=titleBtn.style.display=skillbar.style.display='none';classBtn.style.display='';logoutBtn.style.display='block'}   // viewer account: lobby / spectate only
   }
   else if(m.t==='chat'){addLog(m.name,m.text,m.sys,0);if(m.id)bubbles.set(m.id,{text:m.text,until:performance.now()+4000})}
   else if(m.t==='countdown'){cdEnd=m.ms?performance.now()+m.ms:0}
@@ -253,6 +263,7 @@ function connect(){
   else if(m.t==='cd'){skCd[m.k]=performance.now()+m.ms}
   else if(m.t==='fx'){m.t0=performance.now();if(!(m.by===myId&&m.type==='cone'))fxs.push(m);   // my own cones are drawn instantly on key press
    if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
+  else if(m.t==='kill')addKill(m);
   else if(m.t==='hit'){hits.push({id:m.id,dmg:m.dmg,bl:m.bl,t0:performance.now()})}
   else if(m.t==='tinfo'){myTitles=m.list||[];myEq=m.eq||null;ttRender()}
   else if(m.t==='ttl'){if(m.tt)titleMap.set(m.id,m.tt);else titleMap.delete(m.id)}
@@ -426,9 +437,9 @@ function csRender(){
  csRows.forEach((r,i)=>{const k=sk[i];r.ic.textContent=k.icon;r.nm.textContent=k.name;r.ky.textContent=k.key;r.ds.textContent=k.desc});
  csStyleEl.textContent=c?(c.style||'직업 정보 준비 중입니다.'):'잠겨 있는 칸입니다.';
  const eq=!!c&&c.id===myCls;
- csOk.textContent=!c?'LOCKED':eq?'EQUIPPED ✔':'SELECT';csOk.disabled=!c||eq;
+ const view=obs||phase!=='lobby';csOk.textContent=!c?'LOCKED':eq?'EQUIPPED ✔':view?'VIEW ONLY':'SELECT';csOk.disabled=!c||eq||view;
 }
-csOk.onclick=()=>{const c=CHARS[csSel];if(c){tx({t:'class',cls:c.id});csClose()}};
+csOk.onclick=()=>{const c=CHARS[csSel];if(c&&!obs&&phase==='lobby'){tx({t:'class',cls:c.id});csClose()}};
 csScreen.onclick=e=>{if(e.target===csScreen)csClose()};
 document.getElementById('csClose').onclick=()=>csClose();
 function csOpen(){ttClose();admClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();csScreen.style.display='flex';csFit();
