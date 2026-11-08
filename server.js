@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8' };
 
@@ -66,7 +66,7 @@ function startRound() {
     broadcast({ t: 'countdown', ms: 0 });
     return sysChat('Round cancelled: not enough players.');
   }
-  phase = 'round'; roundStart = Date.now(); arrows.clear();
+  phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear();
   parts.forEach((p, i) => {
     const a = -Math.PI / 2 + i * 2 * Math.PI / parts.length;
     p.lx = p.x; p.ly = p.y;
@@ -87,7 +87,7 @@ function checkRoundEnd() {
   endRound(winner);
 }
 function endRound(winner, tied) {
-  phase = 'lobby'; arrows.clear();
+  phase = 'lobby'; arrows.clear(); bombs.clear();
   for (const p of players.values()) {
     if (p.inRound) { p.x = p.lx; p.y = p.ly; }
     p.role = 0; p.inRound = false; p.ready = false; p.dx = p.dy = 0; p.hist = [];
@@ -109,7 +109,7 @@ const CLASS_STATS = {
   Assassin: { hp: 1000, dmg: 135, reduce: 0, atkCd: 600 },
   Gumiho: { hp: 1100, dmg: 130, reduce: 0, atkCd: 700 }
 };
-const statsOf = p => CLASS_STATS[p.cls] || BASE;
+const statsOf = p => p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : CLASS_STATS[p.cls] || BASE;
 const RADPX = 112.5;
 const MAP = 1254;
 const ARROW = { speed: 800, range: 5 * RADPX, radius: 28 };
@@ -130,22 +130,39 @@ const SHIELDER = {
   span: 90 * RAD, block: 0.8,
   Q: { cd: 12000, radius: 2.5 * RADPX, ms: 3000, slow: 0.8, stop: 45 },
   E: { cd: 11000, dist: 3.5 * RADPX, dashMs: 450, dmg: 200, hit: 55, kb: RADPX, kbMs: 300, stun: 500 },
-  R: { cd: 25000, dur: 7000, reduce: 0.3, reflect: 0.4, speed: 0.85 }
+  R: { cd: 25000, dur: 6000, reduce: 0.3, reflect: 0.4, speed: 0.85 }
 };
 
 const ASSASSIN = {
-  Q: { cd: 12000, range: 2 * RADPX, width: 45, dmg: 250, markMs: 3000, mark: 0.2 },
+  Q: { cd: 10000, range: 2 * RADPX, width: 45, dmg: 250, markMs: 3000, mark: 0.2 },
   E: { cd: 10000, dur: 2500, speed: 1.15 },
   R: { cd: 25000, radius: RADPX, dmg: 250, asMs: 3000, as: 0.1, asPerHit: 0.1 }
 };
 const GUMIHO = {
   atk: { range: 3.5 * RADPX, speed: 1020, radius: 30 },
   fire: { chance: 0.75, max: 5, pick: 55, lift: 25 },
-  eff: { dmg: 120, tick: 20, tickMs: 500, ms: 2000, radius: 2 * RADPX },
+  eff: { dmg: 120, ms: 2000, radius: 2 * RADPX },
   Q: { cd: 8000 },
   E: { cd: 12000, pullMs: 500, dmg: 120, rad: 0.5 * RADPX },
   R: { cd: 25000, radius: 2.5 * RADPX, ms: 3000, speed: 0.8, stop: 45 }
 };
+const BURN = { tick: 35, tickMs: 1000 };
+const LUC = {
+  base: { hp: 1200, dmg: 150, atkCd: 900, range: 3.5 * RADPX, spd: 900, radius: 30 },
+  angel: { hp: 1200, dmg: 130, atkCd: 800, range: 3 * RADPX, spd: 900, radius: 30 },
+  devil: { hp: 1300, dmg: 180, atkCd: 1000, range: 4 * RADPX, spd: 900, radius: 30 },
+  G: { cd: 40000, grace: 1000, afterCd: 5000 },
+  Q: { cd: 10000, range: 3 * RADPX, dmg: 270, spd: 800, radius: 36, sc: 1.6 },
+  E: { cd: 10000, range: 3 * RADPX, dmg: 120, spd: 800, radius: 36, sc: 1.6, burnMs: 4000 },
+  beam: { cd: 15000, ms: 1500, tickMs: 100, dmg: 30, heal: 10, len: 5 * RADPX, half: 32 },
+  sanct: { cd: 18000, ms: 3000, r: 1.5 * RADPX },
+  pure: { cd: 25000, r0: 0.5 * RADPX, r1: 1.5 * RADPX, delay: 200, ms: 1700, tickMs: 100, dmg: 40, heal: 20 },
+  mark: { ms: 2500, amp: 0.1, ampLib: 0.15, defCut: 0.2, max: 1, maxLib: 3 },
+  bomb: { cd: 10000, libCd: 4000, spd: 380, r: RADPX, dmg: 50, tickMs: 500, lift: 1000, small: { r: 0.7 * RADPX, dmg: 25, fan: 20 * RAD } },
+  absorb: { cd: 14000, libCd: 4000, pct: 0.25, heal: 0.6, healLib: 0.85 },
+  lib: { cd: 25000, ms: 10000, speed: 1.2, atkCd: 700 }
+};
+const lForm = p => p.lf === 'a' ? LUC.angel : p.lf === 'd' ? LUC.devil : LUC.base;
 const atkSpeed = (p, now) => now < p.asUntil ? 1 + p.asBonus : 1;
 const breakStealth = p => { if (p.cls === 'Assassin') p.invisUntil = 0; };
 
@@ -215,24 +232,25 @@ function moveArrow(ar, step, time) {
 }
 function arrowHit(ar, t, now) {
   const inDir = ar.a + Math.PI;
-  const type = ar.orb ? 'magic' : 'phys';
+  const type = ar.type || (ar.orb ? 'magic' : 'phys');
   if (type === 'phys' && t.cls === 'Shielder' && now < t.hornUntil && shieldBlocks(t, { dir: inDir })) { deflectArrow(ar, t); return true; }
   dmgTo(t, ar.dmg, now, { dir: inDir, kill: players.get(ar.owner), type });
   if (ar.stun && t.role === 1) t.stunUntil = now + ar.stun;
+  if (ar.luc) lucHit(ar, t, now);
   if (ar.orb && ar.eff) { const g = players.get(ar.owner); if (g) foxHit(t, now, g, GUMIHO.eff.dmg, { dir: inDir, kill: g, type: 'magic' }); }
   return false;
 }
 function deflectArrow(ar, t) {
   broadcast({ t: 'arrowEnd', id: ar.id });
   ar.owner = t.id; ar.a = Math.atan2(-Math.sin(ar.a), -Math.cos(ar.a)); ar.hitIds = new Set();
-  ar.left = ar.noArena ? offMapRange(ar.x, ar.gy * 0.8, ar.a, ar.sc) : ARROW.range;
-  broadcast({ t: 'arrow', id: ar.id, by: t.id, x: ar.x, y: ar.gy * 0.8, a: ar.a, spd: ar.spd, range: ar.left, adv: 0, sc: ar.sc, kd: 'refl' });
+  ar.left = ar.noArena ? offMapRange(ar.x, ar.gy * 0.8, ar.a, ar.sc) : ar.r0;
+  broadcast({ t: 'arrow', id: ar.id, by: t.id, x: ar.x, y: ar.gy * 0.8, a: ar.a, spd: ar.spd, range: ar.left, adv: 0, sc: ar.sc, kd: ar.kd, bm: ar.boom });
   broadcast({ t: 'hit', id: t.id, dmg: 0, bl: 2 });
 }
 
 function spawnArrow(p, o, lag, now, spec) {
   const id = ++arrowSeq;
-  const ar = { id, owner: p.id, x: o.x, gy: o.y / 0.8, a: spec.a, dmg: spec.dmg, spd: spec.spd, radius: spec.radius || ARROW.radius,
+  const ar = { id, owner: p.id, x: o.x, gy: o.y / 0.8, a: spec.a, dmg: spec.dmg, spd: spec.spd, radius: spec.radius || ARROW.radius, type: spec.type || '', luc: spec.luc || '', kd: spec.kind || 'atk', r0: spec.range || ARROW.range,
     orb: !!spec.orb, eff: !!spec.eff, boom: spec.boom || 0, pierce: !!spec.pierce, noArena: !!spec.noArena, sc: spec.sc || 1, stun: spec.stun || 0, hitIds: new Set(), left: spec.range || ARROW.range };
   let adv = 0, ended = false;
   const pending = [];
@@ -252,7 +270,9 @@ function spawnArrow(p, o, lag, now, spec) {
 function stepArrows(dt, now) {
   let any = false;
   for (const ar of arrows.values()) {
-    const hits = moveArrow(ar, Math.min(ar.spd * dt, ar.left), now);
+    const stp = Math.min(ar.spd * dt, ar.left);
+    if (sanctBlocked(ar.owner, ar.x, ar.gy, ar.x + Math.cos(ar.a) * stp, ar.gy + Math.sin(ar.a) * stp, now)) { endArrow(ar); continue; }
+    const hits = moveArrow(ar, stp, now);
     let deflected = false;
     for (const t of hits) { any = true; if (arrowHit(ar, t, now)) { deflected = true; break; } }
     if (deflected) continue;
@@ -264,6 +284,7 @@ function stepArrows(dt, now) {
 }
 
 function resetCombat(p) {
+  p.lf = ''; p.lPend = p.lUsed = false; p.beam = p.pure = p.sanct = null; p.libUntil = p.dmUntil = 0; p.dmList = [];
   p.mh = p.hp = statsOf(p).hp;
   p.atkReady = p.cdQ = p.cdE = p.cdR = 0;
   p.stunUntil = p.guardUntil = p.slowUntil = 0;
@@ -272,6 +293,7 @@ function resetCombat(p) {
   p.markUntil = p.asUntil = p.asBonus = 0;
   p.fires = []; p.qNext = false; p.eNext = 0; p.lastBy = 0; p.charmUntil = p.charmBy = p.burnUntil = p.burnNext = 0;
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
+  if (p.cls === 'Lucifer' && phase === 'round') { p.cdR = Date.now() + LUC.G.cd; send(p.ws, { t: 'cd', k: 'R', ms: LUC.G.cd }); }
 }
 function killPlayer(p) {
   const was = p.role === 1, k = was && p.lastBy && Date.now() - p.lastByT < 10000 ? players.get(p.lastBy) : null;
@@ -291,6 +313,7 @@ function shieldBlocks(t, src) {
 }
 
 function dmgTo(t, amount, now, src) {
+  if (inSanct(t, now)) return;
   const type = (src && src.type) || (src && src.by && src.by.cls === 'Assassin' ? 'pierce' : 'phys');
   const pierce = type === 'pierce', magic = type === 'magic';
   if (!pierce && now < (t.invulnUntil || 0)) return;
@@ -301,9 +324,11 @@ function dmgTo(t, amount, now, src) {
     blocked = shieldBlocks(t, src);
     if (blocked) cut += SHIELDER.block;
     else if (t.cls === 'Shielder' && now < t.hornUntil) cut += SHIELDER.R.reduce;
+    if (now < t.dmUntil) cut *= 1 - LUC.mark.defCut;
   }
   let d = (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount * (1 - Math.min(cut, 0.95))));
   if (d > 0 && now < t.markUntil) d = Math.round(d * (1 + ASSASSIN.Q.mark));
+  if (d > 0 && now < t.dmUntil) { const mo = players.get(t.dmBy); d = Math.round(d * (1 + (mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp))); }
   t.hp -= d;
   if (src && (src.by || src.kill)) { t.lastBy = (src.by || src.kill).id; t.lastByT = now; }
   broadcast({ t: 'hit', id: t.id, dmg: d, bl: blocked ? 1 : 0 });
@@ -342,6 +367,7 @@ function doAttack(p, m) {
   if (!canAct(p, now)) return;
   if (p.cls === 'Archer') return archerAttack(p, m, now);
   if (p.cls === 'Gumiho') return gumihoAttack(p, m, now);
+  if (p.cls === 'Lucifer') return luciferAttack(p, m, now);
   if (now < p.atkReady) return;
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
@@ -361,6 +387,7 @@ function doSkill(p, k, m) {
   else if (p.cls === 'Shielder') shielderSkill(p, k, m, now);
   else if (p.cls === 'Assassin') assassinSkill(p, k, m, now);
   else if (p.cls === 'Gumiho') gumihoSkill(p, k, m, now);
+  else if (p.cls === 'Lucifer') luciferSkill(p, k, m, now);
 }
 function archerSkill(p, k, m, now) {
   const S = ARCHER[k], o = originOf(p, m), lag = lagOf(m);
@@ -401,8 +428,7 @@ function orbLand(ar, hitT, now) {
 }
 function foxHit(t, now, by, dmg, src) {
   dmgTo(t, dmg, now, src);
-  if (t.role !== 1) return;
-  t.burnUntil = now + GUMIHO.eff.ms; t.burnNext = now + GUMIHO.eff.tickMs; t.burnBy = by.id;
+  applyBurn(t, by, GUMIHO.eff.ms, now);
 }
 function foxBlast(p, at, now, lag, dmg) {
   broadcast({ t: 'fx', type: 'ring', x: at.x, y: at.y, r: GUMIHO.eff.radius, c: '#7fe9ff', dur: 600 });
@@ -559,6 +585,188 @@ function knightSkill(p, k, m, now) {
   checkRoundEnd();
 }
 
+const bombs = new Map();
+const heal = (p, n) => { p.hp = Math.min(p.mh, p.hp + n); };
+const cleanse = p => { p.burnUntil = p.stunUntil = p.slowUntil = p.tauntUntil = p.charmUntil = p.kbUntil = p.markUntil = p.dmUntil = 0; };
+function applyBurn(t, by, ms, now) {
+  if (t.role !== 1) return;
+  if (!(now < t.burnUntil)) t.burnNext = now + BURN.tickMs;
+  t.burnUntil = now + ms; t.burnBy = by.id;
+}
+function wallDist(x, gy, a) {
+  const px = (x - CX) / RX, py = (gy * 0.8 - CY) / RY, ax = Math.cos(a) / RX, ay = Math.sin(a) * 0.8 / RY;
+  const A = ax * ax + ay * ay, B = 2 * (px * ax + py * ay), C = px * px + py * py - 1, D = B * B - 4 * A * C;
+  return D < 0 ? 0 : Math.max(0, (-B + Math.sqrt(D)) / (2 * A));
+}
+function sanctBlocked(owner, x0, gy0, x1, gy1, now) {
+  for (const p of players.values()) {
+    const S = p.sanct;
+    if (S && p.id !== owner && now < S.until && segDist(S.x, S.y / 0.8, x0, gy0, x1, gy1) <= S.r) return true;
+  }
+  return false;
+}
+function inSanct(t, now) { const S = t.sanct; return !!S && now < S.until && Math.hypot(t.x - S.x, (t.y - S.y) / 0.8) <= S.r; }
+function devilMark(p, t, now) {
+  if (t.role !== 1) return;
+  const max = now < p.libUntil ? LUC.mark.maxLib : LUC.mark.max;
+  p.dmList = (p.dmList || []).filter(id => { const q = players.get(id); return q && q.role === 1 && now < q.dmUntil && q.dmBy === p.id; });
+  if (p.dmList.includes(t.id)) return;
+  if (p.dmList.length >= max) { const old = players.get(p.dmList.shift()); if (old) old.dmUntil = 0; }
+  t.dmUntil = now + LUC.mark.ms; t.dmBy = p.id; p.dmList.push(t.id);
+}
+function lucTransform(p, form, now) {
+  p.lf = form; p.lPend = false;
+  const old = p.mh; p.mh = statsOf(p).hp; p.hp = Math.min(p.mh, p.hp + Math.max(0, p.mh - old));
+  cleanse(p); p.beam = p.pure = null;
+  const rcd = form === 'a' ? LUC.pure.cd : LUC.lib.cd;
+  p.cdQ = p.cdE = 0; p.cdR = now + rcd;
+  send(p.ws, { t: 'cd', k: 'Q', ms: 0 }); send(p.ws, { t: 'cd', k: 'E', ms: 0 }); send(p.ws, { t: 'cd', k: 'R', ms: rcd });
+  broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.4 * RADPX, c: form === 'a' ? '#fff59a' : '#ff3a3a', dur: 700 });
+}
+function lucHit(ar, t, now) {
+  const p = players.get(ar.owner);
+  if (!p || p.cls !== 'Lucifer' || p.role !== 1) return;
+  if (ar.luc === 'Q' || ar.luc === 'E') {
+    if (!p.lUsed) { p.cdR = Math.max(now, p.cdR - LUC.G.grace); send(p.ws, { t: 'cd', k: 'R', ms: p.cdR - now }); }
+    if (ar.luc === 'E') applyBurn(t, p, LUC.E.burnMs, now);
+    if (p.lPend) lucTransform(p, ar.luc === 'Q' ? 'a' : 'd', now);
+  } else if (p.lf === 'd' && ar.luc === 'atk') devilMark(p, t, now);
+}
+function luciferAttack(p, m, now) {
+  if (now < p.atkReady) return;
+  const st = statsOf(p), F = lForm(p), o = originOf(p, m), lag = lagOf(m);
+  p.atkReady = now + st.atkCd / atkSpeed(p, now);
+  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg, spd: F.spd, range: F.range, radius: F.radius, kind: p.lf === 'a' ? 'lsa' : p.lf === 'd' ? 'lsd' : 'lbase', type: p.lf === 'd' ? 'phys' : 'magic', luc: 'atk' });
+}
+function spawnBomb(p, o, a, r, dmg, lift, now) {
+  const id = ++arrowSeq, len = wallDist(o.x, o.y / 0.8, a);
+  bombs.set(id, { id, owner: p.id, x: o.x, gy: o.y / 0.8, a, r, dmg, lift, t0: now, len, d: 0, next: new Map() });
+  broadcast({ t: 'arrow', id, by: p.id, x: o.x, y: o.y, a, spd: LUC.bomb.spd, range: len, adv: 0, sc: r / RADPX, kd: 'bomb' });
+}
+function endBomb(b) { bombs.delete(b.id); broadcast({ t: 'arrowEnd', id: b.id }); }
+function stepBombs(now) {
+  let any = false;
+  for (const b of bombs.values()) {
+    const own = players.get(b.owner);
+    if (!own || own.role !== 1 || phase !== 'round') { endBomb(b); continue; }
+    const d = Math.min(b.len, LUC.bomb.spd * (now - b.t0) / 1000), px = b.x + Math.cos(b.a) * d, pgy = b.gy + Math.sin(b.a) * d;
+    if (sanctBlocked(b.owner, b.x + Math.cos(b.a) * b.d, b.gy + Math.sin(b.a) * b.d, px, pgy, now)) { endBomb(b); continue; }
+    b.d = d;
+    for (const t of targetsOf(own)) {
+      if (Math.hypot(t.x - px, t.y / 0.8 - pgy) > b.r + 15) continue;
+      const nx = b.next.get(t.id);
+      if (nx !== undefined && now < nx) continue;
+      if (nx === undefined && b.lift) t.stunUntil = Math.max(t.stunUntil, now + LUC.bomb.lift);
+      b.next.set(t.id, now + LUC.bomb.tickMs);
+      dmgTo(t, b.dmg, now, { x: px, y: pgy * 0.8, kill: own, type: 'phys' });
+      devilMark(own, t, now); any = true;
+    }
+    if (d >= b.len) endBomb(b);
+  }
+  if (any) checkRoundEnd();
+}
+function stepSanct(now) {
+  for (const o of players.values()) {
+    const S = o.sanct;
+    if (!S) continue;
+    if (now >= S.until || o.role !== 1) { o.sanct = null; continue; }
+    for (const t of targetsOf(o)) {
+      const dx = t.x - S.x, dy = (t.y - S.y) / 0.8, d = Math.hypot(dx, dy), R = S.r + 18;
+      if (d >= R) continue;
+      const ux = d > 1 ? dx / d : 1, uy = d > 1 ? dy / d : 0, c = clampArena({ x: S.x + ux * R, y: S.y + uy * R * 0.8 });
+      t.x = c.x; t.y = c.y;
+    }
+  }
+}
+function stepLucifer(p, now) {
+  let end = false;
+  const B = p.beam;
+  if (B) {
+    if (p.role !== 1) p.beam = null;
+    else {
+      const c = Math.cos(B.a), s = Math.sin(B.a);
+      const inB = q => { const dx = q.x - B.x, dy = (q.y - B.y) / 0.8, al = dx * c + dy * s, pp = -dx * s + dy * c; return al >= -20 && al <= LUC.beam.len && Math.abs(pp) <= LUC.beam.half + 18; };
+      while (B.next < B.until && now >= B.next) {
+        B.next += LUC.beam.tickMs;
+        for (const t of targetsOf(p)) if (inB(t)) { dmgTo(t, LUC.beam.dmg, now, { x: B.x, y: B.y, kill: p, type: 'magic' }); end = true; }
+        if (inB(p)) heal(p, LUC.beam.heal);
+      }
+      if (now >= B.until) p.beam = null;
+    }
+  }
+  const P = p.pure;
+  if (P) {
+    if (p.role !== 1) p.pure = null;
+    else {
+      while (P.next < P.until && now >= P.next) {
+        const r = P.next - P.t0 < LUC.pure.delay ? LUC.pure.r0 : LUC.pure.r1;
+        P.next += LUC.pure.tickMs;
+        for (const t of targetsOf(p)) if (Math.hypot(t.x - P.x, (t.y - P.y) / 0.8) <= r + 15) { dmgTo(t, LUC.pure.dmg, now, { x: P.x, y: P.y, kill: p, type: 'magic' }); end = true; }
+        if (Math.hypot(p.x - P.x, (p.y - P.y) / 0.8) <= r + 15) { heal(p, LUC.pure.heal); cleanse(p); }
+      }
+      if (now >= P.until) p.pure = null;
+    }
+  }
+  return end;
+}
+function luciferSkill(p, k, m, now) {
+  const o = originOf(p, m), cd = ms => { p['cd' + k] = now + ms; send(p.ws, { t: 'cd', k, ms }); };
+  const shot = (S, luc, kind) => {
+    cd(p.lPend ? LUC.G.afterCd : S.cd);
+    spawnArrow(p, o, lagOf(m), now, { a: p.aim, dmg: S.dmg, spd: S.spd, range: S.range, radius: S.radius, kind, type: 'magic', luc, sc: S.sc });
+  };
+  if (p.lf === '') {
+    if (k === 'Q') shot(LUC.Q, 'Q', 'lsq');
+    else if (k === 'E') shot(LUC.E, 'E', 'lse');
+    else {
+      if (p.lUsed) return;
+      p.lUsed = p.lPend = true;
+      p.cdQ = p.cdE = 0; send(p.ws, { t: 'cd', k: 'Q', ms: 0 }); send(p.ws, { t: 'cd', k: 'E', ms: 0 });
+      p.cdR = now + 1e7; send(p.ws, { t: 'cd', k: 'R', ms: 1e7 });
+      broadcast({ t: 'fx', type: 'ring', x: o.x, y: o.y, r: RADPX, c: '#ffe9a8', dur: 600 });
+    }
+  } else if (p.lf === 'a') {
+    if (k === 'Q') {
+      cd(LUC.beam.cd); p.beam = { x: o.x, y: o.y, a: p.aim, next: now, until: now + LUC.beam.ms };
+      broadcast({ t: 'fx', type: 'beam', x: o.x, y: o.y, a: p.aim, len: LUC.beam.len, w: LUC.beam.half * 2, dur: LUC.beam.ms });
+    } else if (k === 'E') {
+      cd(LUC.sanct.cd); p.sanct = { x: o.x, y: o.y, r: LUC.sanct.r, until: now + LUC.sanct.ms };
+      broadcast({ t: 'fx', type: 'sanct', x: o.x, y: o.y, r: LUC.sanct.r, dur: LUC.sanct.ms });
+      stepSanct(now);
+    } else {
+      cd(LUC.pure.cd); p.pure = { x: o.x, y: o.y, t0: now, next: now, until: now + LUC.pure.ms };
+      broadcast({ t: 'fx', type: 'pillar', x: o.x, y: o.y, r0: LUC.pure.r0, r1: LUC.pure.r1, delay: LUC.pure.delay, dur: LUC.pure.ms });
+    }
+  } else {
+    const lib = now < p.libUntil;
+    if (k === 'Q') {
+      cd(lib ? LUC.bomb.libCd : LUC.bomb.cd);
+      spawnBomb(p, o, p.aim, LUC.bomb.r, LUC.bomb.dmg, true, now);
+      if (lib) for (const s of [-1, 1]) spawnBomb(p, o, p.aim + s * LUC.bomb.small.fan, LUC.bomb.small.r, LUC.bomb.small.dmg, false, now);
+    } else if (k === 'E') {
+      const list = targetsOf(p).filter(t => now < t.dmUntil && t.dmBy === p.id);
+      if (!list.length) return;
+      cd(lib ? LUC.absorb.libCd : LUC.absorb.cd);
+      let total = 0;
+      for (const t of list) {
+        const before = t.hp;
+        broadcast({ t: 'fx', type: 'dash', x: t.x, y: t.y, x2: p.x, y2: p.y, c: 'rgba(255,60,80,.6)', dur: 350 });
+        dmgTo(t, Math.round(before * LUC.absorb.pct), now, { x: p.x, y: p.y, kill: p, type: 'pierce' });
+        total += Math.max(0, Math.min(before, before - t.hp)); t.dmUntil = 0;
+      }
+      p.dmList = [];
+      heal(p, Math.round(total * (lib ? LUC.absorb.healLib : LUC.absorb.heal)));
+    } else {
+      cd(LUC.lib.cd); p.libUntil = now + LUC.lib.ms;
+      for (const kk of ['Q', 'E']) {
+        const cap = now + (kk === 'Q' ? LUC.bomb.libCd : LUC.absorb.libCd);
+        if (p['cd' + kk] > cap) { p['cd' + kk] = cap; send(p.ws, { t: 'cd', k: kk, ms: cap - now }); }
+      }
+      broadcast({ t: 'fx', type: 'ring', x: o.x, y: o.y, r: 1.2 * RADPX, c: '#ff3a3a', dur: 700 });
+    }
+  }
+  checkRoundEnd();
+}
 function checkTimeout(now) {
   if (phase !== 'round' || now - roundStart < ROUND_MS) return;
   endRound(null, [...players.values()].filter(p => p.role === 1).map(p => p.name));
@@ -779,7 +987,7 @@ wss.on('connection', (ws, req) => {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
-      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'tequip') {
       equipTitle(p, m.id === null ? null : m.id).catch(e => console.error('equip:', e.message));
     } else if (m.t === 'tgrant' || m.t === 'tlist' || m.t === 'trevoke') {
@@ -844,8 +1052,9 @@ setInterval(() => {
       } else p.charmUntil = 0;
     }
     if (p.role === 1 && p.burnUntil) {
-      while (p.role === 1 && p.burnNext <= p.burnUntil && now >= p.burnNext) { dmgTo(p, GUMIHO.eff.tick, now, { kill: players.get(p.burnBy), type: 'magic' }); p.burnNext += GUMIHO.eff.tickMs; needEnd = true; }
+      while (p.role === 1 && p.burnNext <= p.burnUntil && now >= p.burnNext) { dmgTo(p, BURN.tick, now, { kill: players.get(p.burnBy), type: 'phys' }); p.burnNext += BURN.tickMs; needEnd = true; }
     }
+    if (p.cls === 'Lucifer' && (p.beam || p.pure) && stepLucifer(p, now)) needEnd = true;
     if (now < p.kbUntil && p.role === 1) {
       p.x += p.kbx * dt; p.y += p.kby * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
@@ -853,7 +1062,7 @@ setInterval(() => {
     }
     if (dx || dy) {
       const l = Math.hypot(dx, dy); dx /= l; dy /= l;
-      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * (p.cls === 'Assassin' && now < p.invisUntil ? ASSASSIN.E.speed : 1);
+      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * (p.cls === 'Assassin' && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < p.libUntil ? LUC.lib.speed : 1);
       p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
@@ -864,7 +1073,9 @@ setInterval(() => {
   }
   if (needEnd) checkRoundEnd();
   checkTimeout(now);
+  stepSanct(now);
   stepArrows(dt, now);
+  stepBombs(now);
   const list = [], hidden = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
@@ -875,7 +1086,7 @@ setInterval(() => {
       f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role,
       hp: Math.max(0, Math.round(p.hp)), mh: p.mh, su: Math.max(0, p.stunUntil - now), gd: now < p.guardUntil ? 1 : 0, sl: now < p.slowUntil ? 1 : 0,
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
-      mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0,
+      mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.min(now - p.chargeStart, ARCHER.charge.maxMs)) : 0 };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);
