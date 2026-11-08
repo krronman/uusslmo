@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8' };
 
