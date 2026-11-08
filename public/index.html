@@ -63,6 +63,9 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 .csSk .tx{flex:1;min-width:0}
 .csSk .nm{display:flex;justify-content:space-between;align-items:baseline;gap:calc(var(--u)*8);line-height:1.25}
 .csSk .nm b{font-size:calc(var(--u)*15);color:#ffd66b;white-space:nowrap}
+.csSk .nm .tp{flex:1;display:flex;gap:calc(var(--u)*3);min-width:0;overflow:hidden}
+.csSk .nm .tp em{font-style:normal;font-size:calc(var(--u)*10);padding:0 calc(var(--u)*4);border-radius:calc(var(--u)*3);color:#fff;white-space:nowrap;line-height:1.4;background:#555}
+.t-phys{background:#b5532e!important}.t-magic{background:#7a45c9!important}.t-pierce{background:#c42f55!important}.t-util{background:#2f8f8a!important}.t-def{background:#3a6fc4!important}.t-heal{background:#3a9a4e!important}.t-cc{background:#c48a1f!important}.t-buff{background:#8a8f2a!important}.t-summon{background:#a8458f!important}
 .csSk .nm i{font-style:normal;font-size:calc(var(--u)*12);color:#b9b3ff;white-space:nowrap}
 .csSk .ds{font-size:calc(var(--u)*12.5);line-height:1.2;color:#dcd8ff;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 #csStyle{display:flex;align-items:center;padding:0 calc(var(--u)*6);font-size:calc(var(--u)*16);line-height:1.3;color:#dcd8ff}
@@ -163,10 +166,10 @@ const bowImg=new Image();bowImg.src='bow.png';
 const shieldImg=new Image();shieldImg.src='shield.png';
 const daggerImg=new Image();daggerImg.src='assassin-sword.png',slashImg=new Image(),orbImg=new Image(),fireImg=new Image(),charmImg=new Image();
 slashImg.src='slash.png';orbImg.src='orb.png';fireImg.src='foxfire.png';charmImg.src='charm.png';
-const RADPX=112.5,SHIELD_SPAN=90*Math.PI/180;   // 1 radpx = radius of the basic attack range (same as the server)
+const RADPX=112.5,SHIELD_SPAN=90*Math.PI/180;
 const clsImg={};for(const c of ['Knight','Archer','Shielder','Assassin','Gumiho']){const i=new Image();i.src=c.toLowerCase()+'.png';clsImg[c]=i}
 let vw,vh,scale,ox,oy,dpr;
-const ZOOM_MAX=2.5;let zoom=1;                   // 1 = the default view = the closest zoom; the mouse wheel only zooms OUT from there
+const ZOOM_MAX=2.5;let zoom=1;
 try{const z=parseFloat(localStorage.getItem('mpvp_zoom'));if(z>=1&&z<=ZOOM_MAX)zoom=z}catch(e){}
 function resize(){dpr=devicePixelRatio||1;vw=innerWidth;vh=innerHeight;cv.width=vw*dpr;cv.height=vh*dpr;
  scale=Math.min(vw,vh)/W*dpr*zoom;ox=(cv.width-W*scale)/2;oy=(cv.height-W*scale)/2}
@@ -181,7 +184,7 @@ const cache={},blankSp=document.createElement('canvas');blankSp.width=blankSp.he
 function spriteFor(hue,cls){
  const im=cls&&clsImg[cls];
  if(im&&im.complete&&im.naturalWidth)return im;
- if(!(spImg.complete&&spImg.naturalWidth))return blankSp;     // image not loaded yet: draw nothing and don't cache
+ if(!(spImg.complete&&spImg.naturalWidth))return blankSp;
  if(cache[hue])return cache[hue];
  const c=document.createElement('canvas');c.width=15;c.height=15;const x=c.getContext('2d');x.drawImage(spImg,0,0);
  const d=x.getImageData(0,0,15,15),a=d.data,li=hsl(hue,85,55),da=hsl(hue,85,42);
@@ -212,7 +215,7 @@ function addKill(m){const el=document.createElement('div'),ic=c=>CLS[c]?CLS[c][0
 let ws,myId=null,joined=false,snapUntil=0,arena=null;
 let phase='lobby',roundLeft=0,myRole=0,snapNext=false,cdEnd=0,winnerText='',winnerUntil=0,myCls='';
 const skCd={Q:0,E:0,R:0},fxs=[],hits=[];
-let isAdmin=false,myTitles=[],myEq=null;const titleMap=new Map();   // titles: mine (list + equipped id) and what every player wears
+let isAdmin=false,myTitles=[],myEq=null;const titleMap=new Map();
 const others=new Map(),bubbles=new Map();
 function connect(){
  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
@@ -230,9 +233,9 @@ function connect(){
     if(!o){o={x:p.x,y:p.y,phase:0,face:p.f};others.set(p.id,o)}
     if(snapNext){o.x=p.x;o.y=p.y}
     const f0=o.face;
-    if(p.su>0&&(p.su>(o.su||0)+60||!(o.su>0)))o.sMax=p.su;      // length of this stun, so the launch arc fits it (0.5s tackle vs 1s knock-up)
+    if(p.su>0&&(p.su>(o.su||0)+60||!(o.su>0)))o.sMax=p.su;
     Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn});
-    if(p.id===myId)o.face=f0;   // own facing is driven by the cursor locally
+    if(p.id===myId)o.face=f0;
    }
    snapNext=false;
    for(const id of others.keys())if(!seen.has(id))others.delete(id);
@@ -248,20 +251,20 @@ function connect(){
    titleBtn.style.display=phase==='lobby'?'':'none';classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
    if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose()}
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
-   if(obs){readyBtn.style.display=titleBtn.style.display=skillbar.style.display='none';classBtn.style.display='';logoutBtn.style.display='block'}   // viewer account: lobby / spectate only
+   if(obs){readyBtn.style.display=titleBtn.style.display=skillbar.style.display='none';classBtn.style.display='';logoutBtn.style.display='block'}
   }
   else if(m.t==='chat'){addLog(m.name,m.text,m.sys,0);if(m.id)bubbles.set(m.id,{text:m.text,until:performance.now()+4000})}
   else if(m.t==='countdown'){cdEnd=m.ms?performance.now()+m.ms:0}
   else if(m.t==='tp'){snapNext=true;arrowsC.length=0;chargeT0=0;hasteLocal=0;flash()}
-  else if(m.t==='warp'){const o=others.get(myId);if(o){o.x=o.tx=m.x;o.y=o.ty=m.y}}      // Shield Tackle: my own dash is decided by the server
+  else if(m.t==='warp'){const o=others.get(myId);if(o){o.x=o.tx=m.x;o.y=o.ty=m.y}}
   else if(m.t==='pong'){rtt=rtt*.6+(performance.now()-m.c)*.4}
   else if(m.t==='arrow'){m.t0=performance.now();
-   if(m.by===myId&&(m.kd==='atk'||m.kd==='orb')){const i=arrowsC.findIndex(a=>a.local);if(i>=0)arrowsC.splice(i,1)}   // replace the instant local arrow with the server's
+   if(m.by===myId&&(m.kd==='atk'||m.kd==='orb')){const i=arrowsC.findIndex(a=>a.local);if(i>=0)arrowsC.splice(i,1)}
    arrowsC.push(m);const o=others.get(m.by);if(o&&(m.by!==myId||m.kd!=='atk'))o.shot=m.t0}
   else if(m.t==='arrowEnd'){const i=arrowsC.findIndex(a=>a.id===m.id);if(i>=0)arrowsC.splice(i,1)}
   else if(m.t==='winner'){winnerText=m.second?'⏱ 시간 제한! 2nd place: '+m.name:'🏆 '+m.name+' 승리!';winnerUntil=performance.now()+5000}
   else if(m.t==='cd'){skCd[m.k]=performance.now()+m.ms}
-  else if(m.t==='fx'){m.t0=performance.now();if(!(m.by===myId&&m.type==='cone'))fxs.push(m);   // my own cones are drawn instantly on key press
+  else if(m.t==='fx'){m.t0=performance.now();if(!(m.by===myId&&m.type==='cone'))fxs.push(m);
    if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
   else if(m.t==='kill')addKill(m);
   else if(m.t==='hit'){hits.push({id:m.id,dmg:m.dmg,bl:m.bl,t0:performance.now()})}
@@ -308,7 +311,7 @@ const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700},arrows
 const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b)),lerpAng=(a,b,t)=>a+angDiff(b,a)*t;
 let mcx=0,mcy=0,camX=W/2,camY=W/2;
 addEventListener('mousemove',e=>{mcx=e.clientX;mcy=e.clientY;mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale;mouseOn=true});
-function updateAim(o){                          // aim = direction from the character's body to the cursor
+function updateAim(o){
  if(!mouseOn)return;
  const dx=mWx-o.x,dy=(mWy-(o.y-30))/0.8;
  if(dx*dx+dy*dy>64)myAim=Math.atan2(dy,dx);
@@ -337,20 +340,20 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{if(e.code==='KeyF'&&chargeT0)archerRelease();if(map[e.code]){keys[map[e.code]]=false;sendInput()}});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;sendInput();cancelCharge()});
 const readyBtn=document.getElementById('readyBtn'),classBtn=document.getElementById('classBtn'),skillbar=document.getElementById('skillbar');
-const SKB={Knight:['⚔️','💨','🗡️'],Archer:['🌧️','⚡','🐉'],Shielder:['📣','💥','📯'],Assassin:['🔪','👻','🌀'],Gumiho:['✨','💫','💗']};     // skill bar icons per class (Q, E, R)
+const SKB={Knight:['⚔️','💨','🗡️'],Archer:['🌧️','⚡','🐉'],Shielder:['📣','💥','📯'],Assassin:['🔪','👻','🌀'],Gumiho:['✨','💫','💗']};
 function skIcons(){const ic=SKB[myCls];if(!ic)return;skillbar.querySelectorAll('.sk').forEach((el,i)=>{el.querySelector('span').textContent=ic[i]})}
 const tx=o=>ws.readyState===1&&ws.send(JSON.stringify(o));
 setTimeout(()=>tx({t:'ping',c:performance.now()}),600);setInterval(()=>tx({t:'ping',c:performance.now()}),2000);
-function atkInfo(){const o=others.get(myId);return o?{x:+o.x.toFixed(1),y:+o.y.toFixed(1),rt:Math.round(rtt)}:{rt:Math.round(rtt)}}   // my on-screen position + round-trip time
+function atkInfo(){const o=others.get(myId);return o?{x:+o.x.toFixed(1),y:+o.y.toFixed(1),rt:Math.round(rtt)}:{rt:Math.round(rtt)}}
 function localCone(r,span,c,dur){const o=others.get(myId);if(!o||myRole===2||o.su>0||o.cm)return;
  fxs.push({type:'cone',by:myId,x:o.x,y:o.y,a:myAim,span,r,c,dur,t0:performance.now()});startSwing(o,myAim,span,dur)}
 function localAttack(){const o=others.get(myId);if(!o||myRole===2||o.su>0||o.cm)return;
  if(myCls==='Gumiho'){localOrb(o);return}
  localCone(RADPX,100*Math.PI/180,'rgba(255,255,255,.6)',220)}
-function localOrb(o){const n=performance.now();                 // Gumiho: the orb leaves at once, the server's copy replaces it
+function localOrb(o){const n=performance.now();
  arrowsC.push({id:'L'+n,local:true,by:myId,x:o.x,y:o.y,a:myAim,spd:1020,range:3.5*RADPX,t0:n,adv:0,kd:'orb'});o.shot=n}
 const FOX_PICK=55,FOX_LIFT=25;
-function hoverFox(){if(!mouseOn)return null;let best=FOX_PICK,hit=null;      // my Foxfire under the cursor
+function hoverFox(){if(!mouseOn)return null;let best=FOX_PICK,hit=null;
  for(const f of foxes){if(f.o!==myId)continue;const d=Math.hypot(mWx-f.x,mWy-(f.y-FOX_LIFT));if(d<=best){best=d;hit=f}}return hit}
 // ---- Archer: hold F to pull the bowstring, release to shoot (Haste: instant shot) ----
 function localArrow(f){const o=others.get(myId);if(!o||myRole===2||o.su>0)return;const n=performance.now();
@@ -373,43 +376,44 @@ const CHARS=[
  {id:'Knight',ko:'기사',img:'knight.png',stats:{hp:1200,atk:150},rng:'1 radpx (근접)',
   style:'최전선 브루저. 단단한 근접 전사로, 띄우기와 둔화로 적을 묶어둡니다.',
   skills:[
-   {icon:'🛡️',name:'갑옷',key:'패시브',desc:'받는 모든 피해가 20% 감소합니다.'},
-   {icon:'⚔️',name:'검격',key:'Q · 8초',desc:'넓은 부채꼴 베기(2 radpx): 250 피해, 1초간 띄움.'},
-   {icon:'💨',name:'수호 돌진',key:'E · 12초',desc:'3초간 받는 피해 70% 감소, 이동 속도 40% 증가.'},
-   {icon:'🗡️',name:'심판',key:'R · 25초',desc:'주변에 검 8자루 소환: 각 200 범위 피해, 적 2초간 30% 둔화.'}]},
+   {icon:'🛡️',name:'갑옷',key:'패시브',types:['def'],desc:'받는 물리 피해가 20% 감소합니다.'},
+   {icon:'⚔️',name:'검격',key:'Q · 8초',types:['phys','cc'],desc:'넓은 부채꼴 베기(2 radpx): 250 피해, 1초간 띄움.'},
+   {icon:'💨',name:'수호 돌진',key:'E · 12초',types:['def','buff'],desc:'3초간 받는 물리 피해 70% 감소, 이동 속도 40% 증가.'},
+   {icon:'🗡️',name:'심판',key:'R · 25초',types:['phys','summon','cc'],desc:'검 8자루+중앙 대검 1자루 소환: 각 200 범위 피해, 적 2초간 30% 둔화.'}]},
  {id:'Archer',ko:'궁수',img:'archer.png',stats:{hp:1000,atk:180},rng:'5 radpx (원거리)',
   style:'원거리 딜러. 활시위를 당겨 화살을 강화하고, 투명화·속사·관통 저격으로 전장을 지배합니다.',
   skills:[
-   {icon:'🏹',name:'활시위',key:'패시브',desc:'기본 공격 최대 2초 차지: 피해·속도 50%~150%. 최대 후에도 유지 가능.'},
-   {icon:'🌧️',name:'애로우 레인',key:'Q · 11초',desc:'부채꼴로 화살 7발(각 130 피해) 발사, 1.5초간 투명화.'},
-   {icon:'⚡',name:'헤이스트',key:'E · 15초',desc:'4초간 차지 없이 즉시 발사, 피해는 기본 공격력의 100%.'},
-   {icon:'🐉',name:'멸룡궁',key:'R · 25초',desc:'8배 큰 관통 화살: 적중한 적에게 380 피해, 1초 기절.'}]},
+   {icon:'🏹',name:'활시위',key:'패시브',types:['buff'],desc:'기본 공격 최대 2초 차지: 피해·속도 50%~150%. 최대 후에도 유지 가능.'},
+   {icon:'🌧️',name:'애로우 레인',key:'Q · 11초',types:['phys','util'],desc:'부채꼴로 화살 7발(각 130 피해) 발사, 1.5초간 투명화.'},
+   {icon:'⚡',name:'헤이스트',key:'E · 15초',types:['buff'],desc:'4초간 차지 없이 즉시 발사, 피해는 기본 공격력의 100%.'},
+   {icon:'🐉',name:'멸룡궁',key:'R · 25초',types:['phys','cc'],desc:'8배 큰 관통 화살: 적중한 적에게 380 피해, 1초 기절.'}]},
  {id:'Shielder',ko:'방패병',img:'shielder.png',stats:{hp:1500,atk:120},rng:'1 radpx (근접)',
   style:'최전선 수호자. 방패로 정면의 공격을 막아내고, 도발과 돌진으로 전장의 흐름을 쥐고 흔듭니다.',
   skills:[
-   {icon:'🔰',name:'방패',key:'패시브',desc:'방패가 향한 100° 방향의 공격은 받는 피해가 80% 감소.'},
-   {icon:'📣',name:'도발',key:'Q · 12초',desc:'2.5 radpx 안의 적을 3초간 끌어당김(이속 20% 감소).'},
-   {icon:'💥',name:'실드 태클',key:'E · 11초',desc:'3.5 radpx 돌진: 200 피해, 밀쳐내고 0.5초간 띄움.'},
-   {icon:'📯',name:'혼 가드',key:'R · 25초',desc:'7초간 못 막은 피해 -30%, 막은 피해 무효, 근접 40% 반사, 투사체 튕김 (이속 -15%).'}]},
+   {icon:'🔰',name:'방패',key:'패시브',types:['def'],desc:'방패가 향한 90° 방향의 물리 기본 공격·투사체는 받는 피해 80% 감소.'},
+   {icon:'📣',name:'도발',key:'Q · 12초',types:['cc'],desc:'2.5 radpx 안의 적을 3초간 끌어당김(이속 20% 감소).'},
+   {icon:'💥',name:'실드 태클',key:'E · 11초',types:['phys','util','cc'],desc:'3.5 radpx 돌진: 200 피해, 밀쳐내고 0.5초간 띄움.'},
+   {icon:'📯',name:'혼 가드',key:'R · 25초',types:['def'],desc:'7초간 못 막은 물리 피해 -30%, 막은 피해 무효, 근접 40% 반사, 투사체 튕김 (이속 -15%).'}]},
  {id:'Assassin',ko:'암살자',img:'assassin.png',stats:{hp:1000,atk:135},rng:'1 radpx (근접)',
   style:'근접 암살형 딜러. 은신으로 접근해 모든 방어를 무시하는 일격을 꽂아 넣습니다.',
   skills:[
-   {icon:'🎯',name:'피어스',key:'패시브',desc:'모든 공격이 대상의 피해 감소와 무적 효과를 무시합니다.'},
-   {icon:'🔪',name:'소드 샤우트',key:'Q · 12초',desc:'검을 찔러 250 피해, 적중한 적이 받는 피해 20% 증가(3초).'},
-   {icon:'👻',name:'은신',key:'E · 10초',desc:'2.5초간 투명화, 이동속도 15% 증가. 공격하면 해제.'},
-   {icon:'🌀',name:'암살',key:'R · 25초',desc:'커서로 순간이동, 1 radpx 내 적에게 250 피해. 3초간 공격속도 +10%(적중당 +10%).'}]},
+   {icon:'🎯',name:'피어스',key:'패시브',types:['pierce'],desc:'모든 공격이 대상의 피해 감소와 무적 효과를 무시합니다.'},
+   {icon:'🔪',name:'소드 샤우트',key:'Q · 12초',types:['pierce'],desc:'검을 찔러 250 피해, 적중한 적이 받는 피해 20% 증가(3초).'},
+   {icon:'👻',name:'은신',key:'E · 10초',types:['util','buff'],desc:'2.5초간 투명화, 이동속도 15% 증가. 공격하면 해제.'},
+   {icon:'🌀',name:'암살',key:'R · 25초',types:['util','pierce','buff'],desc:'커서로 순간이동, 1 radpx 내 적에게 250 피해. 3초간 공격속도 +10%(적중당 +10%).'}]},
  {id:'Gumiho',ko:'구미호',img:'gumiho.png',stats:{hp:1100,atk:130},rng:'3.5 radpx (원거리)',
   style:'원거리 마법사. 여우불을 깔았다 터뜨려 적을 불태우고, 매혹으로 전장을 휘어잡습니다.',
   skills:[
-   {icon:'🔥',name:'여우불',key:'패시브',desc:'공격이 닿은 곳에 60% 확률로 여우불 생성(최대 5개, 초과 시 가장 오래된 것 소멸).'},
-   {icon:'✨',name:'요술',key:'Q · 8초',desc:'커서의 여우불로 순간이동, 가까운 여우불 폭발(2 radpx): 120 피해+화상.'},
-   {icon:'💫',name:'미수옥',key:'E · 12초',desc:'모든 여우불을 모아 0.5초 뒤 폭발: 개당 150 피해+화상.'},
-   {icon:'💗',name:'매혹',key:'R · 25초',desc:'2.5 radpx 안의 적을 3초간 매혹: 공격·이동 불가, 나에게 끌려옴.'}]},
+   {icon:'🔥',name:'여우불',key:'패시브',types:['summon','magic'],desc:'공격이 적에게 적중하면 75% 확률로 여우불 생성(최대 5개, 초과 시 가장 오래된 것 소멸).'},
+   {icon:'✨',name:'요술',key:'Q · 8초',types:['util','magic'],desc:'커서의 여우불로 순간이동, 가까운 여우불 폭발(2 radpx): 120 피해+화상.'},
+   {icon:'💫',name:'미수옥',key:'E · 12초',types:['buff'],desc:'여우불을 모두 회수, 다음 기본 공격 강화: 개당 피해 +120, 폭발 범위 +0.5 radpx.'},
+   {icon:'💗',name:'매혹',key:'R · 25초',types:['cc'],desc:'2.5 radpx 안의 적을 3초간 매혹: 공격·이동 불가, 나에게 끌려옴.'}]},
  ...new Array(15).fill(null)
 ];
 const csScreen=document.getElementById('csScreen'),csBox=document.getElementById('csBox');
 const csPlace=(el,x,y,w,h)=>{el.style.left=x/IMG_W*100+'%';el.style.top=y/IMG_H*100+'%';el.style.width=w/IMG_W*100+'%';el.style.height=h/IMG_H*100+'%'};
 const csEl=(tag,cls,parent)=>{const e=document.createElement(tag);if(cls)e.className=cls;(parent||csBox).appendChild(e);return e};
+const SKILL_TYPES={phys:['물리','방어 스킬의 영향을 받는 피해'],magic:['마법','방어 스킬의 영향을 받지 않는 피해'],pierce:['관통','방어·무적을 무시하는 고정 피해'],util:['유틸','이동 / 순간이동 / 투명화'],def:['방어','무적 / 피해 감소 / 1회성 보호막'],heal:['회복','체력 회복'],cc:['CC','둔화 / 기절 / 이동·공격 제한 / 공중에 띄움'],buff:['버프','공격 강화 / 능력치 증가 / 변신'],summon:['소환','오브젝트 소환']};
 let csSel=0;
 const slotEls=CHARS.map((c,i)=>{
  const b=csEl('button','csSlot'+(c?'':' lock'));csPlace(b,SLOT_X[i%5],SLOT_Y[(i/5)|0],SLOT_W,SLOT_H);
@@ -422,7 +426,7 @@ const csNmL=csEl('b','',csName),csNmR=csEl('i','',csName);
 const csRows=[560,632,705,778].map(y=>{
  const r=csEl('div','csSk');csPlace(r,1030,y,381,60);
  const ic=csEl('div','ic',r),tx=csEl('div','tx',r),top=csEl('div','nm',tx);
- return{ic,nm:csEl('b','',top),ky:csEl('i','',top),ds:csEl('div','ds',tx)}});
+ return{ic,nm:csEl('b','',top),tp:csEl('span','tp',top),ky:csEl('i','',top),ds:csEl('div','ds',tx)}});
 const csStyleEl=csEl('div');csStyleEl.id='csStyle';csPlace(csStyleEl,103,880,930,55);
 const csOk=csEl('button');csOk.id='csOk';csPlace(csOk,1090,880,272,42);
 function csFit(){csBox.style.setProperty('--u',csBox.clientWidth/IMG_W+'px')}
@@ -434,7 +438,7 @@ function csRender(){
  csNmL.textContent=c?c.id+(c.ko?' / '+c.ko:''):'???';
  csNmR.textContent=c&&c.stats?'HP '+c.stats.hp+'   ATK '+c.stats.atk+'\n사거리 '+c.rng:'HP ?   ATK ?\n사거리 ?';
  const sk=(c&&c.skills)||[0,1,2,3].map(()=>({icon:'❔',name:'???',key:'',desc:c?'상세 정보 준비 중입니다.':'잠긴 캐릭터입니다.'}));
- csRows.forEach((r,i)=>{const k=sk[i];r.ic.textContent=k.icon;r.nm.textContent=k.name;r.ky.textContent=k.key;r.ds.textContent=k.desc});
+ csRows.forEach((r,i)=>{const k=sk[i];r.ic.textContent=k.icon;r.nm.textContent=k.name;r.ky.textContent=k.key;r.ds.textContent=k.desc;r.tp.textContent='';(k.types||[]).forEach(t=>{const e=document.createElement('em'),T=SKILL_TYPES[t];e.textContent=T[0];e.title=T[1];e.className='t-'+t;r.tp.appendChild(e)})});
  csStyleEl.textContent=c?(c.style||'직업 정보 준비 중입니다.'):'잠겨 있는 칸입니다.';
  const eq=!!c&&c.id===myCls;
  const view=obs||phase!=='lobby';csOk.textContent=!c?'LOCKED':eq?'EQUIPPED ✔':view?'VIEW ONLY':'SELECT';csOk.disabled=!c||eq||view;
@@ -454,11 +458,11 @@ const titleBtn=document.getElementById('titleBtn'),ttScreen=document.getElementB
 const ttSlots=TT_SLOTS.map((r,i)=>{const b=document.createElement('button');b.className='ttSlot';
  b.style.left=r[0]/TT_W*100+'%';b.style.top=r[1]/TT_H*100+'%';b.style.width=r[2]/TT_W*100+'%';b.style.height=r[3]/TT_H*100+'%';
  b.onclick=()=>ttPick(i);ttBox.appendChild(b);return b});
-function ttPick(i){                                 // slot 1 = no title, slots 2.. = granted titles
+function ttPick(i){
  const t=i>0?myTitles[i-1]:null;if(i>0&&!t)return;
  myEq=t?t.id:null;ttRender();tx({t:'tequip',id:myEq})}
 function ttRender(){
- if(!myTitles.some(t=>t.id===myEq))myEq=null;       // no titles (or the equipped one is gone) -> "none"
+ if(!myTitles.some(t=>t.id===myEq))myEq=null;
  ttSlots.forEach((b,i)=>{const t=i>0?myTitles[i-1]:null;
   b.classList.toggle('empty',i>0&&!t);b.classList.toggle('sel',i===0?myEq===null:!!t&&t.id===myEq);
   if(i===0){b.textContent='없음';b.style.color='#b9b3ff'}else if(t){colorize(b,t.text,t.color,t.cols);b.style.color=t.color}else{b.textContent='';b.style.color=''}b.title=t?t.text:''})}
@@ -510,7 +514,7 @@ async function pnOpen(){csClose();ttClose();admClose();for(const k in keys)keys[
 document.getElementById('patchBtn').onclick=e=>{pnOpen();e.currentTarget.blur()};
 document.getElementById('pnClose').onclick=pnClose;pnScreen.onclick=e=>{if(e.target===pnScreen)pnClose()};
 function resetTitles(){isAdmin=false;myTitles=[];myEq=null;titleMap.clear();ttRender();admClose();ttClose()}
-try{document.fonts.load("13px 'Galmuri11'","칭호가나다")}catch(e){}   // make sure the pixel font is ready for the canvas
+try{document.fonts.load("13px 'Galmuri11'","칭호가나다")}catch(e){}
 
 const CLS={Knight:['⚔️','#ffb3a7'],Archer:['🏹','#b6f0a8'],Shielder:['🛡️','#a9d4ff'],Assassin:['🗡️','#d9b3ff'],Gumiho:['🦊','#9ff0ff']};
 
@@ -521,43 +525,43 @@ function drawSword(o,h,lift){
  if(!(swordImg.complete&&swordImg.naturalWidth))return;
  const now=performance.now(),sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,cx=o.x,cy=o.y-h*.5-lift;
  ctx.save();
- if(sw&&k<1){                                   // swing: the blade sweeps across the attack cone
+ if(sw&&k<1){
   const base=Math.atan2(.8*Math.sin(sw.a),Math.cos(sw.a)),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2,th=base+(e-.5)*sw.span*1.15;
   ctx.translate(cx+Math.cos(th)*14,cy+Math.sin(th)*11);ctx.rotate(th+Math.PI/2);
   ctx.drawImage(swordImg,0,0,7,15,-3.5*PX,-15*PX,7*PX,15*PX);
- }else{                                         // floating "hand" sword beside the body
+ }else{
   const side=o.face,bob=Math.sin(now/260+o.x*.05)*3+(o.moving?Math.sin(o.phase*2)*2:0);
   ctx.translate(cx+side*32,cy+8+bob);ctx.rotate(side*.25);
   ctx.drawImage(swordImg,0,0,7,15,-3.5*PX,-11*PX,7*PX,15*PX);
  }
  ctx.restore();
 }
-function drawBlade(o,h,lift){                       // Assassin: the 15x15 sword floats beside the body and slashes towards the cursor
+function drawBlade(o,h,lift){
  if(!(daggerImg.complete&&daggerImg.naturalWidth))return;
  const now=performance.now(),sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,cx=o.x,cy=o.y-h*.5-lift,S=3.6;
  let th,px,py;
  if(sw&&k<1){const base=Math.atan2(.8*Math.sin(sw.a),Math.cos(sw.a)),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;th=base+(e-.5)*sw.span*1.15;px=cx+Math.cos(th)*14;py=cy+Math.sin(th)*11}
  else{const side=o.face,bob=Math.sin(now/260+o.x*.05)*3+(o.moving?Math.sin(o.phase*2)*2:0);th=side>0?-1.25:-Math.PI+1.25;px=cx+side*30;py=cy+10+bob}
- ctx.save();ctx.translate(px,py);ctx.rotate(th+Math.PI/4);                          // the sprite's blade points up-right (-45 deg)
- ctx.drawImage(daggerImg,0,0,15,15,-1.5*S,-12.5*S,15*S,15*S);ctx.restore();       // the hilt is the pivot
+ ctx.save();ctx.translate(px,py);ctx.rotate(th+Math.PI/4);
+ ctx.drawImage(daggerImg,0,0,15,15,-1.5*S,-12.5*S,15*S,15*S);ctx.restore();
 }
 function drawBow(o,h,lift){
  if(!(bowImg.complete&&bowImg.naturalWidth))return;
  const now=performance.now(),a=o.da||0,th=Math.atan2(.8*Math.sin(a),Math.cos(a));
  const rc=o.shot?Math.max(0,1-(now-o.shot)/180):0,bob=Math.sin(now/260+o.x*.05)*2.5+(o.moving?Math.sin(o.phase*2)*2:0);
- const ch=o.chg>=0?o.chg:0,shk=o.chg>=1?Math.sin(now/35)*1.5:0;      // charging: bow comes closer and shakes at full draw
+ const ch=o.chg>=0?o.chg:0,shk=o.chg>=1?Math.sin(now/35)*1.5:0;
  const dist=36-8*rc-4*ch,cx=o.x+Math.cos(th)*dist+shk,cy=o.y-h*.5-lift+8+Math.sin(th)*dist*.8+bob;
- ctx.save();ctx.translate(cx,cy);ctx.rotate(th+Math.PI);              // the bow sprite points left
- if(o.chg>=0&&arrowImg.complete&&arrowImg.naturalWidth)ctx.drawImage(arrowImg,0,0,14,3,-6+14*ch,-1.5*PX,14*PX,3*PX);   // nocked arrow, pulled back as it charges
+ ctx.save();ctx.translate(cx,cy);ctx.rotate(th+Math.PI);
+ if(o.chg>=0&&arrowImg.complete&&arrowImg.naturalWidth)ctx.drawImage(arrowImg,0,0,14,3,-6+14*ch,-1.5*PX,14*PX,3*PX);
  ctx.drawImage(bowImg,0,0,8,15,-4*PX,-7.5*PX,8*PX,15*PX);ctx.restore();
 }
-function drawShield(o,h,lift){                      // floating shield beside the body: it only swaps between the left and right side (the image never rotates)
+function drawShield(o,h,lift){
  if(!(shieldImg.complete&&shieldImg.naturalWidth))return;
  const now=performance.now(),side=o.face||1;
- const sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,thrust=(sw&&k<1)?Math.sin(k*Math.PI):0;      // F / tackle: the shield bashes outwards
+ const sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,thrust=(sw&&k<1)?Math.sin(k*Math.PI):0;
  const bob=Math.sin(now/260+o.x*.05)*2+(o.moving?Math.sin(o.phase*2)*2:0);
  const cx=o.x+side*(40+24*thrust),cy=o.y-h*.5-lift+10+bob;
- ctx.save();ctx.translate(cx,cy);ctx.scale(side,1);                                  // mirrored for the left side, always upright
+ ctx.save();ctx.translate(cx,cy);ctx.scale(side,1);
  if(o.hn){ctx.shadowColor='#ffd66b';ctx.shadowBlur=18}
  ctx.drawImage(shieldImg,0,0,15,15,-7.5*4,-7.5*4,15*4,15*4);ctx.restore();
 }
@@ -565,25 +569,25 @@ function drawFoxfires(t){
  const hov=hoverFox(),S=3.4;
  for(const f of foxes){
   const bob=Math.sin(t/240+f.id)*3,cx=f.x,cy=f.y-FOX_LIFT+bob;
-  ctx.save();ctx.globalAlpha=.3;ctx.fillStyle='#0b2a40';ctx.beginPath();ctx.ellipse(f.x,f.y-2,20,7,0,0,7);ctx.fill();ctx.restore();       // shadow on the ground
+  ctx.save();ctx.globalAlpha=.3;ctx.fillStyle='#0b2a40';ctx.beginPath();ctx.ellipse(f.x,f.y-2,20,7,0,0,7);ctx.fill();ctx.restore();
   ctx.save();ctx.translate(cx,cy);ctx.shadowColor='#7fe9ff';ctx.shadowBlur=14;if(fireImg.complete&&fireImg.naturalWidth)ctx.drawImage(fireImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();
-  if(f.o===myId&&myCls==='Gumiho'){ctx.save();ctx.strokeStyle=hov===f?'#ffffff':'rgba(127,233,255,.55)';ctx.lineWidth=hov===f?4:2;ctx.setLineDash(hov===f?[]:[5,4]);ctx.beginPath();ctx.arc(cx,cy,hov===f?36:32,0,7);ctx.stroke();ctx.restore()}   // mine: ring, solid when the cursor is on it (Q)
+  if(f.o===myId&&myCls==='Gumiho'){ctx.save();ctx.strokeStyle=hov===f?'#ffffff':'rgba(127,233,255,.55)';ctx.lineWidth=hov===f?4:2;ctx.setLineDash(hov===f?[]:[5,4]);ctx.beginPath();ctx.arc(cx,cy,hov===f?36:32,0,7);ctx.stroke();ctx.restore()}
  }}
 function drawArrows(t){
  for(let i=arrowsC.length-1;i>=0;i--){
   const r=arrowsC[i],d=(r.adv||0)+r.spd*(t-r.t0)/1000,sc=r.sc||1;
-  if(d>=r.range+40||(r.local&&t-r.t0>rtt*2+250)){arrowsC.splice(i,1);continue}   // local arrows the server never confirmed fade out
-  if(r.kd==='orb'){if(!(orbImg.complete&&orbImg.naturalWidth))continue;       // Gumiho's magic orb
+  if(d>=r.range+40||(r.local&&t-r.t0>rtt*2+250)){arrowsC.splice(i,1);continue}
+  if(r.kd==='orb'){if(!(orbImg.complete&&orbImg.naturalWidth))continue;
    const S=(3.2+.6*(r.bm||0))*(1+.06*Math.sin(t/70));ctx.save();ctx.translate(r.x+Math.cos(r.a)*d,r.y+Math.sin(r.a)*d*.8-30);ctx.shadowColor='#6f8fff';ctx.shadowBlur=16;
    ctx.drawImage(orbImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();continue}
   if(!(arrowImg.complete&&arrowImg.naturalWidth))continue;
   const dd=d+28,th=Math.atan2(.8*Math.sin(r.a),Math.cos(r.a));
-  ctx.save();ctx.translate(r.x+Math.cos(r.a)*dd,r.y+Math.sin(r.a)*dd*.8-30);ctx.rotate(th+Math.PI);   // the arrow sprite points left
+  ctx.save();ctx.translate(r.x+Math.cos(r.a)*dd,r.y+Math.sin(r.a)*dd*.8-30);ctx.rotate(th+Math.PI);
   if(sc>1){ctx.shadowColor='#ffd66b';ctx.shadowBlur=24}
   ctx.drawImage(arrowImg,0,0,14,3,0,-1.5*PX*sc,14*PX*sc,3*PX*sc);ctx.restore();
  }
 }
-function drawTitleText(tt,x,y){                     // title above the name: every character can have its own colour
+function drawTitleText(tt,x,y){
  const ch=Array.from(tt.x),wd=ch.map(c=>ctx.measureText(c).width);let cx=x-wd.reduce((a,b)=>a+b,0)/2;
  ctx.textAlign='left';ctx.lineWidth=3;ctx.strokeStyle='rgba(10,20,50,.85)';
  const xs=ch.map((c,i)=>{const v=cx;cx+=wd[i];return v});
@@ -596,16 +600,16 @@ function drawPlayer(o,isMe){
  const lL=step>.3?1:0,lR=step<-.3?1:0,w=15*PX,h=15*PX,x0=o.x-w/2,yb=o.y-h-lift,sp=spriteFor(o.hue,o.cls);
  ctx.fillStyle='rgba(30,40,80,.3)';ctx.beginPath();ctx.ellipse(o.x,o.y-2,22-(bob?2:0),PX*1.3,0,0,7);ctx.fill();
  if(o.gd){ctx.save();ctx.strokeStyle='#7fd3ff';ctx.fillStyle='rgba(127,211,255,.18)';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.5,h*.62,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
- if(o.hs){ctx.save();ctx.strokeStyle='#ffe066';ctx.fillStyle='rgba(255,224,102,.14)';ctx.lineWidth=3;ctx.setLineDash([8,6]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.58,h*.66,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}   // Haste aura
- if(o.cls==='Shielder'){const aa=o.da||0,wd=SHIELD_SPAN/2;ctx.save();ctx.translate(o.x,o.y-4);ctx.scale(1,.8);       // the 100 deg sector the shield protects
+ if(o.hs){ctx.save();ctx.strokeStyle='#ffe066';ctx.fillStyle='rgba(255,224,102,.14)';ctx.lineWidth=3;ctx.setLineDash([8,6]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.58,h*.66,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
+ if(o.cls==='Shielder'){const aa=o.da||0,wd=SHIELD_SPAN/2;ctx.save();ctx.translate(o.x,o.y-4);ctx.scale(1,.8);
   ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,64,aa-wd,aa+wd);ctx.closePath();
   ctx.fillStyle=o.hn?'rgba(255,214,107,.28)':'rgba(255,214,107,.12)';ctx.fill();ctx.lineWidth=2;ctx.strokeStyle=o.hn?'rgba(255,230,140,.95)':'rgba(255,214,107,.5)';ctx.stroke();ctx.restore()}
- if(o.hn){ctx.save();ctx.strokeStyle='#ffd66b';ctx.fillStyle='rgba(255,214,107,'+(.1+.06*Math.sin(performance.now()/160))+')';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.6,h*.7,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}   // Horn Guard aura
- if(o.mk){ctx.save();ctx.translate(o.x,o.y-4);ctx.scale(1,.8);const mp=1+.06*Math.sin(performance.now()/110);ctx.strokeStyle='#ff4b6e';ctx.lineWidth=3;ctx.setLineDash([5,4]);ctx.beginPath();ctx.arc(0,0,36*mp,0,7);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();for(let q=0;q<4;q++){const aa=q*Math.PI/2+Math.PI/4;ctx.moveTo(Math.cos(aa)*28*mp,Math.sin(aa)*28*mp);ctx.lineTo(Math.cos(aa)*46*mp,Math.sin(aa)*46*mp)}ctx.stroke();ctx.restore()}   // Sword Shout mark: takes +20% damage
- if(o.as>0){ctx.save();ctx.strokeStyle='#c98bff';ctx.fillStyle='rgba(201,139,255,.13)';ctx.lineWidth=3;ctx.setLineDash([8,6]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.56,h*.66,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}   // Assassinate attack-speed buff
- if(o.bn){ctx.save();ctx.strokeStyle='#6fd8ff';ctx.fillStyle='rgba(111,216,255,.12)';ctx.lineWidth=3;ctx.setLineDash([4,5]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.5,h*.64,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}   // burning
- if(o.qn){ctx.save();ctx.strokeStyle='#9ff0ff';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(o.x,o.y-4,30,11,0,0,7);ctx.stroke();ctx.restore()}   // next attack carries the Foxfire effect
- if(o.ta){ctx.save();ctx.strokeStyle='#ff5a4a';ctx.fillStyle='rgba(255,90,74,.12)';ctx.lineWidth=3;ctx.setLineDash([6,5]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.55,h*.68,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}   // taunted
+ if(o.hn){ctx.save();ctx.strokeStyle='#ffd66b';ctx.fillStyle='rgba(255,214,107,'+(.1+.06*Math.sin(performance.now()/160))+')';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.6,h*.7,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
+ if(o.mk){ctx.save();ctx.translate(o.x,o.y-4);ctx.scale(1,.8);const mp=1+.06*Math.sin(performance.now()/110);ctx.strokeStyle='#ff4b6e';ctx.lineWidth=3;ctx.setLineDash([5,4]);ctx.beginPath();ctx.arc(0,0,36*mp,0,7);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();for(let q=0;q<4;q++){const aa=q*Math.PI/2+Math.PI/4;ctx.moveTo(Math.cos(aa)*28*mp,Math.sin(aa)*28*mp);ctx.lineTo(Math.cos(aa)*46*mp,Math.sin(aa)*46*mp)}ctx.stroke();ctx.restore()}
+ if(o.as>0){ctx.save();ctx.strokeStyle='#c98bff';ctx.fillStyle='rgba(201,139,255,.13)';ctx.lineWidth=3;ctx.setLineDash([8,6]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.56,h*.66,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
+ if(o.bn){ctx.save();ctx.strokeStyle='#6fd8ff';ctx.fillStyle='rgba(111,216,255,.12)';ctx.lineWidth=3;ctx.setLineDash([4,5]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.5,h*.64,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
+ if(o.qn){ctx.save();ctx.strokeStyle='#9ff0ff';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(o.x,o.y-4,30,11,0,0,7);ctx.stroke();ctx.restore()}
+ if(o.ta){ctx.save();ctx.strokeStyle='#ff5a4a';ctx.fillStyle='rgba(255,90,74,.12)';ctx.lineWidth=3;ctx.setLineDash([6,5]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.55,h*.68,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
  ctx.save();ctx.translate(o.x,0);ctx.scale(o.face,1);ctx.translate(-o.x,0);
  ctx.save();ctx.translate(o.x,yb+h);ctx.rotate((o.moving?step*PX*.4:0)*.012);ctx.translate(-o.x,-(yb+h));
  ctx.drawImage(sp,0,0,15,11,x0,yb-bob*PX,w,11*PX);
@@ -618,62 +622,62 @@ function drawPlayer(o,isMe){
  if(o.cls==='Assassin')drawBlade(o,h,lift);
  if(o.cls==='Archer')drawBow(o,h,lift);
  if(o.cls==='Shielder')drawShield(o,h,lift);
- if(o.cm&&charmImg.complete&&charmImg.naturalWidth){const bob=Math.sin(performance.now()/180)*3,top=o.tt?yb-57:yb-39;ctx.drawImage(charmImg,0,0,15,15,o.x-22,top-49+bob,45,45)}   // charmed: a heart above the head
+ if(o.cm&&charmImg.complete&&charmImg.naturalWidth){const bob=Math.sin(performance.now()/180)*3,top=o.tt?yb-57:yb-39;ctx.drawImage(charmImg,0,0,15,15,o.x-22,top-49+bob,45,45)}
  if(o.ta){ctx.font='bold 22px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(60,0,0,.9)';ctx.fillStyle='#ff5a4a';ctx.strokeText('!',o.x+36,yb+10);ctx.fillText('!',o.x+36,yb+10)}
- // name tag
+
  ctx.font='bold 15px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(10,20,50,.85)';
  ctx.fillStyle=isMe?'#ffe066':'#fff';ctx.strokeText(o.name||'',o.x,yb-8);ctx.fillText(o.name||'',o.x,yb-8);
  if(o.cls&&CLS[o.cls]){const t=CLS[o.cls][0]+' '+o.cls;ctx.font='bold 13px system-ui,sans-serif';ctx.lineWidth=3;
   ctx.fillStyle=CLS[o.cls][1];ctx.strokeText(t,o.x,yb-26);ctx.fillText(t,o.x,yb-26)}
- if(o.tt){const ty=(o.cls&&CLS[o.cls])?yb-44:yb-26;                       // title above the name, in the pixel font
+ if(o.tt){const ty=(o.cls&&CLS[o.cls])?yb-44:yb-26;
   ctx.font="13px 'Galmuri11','DotGothic16',system-ui,sans-serif";ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(10,20,50,.85)';
   drawTitleText(o.tt,o.x,ty)}
  if(phase==='round'&&o.mh){const bw=46,bx=o.x-bw/2,by=o.y+8,r=Math.max(0,o.hp/o.mh);
   ctx.fillStyle='rgba(10,20,50,.85)';ctx.fillRect(bx-2,by-2,bw+4,10);
   ctx.fillStyle=r>.35?'#4cd964':'#ff5a4a';ctx.fillRect(bx,by,bw*r,6);
   if(o.sl){ctx.fillStyle='#8fd0ff';ctx.fillRect(bx,by+7,bw,2)}}
- if(o.chg>=0){const bw=46,bx=o.x-bw/2,by=o.y+(phase==='round'&&o.mh?20:8);          // Bowstring charge gauge
+ if(o.chg>=0){const bw=46,bx=o.x-bw/2,by=o.y+(phase==='round'&&o.mh?20:8);
   ctx.fillStyle='rgba(10,20,50,.85)';ctx.fillRect(bx-2,by-2,bw+4,8);
   ctx.fillStyle=o.chg>=1&&Math.sin(performance.now()/60)>0?'#fff':'#ffd66b';ctx.fillRect(bx,by,bw*o.chg,4)}
 }
-function drawDash(f,k){                              // Shield Tackle streak (screen space, body height)
+function drawDash(f,k){
  ctx.save();ctx.globalAlpha=(1-k)*.85;ctx.lineCap='round';
- let x2=f.x2,y2=f.y2;if(f.follow){const o=others.get(f.by);if(o){x2=o.x;y2=o.y}}        // Shield Tackle: the streak grows behind the Shielder as it really moves
+ let x2=f.x2,y2=f.y2;if(f.follow){const o=others.get(f.by);if(o){x2=o.x;y2=o.y}}
  ctx.strokeStyle=f.c||'rgba(255,170,60,.55)';ctx.lineWidth=44*(1-k*.5);ctx.beginPath();ctx.moveTo(f.x,f.y-30);ctx.lineTo(x2,y2-30);ctx.stroke();
  ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=10;ctx.stroke();ctx.restore()}
 function drawGhosts(t){for(let i=ghosts.length-1;i>=0;i--){const g=ghosts[i],a=(t-g.t0)/300;if(a>=1){ghosts.splice(i,1);continue}
  const sp=spriteFor(g.hue,g.cls);ctx.save();ctx.globalAlpha=(1-a)*.4;ctx.translate(g.x,0);ctx.scale(g.face,1);ctx.drawImage(sp,0,0,15,15,-37.5,g.y-75,75,75);ctx.restore()}}
-function drawSlash(f,k){                            // sword swing: the 15x15 arc, centred on the attacker, outer edge = attack range
+function drawSlash(f,k){
  const S=f.r/.9,al=k<.12?k/.12:1-(k-.12)/.88;
- ctx.globalAlpha=Math.max(0,al)*.95;ctx.rotate(f.a+3*Math.PI/4+(k-.5)*.9);       // the arc's middle points up-left in the image: turn it onto the aim, sweep a little
+ ctx.globalAlpha=Math.max(0,al)*.95;ctx.rotate(f.a+3*Math.PI/4+(k-.5)*.9);
  ctx.drawImage(slashImg,0,0,15,15,-.967*S,-.967*S,S,S)}
-function drawPull(f,k){                             // Foxfires fly to the Gumiho
+function drawPull(f,k){
  const e=k*k,tx=f.x,ty=f.y-30,S=3.4;
  for(const q of f.pts){const sx=q[0],sy=q[1]-FOX_LIFT,x=sx+(tx-sx)*e,y=sy+(ty-sy)*e;
   ctx.save();ctx.translate(x,y);ctx.shadowColor='#7fe9ff';ctx.shadowBlur=14;if(fireImg.complete&&fireImg.naturalWidth)ctx.drawImage(fireImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore()}}
 function drawFx(t){
  for(let i=fxs.length-1;i>=0;i--){
-  const f=fxs[i],k=Math.max(0,(t-f.t0)/f.dur);       // k can be slightly negative (rAF time < message time): a negative arc radius throws and used to kill the render loop
+  const f=fxs[i],k=Math.max(0,(t-f.t0)/f.dur);
   if(k>=1){fxs.splice(i,1);continue}
-  try{fxOne(f,k)}catch(e){fxs.splice(i,1);throw e}  // a broken effect is dropped so it can never break every following frame
+  try{fxOne(f,k)}catch(e){fxs.splice(i,1);throw e}
  }
 }
 function fxOne(f,k){
  if(f.type==='dash'){drawDash(f,k);return}
  if(f.type==='pull'){drawPull(f,k);return}
- ctx.save();ctx.translate(f.x,f.y);ctx.scale(1,.8);          // ground plane
- if(f.type==='ring'){                                       // Taunt: shockwave out to the full radius
+ ctx.save();ctx.translate(f.x,f.y);ctx.scale(1,.8);
+ if(f.type==='ring'){
   ctx.globalAlpha=(1-k)*.85;const rr=f.r*Math.min(1,k*3);
   const fa=ctx.globalAlpha;ctx.beginPath();ctx.arc(0,0,rr,0,6.2832);ctx.globalAlpha=fa*.16;ctx.fillStyle=f.c||'#ff5a4a';ctx.fill();ctx.globalAlpha=fa;ctx.lineWidth=5;ctx.strokeStyle=f.c||'#ff6b4a';ctx.stroke();
   ctx.beginPath();ctx.arc(0,0,rr*.72,0,6.2832);ctx.lineWidth=2;ctx.strokeStyle='rgba(255,220,180,.8)';ctx.stroke();ctx.restore();
- }else if(f.type==='thrust'){                               // Sword Shout: a long, narrow stab
+ }else if(f.type==='thrust'){
   ctx.rotate(f.a);const L=f.len*Math.min(1,k*4+.25),w=f.w*(1-k*.55);ctx.globalAlpha=(1-k)*.95;
   ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(L*.8,-w*.55);ctx.lineTo(L,0);ctx.lineTo(L*.8,w*.55);ctx.closePath();
   ctx.fillStyle='rgba(205,150,255,.5)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='rgba(255,255,255,.95)';ctx.stroke();
   ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(L,0);ctx.lineWidth=2;ctx.strokeStyle='rgba(255,255,255,.9)';ctx.stroke();ctx.restore();
  }else if(f.type==='cone'){
   const fo=f.by?others.get(f.by):null;
-  if(fo&&(fo.cls==='Knight'||fo.cls==='Assassin')&&slashImg.complete&&slashImg.naturalWidth){drawSlash(f,k);ctx.restore();return}   // Knight / Assassin swing = the arc image
+  if(fo&&(fo.cls==='Knight'||fo.cls==='Assassin')&&slashImg.complete&&slashImg.naturalWidth){drawSlash(f,k);ctx.restore();return}
   ctx.globalAlpha=(1-k)*.9;ctx.beginPath();ctx.moveTo(0,0);
   ctx.arc(0,0,f.r*(.6+.4*Math.min(1,k*4)),f.a-f.span/2,f.a+f.span/2);ctx.closePath();
   ctx.fillStyle=f.c;ctx.fill();ctx.fillStyle='rgba(15,15,45,.45)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='rgba(255,255,255,.85)';ctx.stroke();
@@ -681,19 +685,19 @@ function fxOne(f,k){
  }else{
   for(let n=0;n<f.n;n++){const a=n*Math.PI*2/f.n;
    ctx.globalAlpha=(1-k)*.6;ctx.beginPath();ctx.arc(Math.cos(a)*f.r,Math.sin(a)*f.r,f.ar*Math.min(1,.4+k*3),0,6.2832);ctx.fillStyle='#1f4fa0';ctx.fill()}
-  if(f.cr){ctx.globalAlpha=(1-k)*.6;ctx.beginPath();ctx.arc(0,0,f.cr*Math.min(1,.4+k*3),0,6.2832);ctx.fillStyle='#1f4fa0';ctx.fill()}   // ← 1st line here
+  if(f.cr){ctx.globalAlpha=(1-k)*.6;ctx.beginPath();ctx.arc(0,0,f.cr*Math.min(1,.4+k*3),0,6.2832);ctx.fillStyle='#1f4fa0';ctx.fill()}
   ctx.restore();
   for(let n=0;n<f.n;n++){const a=n*Math.PI*2/f.n,drop=Math.max(0,1-k*5)*70,bx=f.x+Math.cos(a)*f.r,by=f.y+Math.sin(a)*f.r*.8-drop;
    ctx.save();ctx.globalAlpha=Math.min(1,(1-k)*2.2);ctx.translate(bx,by);ctx.scale(1,-1);
    ctx.drawImage(swordImg,0,0,7,15,-3.5*4,-6,7*4,15*4);ctx.restore()}
-  if(f.cr){const drop=Math.max(0,1-k*5)*70;ctx.save();ctx.globalAlpha=Math.min(1,(1-k)*2.2);ctx.translate(f.x,f.y-drop);ctx.scale(2.2,-2.2);ctx.drawImage(swordImg,0,0,7,15,-3.5*4,-6,7*4,15*4);ctx.restore()}   // ← 2nd line here
+  if(f.cr){const drop=Math.max(0,1-k*5)*70;ctx.save();ctx.globalAlpha=Math.min(1,(1-k)*2.2);ctx.translate(f.x,f.y-drop);ctx.scale(2.2,-2.2);ctx.drawImage(swordImg,0,0,7,15,-3.5*4,-6,7*4,15*4);ctx.restore()}
  }
 }
 function drawHits(t){
  for(let i=hits.length-1;i>=0;i--){
   const h=hits[i],k=Math.max(0,(t-h.t0)/900);
   if(k>=1){hits.splice(i,1);continue}
-  const o=others.get(h.id);if(!o||(o.iv&&h.id!==myId))continue;      // nothing is shown for an invisible player
+  const o=others.get(h.id);if(!o||(o.iv&&h.id!==myId))continue;
   const y=o.y-15*PX-40-k*34;
   ctx.globalAlpha=1-k*k;ctx.font='bold 20px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(60,0,0,.9)';
   const txt=h.bl===2?'튕김!':h.bl&&!h.dmg?'🛡 막힘':(h.bl?'🛡-':'-')+h.dmg;ctx.fillStyle=h.bl===2?'#8fe8ff':h.bl?'#a9d4ff':'#ffe066';ctx.strokeText(txt,o.x,y);ctx.fillText(txt,o.x,y);ctx.globalAlpha=1}
@@ -726,7 +730,7 @@ function updateBanner(t){
  if(b!==bannerTxt){bannerTxt=b;banner.textContent=b;banner.style.display=b?'block':'none'}
 }
 let last=performance.now();
-function frame(t){requestAnimationFrame(frame);          // always schedule the next frame first: an error in one frame must never stop rendering
+function frame(t){requestAnimationFrame(frame);
  try{draw(t)}catch(e){console.error(e);if(ctx.reset)ctx.reset()}}
 function draw(t){
  const dt=Math.min((t-last)/1000,.05);last=t;
@@ -740,22 +744,22 @@ function draw(t){
  const k=1-Math.exp(-dt*18),list=[];
  for(const [id,o] of others){
   if(id===myId&&arena&&myRole!==2){
-   // 내 캐릭터: 서버를 기다리지 않고 즉시 이동 (클라이언트 예측)
+
    updateAim(o);
-   const stun=o.su>0,forced=stun||o.ta||o.kb||o.ds||o.cm;if(chargeT0&&stun)chargeT0=0;      // taunted / knocked back / airborne / dashing: the server moves me
+   const stun=o.su>0,forced=stun||o.ta||o.kb||o.ds||o.cm;if(chargeT0&&stun)chargeT0=0;
    const dx=forced?0:(keys.d?1:0)-(keys.a?1:0),dy=forced?0:(keys.s?1:0)-(keys.w?1:0);
    o.moving=!!(dx||dy);
-   if(Math.abs(Math.cos(myAim))>.2)o.face=Math.cos(myAim)>0?1:-1;       // face the cursor side
+   if(Math.abs(Math.cos(myAim))>.2)o.face=Math.cos(myAim)>0?1:-1;
    if(o.moving){
     const l=Math.hypot(dx,dy),spd=300*(o.gd?1.4:1)*(o.sl?.7:1)*(o.hn?.85:1)*(o.cls==='Assassin'&&o.iv?1.15:1);
     o.x+=dx/l*spd*dt;o.y+=dy/l*spd*dt*0.8;
     const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=Math.hypot(nx,ny);
     if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}
    }
-   // 서버 위치와 어긋나면 살짝 보정 (멈췄을 때, 또는 오차가 클 때)
+
    if(o.tx!==undefined){
     const err=Math.hypot(o.tx-o.x,o.ty-o.y);
-    const c=(t<snapUntil||forced||(!o.moving&&!o.sm))?(o.ds?1-Math.exp(-dt*45):k):(err>80?k*0.3:0);   // follow the dash tightly
+    const c=(t<snapUntil||forced||(!o.moving&&!o.sm))?(o.ds?1-Math.exp(-dt*45):k):(err>80?k*0.3:0);
     o.x+=(o.tx-o.x)*c;o.y+=(o.ty-o.y)*c;
    }
   }else if(o.tx!==undefined){o.x+=(o.tx-o.x)*k;o.y+=(o.ty-o.y)*k}
@@ -767,10 +771,10 @@ function draw(t){
   list.push([id,o]);
  }
  list.sort((a,b)=>a[1].y-b[1].y);
- const vis=(phase==='round'?list.filter(([id,o])=>o.role===1):list).filter(([id,o])=>!o.iv||id===myId);   // invisible archers are hidden from everyone but themselves
+ const vis=(phase==='round'?list.filter(([id,o])=>o.role===1):list).filter(([id,o])=>!o.iv||id===myId);
  drawFx(t);
  drawFoxfires(t);
- for(const [id,o] of vis)if(o.ds&&t-(o.ghT||0)>45){o.ghT=t;ghosts.push({x:o.x,y:o.y,face:o.face,hue:o.hue,cls:o.cls,t0:t})}   // after-images behind a dashing Shielder
+ for(const [id,o] of vis)if(o.ds&&t-(o.ghT||0)>45){o.ghT=t;ghosts.push({x:o.x,y:o.y,face:o.face,hue:o.hue,cls:o.cls,t0:t})}
  drawGhosts(t);
  for(const [id,o] of vis){if(id===myId&&o.iv)ctx.globalAlpha=.4;drawPlayer(o,id===myId);ctx.globalAlpha=1}
  for(const [id,o] of vis){const b=bubbles.get(id);if(b){if(t>b.until)bubbles.delete(id);else drawBubble(o,b)}}
