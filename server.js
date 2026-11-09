@@ -128,7 +128,7 @@ const KNIGHT = {
 
 const SHIELDER = {
   span: 90 * RAD, block: 0.8,
-  Q: { cd: 12000, radius: 2.5 * RADPX, ms: 3000, slow: 0.8, stop: 45 },
+  Q: { cd: 12000, radius: 2.5 * RADPX, ms: 2000, slow: 0.8, stop: 45 },
   E: { cd: 11000, dist: 3.5 * RADPX, dashMs: 450, dmg: 200, hit: 55, kb: RADPX, kbMs: 300, stun: 500 },
   R: { cd: 25000, dur: 6000, reduce: 0.3, reflect: 0.4, speed: 0.85 }
 };
@@ -140,7 +140,7 @@ const ASSASSIN = {
 };
 const GUMIHO = {
   atk: { range: 3.5 * RADPX, speed: 1020, radius: 30 },
-  fire: { chance: 0.75, max: 5, pick: 55, lift: 25 },
+  fire: { chance: 0.65, max: 5, pick: 55, lift: 25 },
   eff: { dmg: 120, ms: 2000, radius: 2 * RADPX },
   Q: { cd: 8000 },
   E: { cd: 12000, pullMs: 500, dmg: 120, rad: 0.5 * RADPX },
@@ -151,7 +151,7 @@ const LUC = {
   base: { hp: 1200, dmg: 150, atkCd: 900, range: 3.5 * RADPX, spd: 900, radius: 30 },
   angel: { hp: 1200, dmg: 130, atkCd: 800, range: 3 * RADPX, spd: 900, radius: 30 },
   devil: { hp: 1300, dmg: 180, atkCd: 1000, range: 4 * RADPX, spd: 900, radius: 30 },
-  G: { cd: 40000, grace: 1000, afterCd: 5000 },
+  G: { cd: 30000, grace: 1000, afterCd: 5000 },
   Q: { cd: 10000, range: 3 * RADPX, dmg: 270, spd: 800, radius: 36, sc: 1.6 },
   E: { cd: 10000, range: 3 * RADPX, dmg: 120, spd: 800, radius: 36, sc: 1.6, burnMs: 4000 },
   beam: { cd: 15000, ms: 1500, tickMs: 100, dmg: 30, heal: 10, len: 5 * RADPX, half: 32 },
