@@ -610,7 +610,7 @@ function drawProj(r,d,t,pj){
  ctx.restore()}
 function drawArrows(t){
  for(let i=arrowsC.length-1;i>=0;i--){
-  const r=arrowsC[i],d=(r.adv||0)+r.spd*(t-r.t0)/1000,sc=r.sc||1;
+  const r=arrowsC[i],pj0=r.kd&&PROJ[r.kd],d=(r.adv||0)*(pj0&&!pj0.bomb?Math.min(1,(t-r.t0)/150):1)+r.spd*(t-r.t0)/1000,sc=r.sc||1;
   if(d>=r.range+40||(r.local&&t-r.t0>rtt*2+250)){arrowsC.splice(i,1);continue}
   const pj=r.kd&&PROJ[r.kd];if(pj){drawProj(r,d,t,pj);continue}
    if(r.kd==='orb'){if(!(orbImg.complete&&orbImg.naturalWidth))continue;
@@ -705,8 +705,9 @@ function drawFx(t){
   try{fxOne(f,k)}catch(e){fxs.splice(i,1);throw e}
  }
 }
+function wallLen(x,gy,a){const px=(x-arena.CX)/arena.RX,py=(gy*.8-arena.CY)/arena.RY,ax=Math.cos(a)/arena.RX,ay=Math.sin(a)*.8/arena.RY,A=ax*ax+ay*ay,B=2*(px*ax+py*ay),C=px*px+py*py-1,D=B*B-4*A*C;return D<0?0:Math.max(0,(-B+Math.sqrt(D))/(2*A))}
 function drawBeam(f,k){
- const th=Math.atan2(.8*Math.sin(f.a),Math.cos(f.a)),L=f.len*Math.hypot(Math.cos(f.a),.8*Math.sin(f.a)),w=f.w*1.5;
+ const th=Math.atan2(.8*Math.sin(f.a),Math.cos(f.a)),L=(arena?wallLen(f.x,f.y/.8,f.a):f.len)*Math.hypot(Math.cos(f.a),.8*Math.sin(f.a)),w=f.w*1.5;
  ctx.save();ctx.translate(f.x,f.y-30);ctx.rotate(th-Math.PI/2);
  ctx.globalAlpha=Math.min(1,k*12,(1-k)*6)*(.8+.2*Math.sin(performance.now()/45));
  if(imOk(lgImg))ctx.drawImage(lgImg,-w/2,0,w,L);else{ctx.fillStyle='rgba(255,247,150,.7)';ctx.fillRect(-w/2,0,w,L)}
@@ -718,7 +719,7 @@ function drawSanct(f,k){
  if(imOk(hfImg)){ctx.rotate(k*6);ctx.globalAlpha=a*.75;ctx.drawImage(hfImg,0,0,15,15,-r*.78,-r*.78,r*1.56,r*1.56)}
  ctx.restore()}
 function drawPillar(f,k){
- const r=k*f.dur<f.delay?f.r0:f.r1,a=Math.min(1,k*14,(1-k)*3.5),h=r*3;
+ const r=k*f.dur<f.delay?f.r0:f.r1,a=Math.min(1,k*14,(1-k)*3.5),h=Math.max(r*3,arena?f.y-(arena.CY-arena.RY*Math.sqrt(Math.max(0,1-((f.x-arena.CX)/arena.RX)**2))):0);
  ctx.save();ctx.translate(f.x,f.y);
  ctx.save();ctx.scale(1,.8);ctx.globalAlpha=a*.6;ctx.beginPath();ctx.arc(0,0,r,0,6.2832);ctx.fillStyle='rgba(255,247,150,.35)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#fff59a';ctx.stroke();ctx.restore();
  ctx.globalAlpha=a*(.75+.25*Math.sin(performance.now()/50));
