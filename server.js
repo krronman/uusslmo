@@ -616,11 +616,10 @@ function devilMark(p, t, now) {
 }
 function lucTransform(p, form, now) {
   p.lf = form; p.lPend = false;
-  const old = p.mh; p.mh = statsOf(p).hp; p.hp = Math.min(p.mh, p.hp + Math.max(0, p.mh - old));
+  p.mh = statsOf(p).hp; p.hp = p.mh;
   cleanse(p); p.beam = p.pure = null;
-  const rcd = form === 'a' ? LUC.pure.cd : LUC.lib.cd;
-  p.cdQ = p.cdE = 0; p.cdR = now + rcd;
-  send(p.ws, { t: 'cd', k: 'Q', ms: 0 }); send(p.ws, { t: 'cd', k: 'E', ms: 0 }); send(p.ws, { t: 'cd', k: 'R', ms: rcd });
+  p.cdQ = p.cdE = p.cdR = 0;
+  for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
   broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.4 * RADPX, c: form === 'a' ? '#fff59a' : '#ff3a3a', dur: 700 });
 }
 function lucHit(ar, t, now) {
