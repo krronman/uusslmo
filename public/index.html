@@ -399,7 +399,7 @@ const CHARS=[
   skills:[
    {icon:'🛡️',name:'갑옷',key:'패시브',types:['def'],desc:'받는 물리 피해가 20% 감소합니다.'},
    {icon:'⚔️',name:'검격',key:'Q · 8초',types:['phys','cc'],desc:'넓은 부채꼴 베기(2 radpx): 250 피해, 1초간 띄움.'},
-   {icon:'💨',name:'수호 돌진',key:'E · 12초',types:['def','buff'],desc:'3초간 받는 물리 피해 70% 감소, 이동 속도 40% 증가.'},
+   {icon:'💨',name:'수호 돌진',key:'E · 12초',types:['def','buff'],desc:'3초간 받는 물리 피해 40% 추가 감소, 이동 속도 15% 증가.'},
    {icon:'🗡️',name:'심판',key:'R · 25초',types:['phys','cc'],desc:'검 8자루+중앙 대검 1자루 소환: 각 120(대검 220) 범위 피해, 적 2초간 30% 둔화.'}]},
  {id:'Archer',ko:'궁수',img:'archer.png',stats:{hp:1000,atk:180},rng:'5 radpx (원거리)',
   style:'원거리 딜러. 활시위를 당겨 화살을 강화하고, 투명화·속사·관통 저격으로 전장을 지배합니다.',
@@ -610,6 +610,13 @@ function drawGun(o,h,lift){
  if(o.mt){ctx.shadowColor='#ff3a3a';ctx.shadowBlur=16}
  ctx.drawImage(revImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();
 }
+function drawKnightShield(o,h,lift){
+ if(!imOk(kshImg))return;
+ const now=performance.now(),a=o.da||0,th=Math.atan2(.8*Math.sin(a),Math.cos(a)),bob=Math.sin(now/260+o.x*.05)*2+(o.moving?Math.sin(o.phase*2)*2:0),S=4;
+ ctx.save();ctx.translate(o.x+Math.cos(th)*34,o.y-h*.5-lift+8+Math.sin(th)*34*.8+bob);
+ ctx.shadowColor='#7fd3ff';ctx.shadowBlur=12;
+ ctx.drawImage(kshImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();
+}
 function drawShield(o,h,lift){
  if(!(shieldImg.complete&&shieldImg.naturalWidth))return;
  const now=performance.now(),side=o.face||1;
@@ -695,6 +702,7 @@ function drawPlayer(o,isMe){
  ctx.drawImage(sp,8,12,7,3,x0+8*PX,yb+12*PX-lR*PX,7*PX,3*PX);
  ctx.restore();
  if(o.cls==='Knight')drawSword(o,h,lift);
+ if(o.cls==='Knight'&&o.gd)drawKnightShield(o,h,lift);
  if(o.cls==='Assassin')drawBlade(o,h,lift);
  if(o.cls==='Archer')drawBow(o,h,lift);
  if(o.cls==='Shielder')drawShield(o,h,lift);
@@ -867,7 +875,7 @@ function draw(t){
    o.moving=!!(dx||dy);
    if(Math.abs(Math.cos(myAim))>.2)o.face=Math.cos(myAim)>0?1:-1;
    if(o.moving){
-    const l=Math.hypot(dx,dy),spd=300*(o.gd?1.4:1)*(o.sl?.7:1)*(o.hn?.85:1)*(o.cls==='Assassin'&&o.iv?1.15:1)*(o.lb?1.2:1)*(o.fs?1.2:1);
+    const l=Math.hypot(dx,dy),spd=300*(o.gd?1.15:1)*(o.sl?.7:1)*(o.hn?.85:1)*(o.cls==='Assassin'&&o.iv?1.15:1)*(o.lb?1.2:1)*(o.fs?1.2:1);
     o.x+=dx/l*spd*dt;o.y+=dy/l*spd*dt*0.8;
     const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=Math.hypot(nx,ny);
     if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}
