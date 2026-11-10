@@ -1097,7 +1097,7 @@ wss.on('connection', (ws, req) => {
     } else if (m.t === 'class') {
       if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'map') {
-      if (phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
+      if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
     } else if (m.t === 'tequip') {
       equipTitle(p, m.id === null ? null : m.id).catch(e => console.error('equip:', e.message));
     } else if (m.t === 'tgrant' || m.t === 'tlist' || m.t === 'trevoke') {
