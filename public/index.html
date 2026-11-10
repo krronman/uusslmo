@@ -266,7 +266,6 @@ function connect(){
     const fm=(me&&me.lf)||'';if(fm!==myForm){myForm=fm;skIcons()}
    titleBtn.style.display=phase==='lobby'?'':'none';
    mapBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'':'none';mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
-   if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) {mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;
    if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose()}
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
    if(obs){readyBtn.style.display=titleBtn.style.display=skillbar.style.display='none';classBtn.style.display='';logoutBtn.style.display='block'}
