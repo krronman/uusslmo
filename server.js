@@ -149,12 +149,12 @@ const GUMIHO = {
 };
 const BURN = { tick: 35, tickMs: 1000 };
 const LUC = {
-  base: { hp: 1200, dmg: 150, atkCd: 900, range: 3.5 * RADPX, spd: 900, radius: 30 },
-  angel: { hp: 1200, dmg: 130, atkCd: 800, range: 3 * RADPX, spd: 900, radius: 30 },
-  devil: { hp: 1300, dmg: 180, atkCd: 1000, range: 4 * RADPX, spd: 900, radius: 30 },
+  base: { hp: 1200, dmg: 150, atkCd: 900, range: 3.5 * RADPX, spd: 900, radius: 0.3 * RADPX },
+  angel: { hp: 1200, dmg: 130, atkCd: 800, range: 3 * RADPX, spd: 900, radius: 0.3 * RADPX },
+  devil: { hp: 1300, dmg: 180, atkCd: 1000, range: 4 * RADPX, spd: 900, radius: 0.3 * RADPX },
   G: { cd: 30000, atkCut: 1000, skillCut: 1500, afterCd: 5000 },
-  Q: { cd: 10000, range: 3 * RADPX, dmg: 270, spd: 800, radius: 36, sc: 1.6 },
-  E: { cd: 10000, range: 3 * RADPX, dmg: 120, spd: 800, radius: 36, sc: 1.6, burnMs: 4000 },
+  Q: { cd: 10000, range: 3 * RADPX, dmg: 270, spd: 800, radius: 0.3 * RADPX, sc: 1.6 },
+  E: { cd: 10000, range: 3 * RADPX, dmg: 120, spd: 800, radius: 0.3 * RADPX, sc: 1.6, burnMs: 4000 },
   beam: { cd: 15000, ms: 1500, tickMs: 100, dmg: 30, heal: 10, half: 50, pad: 400 },
   sanct: { cd: 18000, ms: 3000, r: 1.5 * RADPX },
   pure: { cd: 25000, r0: 0.5 * RADPX, r1: 1.5 * RADPX, delay: 200, ms: 1700, tickMs: 100, dmg: 50, heal: 20 },
