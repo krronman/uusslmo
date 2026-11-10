@@ -8,7 +8,8 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8' };
 
-const CX = 630, CY = 640, RX = 410, RY = 335;
+const ARENAS = [{ CX: 630, CY: 640, RX: 410, RY: 335 }, { CX: 630, CY: 600, RX: 460, RY: 370 }];
+let mapId = 0, { CX, CY, RX, RY } = ARENAS[0];
 const SPEED = 300, TICK = 30, MAX_PLAYERS = 50;
 
 const server = http.createServer((req, res) => {
@@ -37,6 +38,11 @@ const chatLog = [];
 let phase = 'lobby', roundStart = 0, deathCounter = 0;
 
 const joinedList = () => [...players.values()].filter(p => p.joined);
+function setMap(id) {
+  mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]);
+  for (const p of players.values()) { const c = clampArena({ x: p.x, y: p.y }); p.x = c.x; p.y = c.y; p.hist = []; }
+  broadcast({ t: 'map', id, arena: { CX, CY, RX, RY } });
+}
 
 function addChat(e) {
   e.ts = Date.now();
@@ -655,7 +661,7 @@ function luciferAttack(p, m, now) {
   if (now < p.atkReady) return;
   const st = statsOf(p), F = lForm(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
-  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg, spd: F.spd, range: F.range, radius: F.radius, kind: p.lf === 'a' ? 'lsa' : p.lf === 'd' ? 'lsd' : 'lbase', type: p.lf === 'd' ? 'phys' : 'magic', luc: 'atk' });
+  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg, spd: F.spd, range: F.range, radius: F.radius, kind: 'lbase', type: p.lf === 'd' ? 'phys' : 'magic', luc: 'atk' });
 }
 function spawnBomb(p, o, a, r, dmg, lift, now) {
   const id = ++arrowSeq, len = wallDist(o.x, o.y / 0.8, a);
@@ -1062,7 +1068,7 @@ wss.on('connection', (ws, req) => {
     hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, fires: [], qNext: false, pull: null, charmUntil: 0, charmBy: 0, burnUntil: 0, burnNext: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
   players.set(id, p);
   pruneChat();
-  send(ws, { t: 'hello', id, arena: { CX, CY, RX, RY } });
+  send(ws, { t: 'hello', id, map: mapId, arena: { CX, CY, RX, RY } });
   send(ws, { t: 'history', log: chatLog.map(c => ({ name: c.name, text: c.text, sys: c.sys ? 1 : 0, age: Date.now() - c.ts })) });
 
   ws.on('pong', () => { p.alive = true; });
@@ -1090,6 +1096,8 @@ wss.on('connection', (ws, req) => {
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
       if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+    } else if (m.t === 'map') {
+      if (phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
     } else if (m.t === 'tequip') {
       equipTitle(p, m.id === null ? null : m.id).catch(e => console.error('equip:', e.message));
     } else if (m.t === 'tgrant' || m.t === 'tlist' || m.t === 'trevoke') {
