@@ -129,7 +129,7 @@ const ARCHER = {
 const ATK = { range: 1 * RADPX, span: 100 * RAD };
 const KNIGHT = {
   Q: { cd: 8000, range: 2 * RADPX, span: 120 * RAD, dmg: 250, stun: 1000 },
-  E: { cd: 12000, dur: 3000, reduce: 0.7, speed: 1.4 },
+  E: { cd: 12000, dur: 3000, reduce: 0.4, speed: 1.15 },
   R: { cd: 25000, swords: 8, ring: 195, radius: 1 * RADPX, cRadius: 2.5 * RADPX, dmg: 120, cdmg: 220, slow: 0.7, slowMs: 2000 }
 };
 
