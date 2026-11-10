@@ -169,7 +169,7 @@ const LUC = {
   absorb: { cd: 14000, libCd: 4000, pct: 0.25, heal: 0.6, healLib: 0.85 },
   lib: { cd: 25000, ms: 10000, speed: 1.2, atkCd: 700 }
 };
-const ANGEL = { regen: 20, sanctHeal: 30 };
+const ANGEL = { regen: 20 };
 const GAMBLER = {
   range: 4 * RADPX, spd: 1100, radius: 24, chambers: 6, reloadMs: 4000,
   Q: { cd: 10000 },
@@ -702,8 +702,6 @@ function stepSanct(now) {
     const S = o.sanct;
     if (!S) continue;
     if (now >= S.until || o.role !== 1) { o.sanct = null; continue; }
-    const sdt = Math.min(0.1, Math.max(0, (now - (S.t || now)) / 1000)); S.t = now;
-    if (Math.hypot(o.x - S.x, (o.y - S.y) / 0.8) <= S.r) heal(o, ANGEL.sanctHeal * sdt);
     for (const t of targetsOf(o)) {
       const dx = t.x - S.x, dy = (t.y - S.y) / 0.8, d = Math.hypot(dx, dy), R = S.r + 18;
       if (d >= R) continue;
