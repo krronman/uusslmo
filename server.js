@@ -130,8 +130,8 @@ const ARCHER = {
 const ATK = { range: 1 * RADPX, span: 100 * RAD };
 const SM = {
   atk: { need: 4, needAwk: 2, auraDmg: 180, kb: 1 * RADPX, kbMs: 250 },
-  Q: { cd: 12000, dmg: 200, pct: 0.15, spd: 1500, range: 6 * RADPX, radius: 1.5 * RADPX },
-  E: { cd: 4000, cdAwk: 1000, mult: 0.5, multAwk: 0.8, dash: 2 * RADPX, dashMs: 200, dashDir: 1 },
+  Q: { cd: 12000, dmg: 100, pct: 0.15, spd: 1500, range: 6 * RADPX, radius: 1.5 * RADPX },
+  E: { cd: 4000, cdAwk: 1000, mult: 0.5, multAwk: 0.8, dash: 2 * RADPX, dashMs: 200, dashDir: 1, delayMs: 500 },
   R: { cd: 25000, dur: 10000 }
 };
 const KNIGHT = {
@@ -313,7 +313,7 @@ function resetCombat(p) {
   p.tauntUntil = p.tauntBy = p.kbUntil = p.hornUntil = 0; p.dash = null;
   p.markUntil = p.asUntil = p.asBonus = 0;
   p.fires = []; p.qNext = false; p.eNext = 0; p.lastBy = 0; p.charmUntil = p.charmBy = p.burnUntil = p.burnNext = 0;
-  p.smN = 0; p.smAura = false; p.smAwkUntil = 0; p.smLast = null;
+  p.smN = 0; p.smAura = false; p.smAwkUntil = 0; p.smLast = null; p.smSaved = false;
   p.ch = null; p.chi = 0; p.reloadUntil = 0; p.myTurn = false; p.gbUntil = p.gbPlusUntil = p.fastUntil = 0;
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
   if (p.cls === 'Gambler') loadRevolver(p); else send(p.ws, { t: 'rv', n: 0 });
@@ -829,7 +829,7 @@ function smStrike(p, o, lag, now, aura, mult) {
 }
 function smCastQ(p, o, lag, now, mult) {
   const Q = SM.Q;
-  spawnArrow(p, o, lag, now, { a: p.aim, dmg: Math.round(Q.dmg * mult), hpPct: Q.pct * mult, spd: Q.spd, range: Q.range, radius: Q.radius, pierce: true, kind: 'smq', type: 'phys' });
+  spawnArrow(p, o, lag, now, { a: p.aim, dmg: Math.round(Q.dmg * mult), hpPct: Q.pct * mult, spd: Q.spd, range: Q.range, radius: Q.radius, pierce: true, kind: 'smq', type: 'magic' });
 }
 function swordmasterAttack(p, m, now) {
   if (now < p.atkReady) return;
@@ -838,25 +838,31 @@ function swordmasterAttack(p, m, now) {
   const aura = !!p.smAura;
   if (aura) p.smAura = false;
   else if (++p.smN >= smNeed(p, now)) { p.smAura = true; p.smN = 0; }
-  p.smLast = { k: 'atk', aura };
+  p.smLast = { k: 'atk', aura }; p.smSaved = false;
   smStrike(p, o, lag, now, aura, 1);
 }
 function swordmasterSkill(p, k, m, now) {
   const o = originOf(p, m), lag = lagOf(m), awk = now < p.smAwkUntil;
   const cd = (key, ms) => { p['cd' + key] = now + ms; send(p.ws, { t: 'cd', k: key, ms }); };
   if (k === 'Q') {
-    cd('Q', SM.Q.cd); smCastQ(p, o, lag, now, 1); p.smLast = { k: 'Q' };
+    cd('Q', SM.Q.cd); smCastQ(p, o, lag, now, 1); p.smLast = { k: 'Q' }; p.smSaved = false;
   } else if (k === 'E') {
     const L = p.smLast; if (!L) return;
+    if (p.smSaved) return fxTxt(p.x, p.y, '공격 후 사용 가능', '#cfcfcf');
+    p.smSaved = true;
     const mult = awk ? SM.E.multAwk : SM.E.mult;
     cd('E', awk ? SM.E.cdAwk : SM.E.cd);
     broadcast({ t: 'fx', type: 'ring', x: o.x, y: o.y, r: 0.7 * RADPX, c: '#8fe3ff', dur: 450 });
-    if (L.k === 'Q') smCastQ(p, o, lag, now, mult);
-    else {
-      smStrike(p, o, lag, now, L.aura, mult);
-      const v = SM.E.dash / (SM.E.dashMs / 1000) * SM.E.dashDir;
-      p.kbUntil = now + SM.E.dashMs; p.kbx = Math.cos(p.aim) * v; p.kby = Math.sin(p.aim) * v;
-    }
+    setTimeout(() => {
+      if (p.role !== 1 || phase !== 'round') return;
+      const n = Date.now(), o2 = { x: p.x, y: p.y };
+      if (L.k === 'Q') smCastQ(p, o2, 0, n, mult);
+      else {
+        smStrike(p, o2, 0, n, L.aura, mult);
+        const v = SM.E.dash / (SM.E.dashMs / 1000) * SM.E.dashDir;
+        p.kbUntil = n + SM.E.dashMs; p.kbx = Math.cos(p.aim) * v; p.kby = Math.sin(p.aim) * v;
+      }
+    }, SM.E.delayMs);
   } else {
     cd('R', SM.R.cd); p.smAwkUntil = now + SM.R.dur;
     if (p.smN >= SM.atk.needAwk && !p.smAura) { p.smAura = true; p.smN = 0; }
