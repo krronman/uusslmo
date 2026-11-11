@@ -495,10 +495,20 @@ const csStyleEl=csEl('div');csStyleEl.id='csStyle';csPlace(csStyleEl,103,880,930
 const csOk=csEl('button');csOk.id='csOk';csPlace(csOk,1090,880,272,42);
 function csFit(){csBox.style.setProperty('--u',csBox.clientWidth/IMG_W+'px')}
 addEventListener('resize',csFit);
+let towerPrevSrc='';
+function towerPrev(){
+ if(towerPrevSrc)return towerPrevSrc;if(!imOk(towerImg))return 'tower.png';
+ const c=document.createElement('canvas');c.width=towerImg.naturalWidth;c.height=towerImg.naturalHeight;const g=c.getContext('2d');g.drawImage(towerImg,0,0);
+ const d=g.getImageData(0,0,c.width,c.height).data;let x0=c.width,y0=c.height,x1=0,y1=0;
+ for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(d[(y*c.width+x)*4+3]>0){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}
+ const o=document.createElement('canvas');o.width=x1-x0+1;o.height=y1-y0+1;o.getContext('2d').drawImage(c,x0,y0,o.width,o.height,0,0,o.width,o.height);
+ return towerPrevSrc=o.toDataURL()}
+towerImg.addEventListener('load',()=>{if(csIsOpen())csRender()});
+{const ti=CHARS.findIndex(c=>c&&c.id==='Tower'),im=ti>=0&&slotEls[ti].querySelector('img');if(im){im.style.width=im.style.height='92%';const f=()=>{im.src=towerPrev()};if(imOk(towerImg))f();else towerImg.addEventListener('load',f)}}
 function csRender(){
  slotEls.forEach((b,i)=>{b.classList.toggle('sel',i===csSel);const q=b.querySelector('.eq');if(q)q.style.display=CHARS[i]&&CHARS[i].id===myCls?'block':'none'});
  const c0=CHARS[csSel],c=c0&&c0.forms?Object.assign({},c0,c0.forms[csForm%c0.forms.length]):c0;
- csImg.style.cursor=c0&&c0.forms?'pointer':'';csImg.style.display=c?'block':'none';csQ.style.display=c?'none':'block';if(c)csImg.src=c.img;
+ csImg.style.cursor=c0&&c0.forms?'pointer':'';csImg.style.display=c?'block':'none';csQ.style.display=c?'none':'block';if(c){csImg.src=c.id==='Tower'?towerPrev():c.img;csImg.style.height=c.id==='Tower'?'100%':''}
  csNmL.textContent=c?c.id+(c.ko?' / '+c.ko:'')+(c0.forms?' ['+c.tag+']':''):'???';
  csNmR.textContent=c&&c.stats?'HP '+c.stats.hp+'   ATK '+c.stats.atk+'\n사거리 '+c.rng:'HP ?   ATK ?\n사거리 ?';
  const sk=(c&&c.skills)||[0,1,2,3].map(()=>({icon:'❔',name:'???',key:'',desc:c?'상세 정보 준비 중입니다.':'잠긴 캐릭터입니다.'}));
@@ -738,7 +748,12 @@ function drawPlayer(o,isMe){
  if(o.ta){ctx.save();ctx.strokeStyle='#ff5a4a';ctx.fillStyle='rgba(255,90,74,.12)';ctx.lineWidth=3;ctx.setLineDash([6,5]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.55,h*.68,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
  ctx.save();ctx.translate(o.x,0);ctx.scale(o.face,1);ctx.translate(-o.x,0);
  if(o.cls==='Lucifer'&&o.lf==='a')drawWings(x0,yb);
- if(tw){ctx.drawImage(sp,0,0,30,40,x0,yb-bob*PX*.5,w,h)}else{
+ if(tw){
+  ctx.save();ctx.translate(o.x,yb+h);ctx.rotate(o.moving?s*.04:0);ctx.translate(-o.x,-(yb+h));
+  ctx.drawImage(sp,0,0,30,32,x0,yb-(o.moving?Math.abs(s)*2.5:0),w,32*PX);
+  ctx.drawImage(sp,0,32,15,8,x0,yb+32*PX-lL*PX*1.6,15*PX,8*PX);
+  ctx.drawImage(sp,15,32,15,8,x0+15*PX,yb+32*PX-lR*PX*1.6,15*PX,8*PX);
+  ctx.restore()}else{
  ctx.save();ctx.translate(o.x,yb+h);ctx.rotate((o.moving?step*PX*.4:0)*.012);ctx.translate(-o.x,-(yb+h));
  ctx.drawImage(sp,0,0,15,11,x0,yb-bob*PX,w,11*PX);
  ctx.drawImage(sp,0,11,15,1,x0,yb+11*PX-bob*PX*.5,w,PX);
