@@ -859,8 +859,10 @@ function swordmasterSkill(p, k, m, now) {
       if (L.k === 'Q') smCastQ(p, o2, 0, n, mult);
       else {
         smStrike(p, o2, 0, n, L.aura, mult);
-        const v = SM.E.dash / (SM.E.dashMs / 1000) * SM.E.dashDir;
-        p.kbUntil = n + SM.E.dashMs; p.kbx = Math.cos(p.aim) * v; p.kby = Math.sin(p.aim) * v;
+        if (L.aura) {
+          const v = SM.E.dash / (SM.E.dashMs / 1000) * SM.E.dashDir;
+          p.kbUntil = n + SM.E.dashMs; p.kbx = Math.cos(p.aim) * v; p.kby = Math.sin(p.aim) * v;
+        }
       }
     }, SM.E.delayMs);
   } else {
