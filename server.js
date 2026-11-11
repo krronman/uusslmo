@@ -29,7 +29,7 @@ const players = new Map();
 let nextId = 1;
 
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
-const send = (ws, o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
+const send = (ws, o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 const broadcast = o => { const m = JSON.stringify(o); for (const p of players.values()) if (p.ws.readyState === 1) p.ws.send(m); };
 
 const CHAT_TTL = 10 * 60 * 1000;
@@ -72,7 +72,7 @@ function startRound() {
     broadcast({ t: 'countdown', ms: 0 });
     return sysChat('Round cancelled: not enough players.');
   }
-  phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear();
+  phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); balls.length = 0;
   parts.forEach((p, i) => {
     const a = -Math.PI / 2 + i * 2 * Math.PI / parts.length;
     p.lx = p.x; p.ly = p.y;
@@ -93,7 +93,7 @@ function checkRoundEnd() {
   endRound(winner);
 }
 function endRound(winner, tied) {
-  phase = 'lobby'; arrows.clear(); bombs.clear();
+  phase = 'lobby'; arrows.clear(); bombs.clear(); units.clear(); balls.length = 0;
   for (const p of players.values()) {
     if (p.inRound) { p.x = p.lx; p.y = p.ly; }
     p.role = 0; p.inRound = false; p.ready = false; p.dx = p.dy = 0; p.hist = [];
@@ -115,7 +115,8 @@ const CLASS_STATS = {
   Assassin: { hp: 1000, dmg: 135, reduce: 0, atkCd: 600 },
   Gumiho: { hp: 1100, dmg: 130, reduce: 0, atkCd: 700 },
   Gambler: { hp: 1000, dmg: 180, reduce: 0, atkCd: 600 },
-  SwordMaster: { hp: 1200, dmg: 160, reduce: 0, atkCd: 600 }
+  SwordMaster: { hp: 1200, dmg: 160, reduce: 0, atkCd: 600 },
+  Tower: { hp: 2500, dmg: 150, reduce: 0, atkCd: 2500 }
 };
 const statsOf = p => p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : CLASS_STATS[p.cls] || BASE;
 const RADPX = 112.5;
@@ -235,10 +236,10 @@ function endArrow(ar) { arrows.delete(ar.id); broadcast({ t: 'arrowEnd', id: ar.
 function moveArrow(ar, step, time) {
   const nx = ar.x + Math.cos(ar.a) * step, ngy = ar.gy + Math.sin(ar.a) * step;
   const found = [];
-  if (phase === 'round') for (const t of players.values()) {
-    if (t.id === ar.owner || !t.joined || t.role !== 1 || ar.hitIds.has(t.id)) continue;
+  if (phase === 'round') for (const t of [...players.values(), ...units.values()]) {
+    if (t.id === ar.owner || t.owner === ar.owner || !(t.unit || t.joined) || t.role !== 1 || ar.hitIds.has(t.id)) continue;
     const tp = posAt(t, time);
-    if (segDist(tp.x, tp.y / 0.8, ar.x, ar.gy, nx, ngy) > ar.radius) continue;
+    if (segDist(tp.x, tp.y / 0.8, ar.x, ar.gy, nx, ngy) > ar.radius + (t.hr || 0)) continue;
     found.push({ t, d: Math.hypot(tp.x - ar.x, tp.y / 0.8 - ar.gy) });
   }
   found.sort((a, b) => a.d - b.d);
@@ -313,6 +314,8 @@ function resetCombat(p) {
   p.tauntUntil = p.tauntBy = p.kbUntil = p.hornUntil = 0; p.dash = null;
   p.markUntil = p.asUntil = p.asBonus = 0;
   p.fires = []; p.qNext = false; p.eNext = 0; p.lastBy = 0; p.charmUntil = p.charmBy = p.burnUntil = p.burnNext = 0;
+  p.hr = p.cls === 'Tower' ? TOWER.hr : 0; p.towerRUntil = 0; p.mercNext = Date.now() + TOWER.merc.ms;
+  for (const u of units.values()) if (u.owner === p.id) units.delete(u.id);
   p.smN = 0; p.smAura = false; p.smAwkUntil = 0; p.smLast = null; p.smSaved = false;
   p.ch = null; p.chi = 0; p.reloadUntil = 0; p.myTurn = false; p.gbUntil = p.gbPlusUntil = p.fastUntil = 0;
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
@@ -360,12 +363,13 @@ function dmgTo(t, amount, now, src) {
     const back = Math.round(amount * SHIELDER.R.reflect);
     if (back > 0) dmgTo(src.by, back, now, { kill: t });
   }
-  if (t.hp <= 0) killPlayer(t);
+  if (t.hp <= 0) { if (t.unit) units.delete(t.id); else killPlayer(t); }
 }
-const targetsOf = p => phase !== 'round' ? [] : [...players.values()].filter(t => t !== p && t.joined && t.role === 1);
-function inConeAt(ox, oy, aim, tx, ty, range, span) {
+const units = new Map(); let unitSeq = 0; const balls = [];
+const targetsOf = p => phase !== 'round' ? [] : [...players.values(), ...units.values()].filter(t => t !== p && (t.unit ? t.owner !== p.id : (t.joined && t.role === 1)));
+function inConeAt(ox, oy, aim, tx, ty, range, span, ext = 0) {
   const dx = tx - ox, dy = (ty - oy) / 0.8, d = Math.hypot(dx, dy);
-  if (d > range + 10) return false;
+  if (d > range + 10 + ext) return false;
   if (d < 10) return true;
   let diff = Math.abs(Math.atan2(dy, dx) - aim);
   if (diff > Math.PI) diff = 2 * Math.PI - diff;
@@ -397,10 +401,15 @@ function doAttack(p, m) {
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
   breakStealth(p);
-  broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
+  const reach = ATK.range + (p.hr || 0);
+  broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: reach, c: 'rgba(255,255,255,.6)', dur: 220 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
-    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span)) dmgTo(t, st.dmg, now, { x: o.x, y: o.y, by: p, basic: true });
+    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, reach, ATK.span, t.hr || 0)) dmgTo(t, st.dmg, now, { x: o.x, y: o.y, by: p, basic: true });
+  }
+  if (p.cls === 'Tower' && now < p.towerRUntil) for (const sd of [-1, 1]) {
+    const off = TOWER.R.gap * sd;
+    spawnArrow(p, { x: o.x - Math.sin(p.aim) * off, y: o.y + Math.cos(p.aim) * off * 0.8 }, lag, now, { a: p.aim, dmg: TOWER.R.dmg, spd: ARROW.speed, range: TOWER.R.range, kind: 'tarr' });
   }
   checkRoundEnd();
 }
@@ -415,6 +424,7 @@ function doSkill(p, k, m) {
   else if (p.cls === 'Lucifer') luciferSkill(p, k, m, now);
   else if (p.cls === 'Gambler') gamblerSkill(p, k, m, now);
   else if (p.cls === 'SwordMaster') swordmasterSkill(p, k, m, now);
+  else if (p.cls === 'Tower') towerSkill(p, k, m, now);
 }
 function archerSkill(p, k, m, now) {
   const S = ARCHER[k], o = originOf(p, m), lag = lagOf(m);
@@ -591,7 +601,7 @@ function knightSkill(p, k, m, now) {
     broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: S.span, r: S.range, c: 'rgba(255,214,107,.65)', dur: 380 });
     for (const t of targetsOf(p)) {
       const tp = posAt(t, now - lag);
-      if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, S.range, S.span)) { dmgTo(t, S.dmg, now, { x: o.x, y: o.y, by: p }); if (t.role === 1) t.stunUntil = now + S.stun; }
+      if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, S.range, S.span, t.hr || 0)) { dmgTo(t, S.dmg, now, { x: o.x, y: o.y, by: p }); if (t.role === 1) t.stunUntil = now + S.stun; }
     }
   } else if (k === 'E') {
     p.guardUntil = now + S.dur;
@@ -810,6 +820,124 @@ function luciferSkill(p, k, m, now) {
   }
   checkRoundEnd();
 }
+// ---- Tower ----
+const TOWER = {
+  hr: 36, maxUnits: 12,
+  merc: { ms: 5000, msAwk: 2000 },
+  Q: { cd: 10000, dmg: 220, radius: 1.5 * RADPX, speed: 800 },
+  E: { cd: 15000, heal: 0.2 },
+  R: { cd: 25000, dur: 10000, dmg: 150, range: 4 * RADPX, gap: 22 },
+  INF: { hp: 800, dmg: 100, atkCd: 700, speed: SPEED * 0.8, range: 1 * RADPX },
+  ARC: { hp: 500, dmg: 120, atkCd: 1000, speed: SPEED * 0.7, range: 4 * RADPX, keep: 2.4 * RADPX },
+  aggro: 6 * RADPX
+};
+function spawnUnit(p, type, now) {
+  let n = 0; for (const u of units.values()) if (u.owner === p.id) n++;
+  if (n >= TOWER.maxUnits) return;
+  const D = type === 'i' ? TOWER.INF : TOWER.ARC, a = Math.random() * Math.PI * 2, r = 1.2 * RADPX + Math.random() * 40;
+  const c = clampArena({ x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r * 0.8 });
+  const u = { id: 100000 + (++unitSeq), unit: true, ut: type, cls: type === 'i' ? 'UnitInf' : 'UnitArc', owner: p.id, name: '', x: c.x, y: c.y, hp: D.hp, mh: D.hp, role: 1, joined: true, hist: [],
+    aim: 0, face: 1, moving: false, atkReady: now + 400, stunUntil: 0, slowUntil: 0, kbUntil: 0, kbx: 0, kby: 0, tauntUntil: 0, tauntBy: 0, tgt: 0, ws: null, hr: 0 };
+  units.set(u.id, u);
+  broadcast({ t: 'fx', type: 'ring', x: u.x, y: u.y, r: 0.6 * RADPX, c: '#ffe08a', dur: 400 });
+}
+const gdist = (a, b) => Math.hypot(a.x - b.x, (a.y - b.y) / 0.8);
+function stepUnits(dt, now) {
+  for (const u of units.values()) {
+    const own = players.get(u.owner);
+    if (phase !== 'round' || !own || own.role !== 1) { units.delete(u.id); continue; }
+    const D = u.ut === 'i' ? TOWER.INF : TOWER.ARC;
+    let dx = 0, dy = 0, mul = 1;
+    if (now >= u.stunUntil) {
+      const enemies = targetsOf(own).filter(t => t.role === 1 && now >= (t.invisUntil || 0));
+      let tgt = null;
+      if (now < u.tauntUntil) { const s = players.get(u.tauntBy); if (s && s.role === 1) { tgt = s; mul = SHIELDER.Q.slow; } }
+      if (!tgt) tgt = enemies.find(t => t.id === u.tgt && gdist(u, t) <= TOWER.aggro * 1.4) || null;
+      if (!tgt) { let best = TOWER.aggro; for (const t of enemies) { const d = gdist(u, t); if (d < best) { best = d; tgt = t; } } }
+      u.tgt = tgt ? tgt.id : 0;
+      if (tgt) {
+        const d = gdist(u, tgt), a = Math.atan2((tgt.y - u.y) / 0.8, tgt.x - u.x), ux = Math.cos(a), uy = Math.sin(a);
+        u.aim = a; u.face = ux >= 0 ? 1 : -1;
+        if (u.ut === 'i') {
+          if (d > D.range + (tgt.hr || 0) - 12) { dx = ux; dy = uy; }
+          else if (now >= u.atkReady) {
+            u.atkReady = now + D.atkCd;
+            broadcast({ t: 'fx', type: 'cone', by: u.id, x: u.x, y: u.y, a, span: ATK.span, r: D.range, c: 'rgba(255,255,255,.5)', dur: 220 });
+            dmgTo(tgt, D.dmg, now, { x: u.x, y: u.y, by: own, basic: true });
+            checkRoundEnd();
+          }
+        } else {
+          if (d > D.range * 0.92) { dx = ux; dy = uy; }
+          else if (d < D.keep) { dx = -ux; dy = -uy; }
+          if (d <= D.range && now >= u.atkReady) {
+            u.atkReady = now + D.atkCd;
+            spawnArrow(own, { x: u.x, y: u.y }, 0, now, { a, dmg: D.dmg, spd: ARROW.speed, range: D.range, kind: 'tarr' });
+          }
+        }
+      } else if (gdist(u, own) > 2.5 * RADPX) {
+        const d = gdist(u, own); dx = (own.x - u.x) / d; dy = ((own.y - u.y) / 0.8) / d;
+        u.face = dx >= 0 ? 1 : -1;
+      }
+      for (const v of units.values()) {
+        if (v === u) continue;
+        const d = gdist(u, v);
+        if (d > 0 && d < 34) { dx += (u.x - v.x) / d * 0.6; dy += ((u.y - v.y) / 0.8) / d * 0.6; }
+      }
+    }
+    if (now < u.kbUntil) {
+      u.x += u.kbx * dt; u.y += u.kby * dt * 0.8;
+      const nx = (u.x - CX) / RX, ny = (u.y - CY) / RY, d = Math.hypot(nx, ny);
+      if (d > 1) { u.x = CX + nx / d * RX; u.y = CY + ny / d * RY; }
+    }
+    const l = Math.hypot(dx, dy);
+    if (l > 0.01) {
+      dx /= l; dy /= l;
+      const spd = D.speed * mul * (now < u.slowUntil ? KNIGHT.R.slow : 1);
+      u.x += dx * spd * dt; u.y += dy * spd * dt * 0.8;
+      const nx = (u.x - CX) / RX, ny = (u.y - CY) / RY, d = Math.hypot(nx, ny);
+      if (d > 0.97) { u.x = CX + nx / d * 0.97 * RX; u.y = CY + ny / d * 0.97 * RY; }
+      u.moving = true;
+    } else u.moving = false;
+    u.hist.push({ t: now, x: u.x, y: u.y });
+    while (u.hist.length && u.hist[0].t < now - HIST_MS) u.hist.shift();
+  }
+}
+function stepBalls(now) {
+  for (let i = balls.length - 1; i >= 0; i--) {
+    const b = balls[i];
+    if (now < b.at) continue;
+    balls.splice(i, 1);
+    const own = players.get(b.owner);
+    broadcast({ t: 'fx', type: 'ring', x: b.x, y: b.y, r: TOWER.Q.radius, c: '#ff9a3c', dur: 450 });
+    if (!own || phase !== 'round') continue;
+    for (const t of targetsOf(own)) if (Math.hypot(t.x - b.x, (t.y - b.y) / 0.8) <= TOWER.Q.radius + (t.hr || 0)) dmgTo(t, TOWER.Q.dmg, now, { x: b.x, y: b.y, by: own, type: 'phys' });
+    checkRoundEnd();
+  }
+}
+function towerSkill(p, k, m, now) {
+  const T = TOWER, o = originOf(p, m);
+  const cd = ms => { p['cd' + k] = now + ms; send(p.ws, { t: 'cd', k, ms }); };
+  if (k === 'Q') {
+    cd(T.Q.cd);
+    let tx = Number(m && m.cx), ty = Number(m && m.cy);
+    if (!Number.isFinite(tx) || !Number.isFinite(ty)) { tx = o.x + Math.cos(p.aim) * 5 * RADPX; ty = o.y + Math.sin(p.aim) * 5 * RADPX * 0.8; }
+    const c = clampArena({ x: tx, y: ty }), ms = Math.max(350, Math.round(Math.hypot(c.x - o.x, (c.y - o.y) / 0.8) / T.Q.speed * 1000));
+    balls.push({ owner: p.id, x: c.x, y: c.y, at: now + ms });
+    broadcast({ t: 'fx', type: 'cannon', x0: o.x, y0: o.y, x1: c.x, y1: c.y, dur: ms });
+  } else if (k === 'E') {
+    cd(T.E.cd);
+    heal(p, (p.mh - p.hp) * T.E.heal);
+    spawnUnit(p, 'i', now);
+    broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.2 * RADPX, c: '#7dffb2', dur: 600 });
+    fxTxt(p.x, p.y - 40, '🔧 수리', '#9dffb0');
+  } else {
+    cd(T.R.cd);
+    p.towerRUntil = now + T.R.dur;
+    p.mercNext = Math.min(p.mercNext || Infinity, now + T.merc.msAwk);
+    broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.6 * RADPX, c: '#ffb04a', dur: 700 });
+    fxTxt(p.x, p.y - 40, '🛡️ 항전', '#ffd08a');
+  }
+}
 // ---- Sword Master ----
 const smNeed = (p, now) => now < p.smAwkUntil ? SM.atk.needAwk : SM.atk.need;
 function knockFrom(t, o, dist, ms, now) {
@@ -821,7 +949,7 @@ function smStrike(p, o, lag, now, aura, mult) {
   broadcast({ t: 'fx', type: 'smslash', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, aura: aura ? 1 : 0, echo: mult < 1 ? 1 : 0, dur: 280 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
-    if (!inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span)) continue;
+    if (!inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) continue;
     dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: aura ? 'magic' : 'phys' });
     if (aura && t.role === 1) knockFrom(t, o, SM.atk.kb, SM.atk.kbMs, now);
   }
@@ -1166,7 +1294,7 @@ wss.on('connection', (ws, req) => {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
-      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'map') {
       if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
     } else if (m.t === 'tequip') {
@@ -1238,6 +1366,10 @@ setInterval(() => {
     if (p.cls === 'Lucifer' && (p.beam || p.pure) && stepLucifer(p, now)) needEnd = true;
     if (p.cls === 'Lucifer' && p.lf === 'a' && p.role === 1 && phase === 'round') heal(p, ANGEL.regen * dt);
     if (p.cls === 'Gambler' && p.reloadUntil && now >= p.reloadUntil) loadRevolver(p);
+    if (p.cls === 'Tower' && p.role === 1 && phase === 'round' && now >= p.mercNext) {
+      spawnUnit(p, Math.random() < 0.5 ? 'i' : 'a', now);
+      p.mercNext = now + (now < p.towerRUntil ? TOWER.merc.msAwk : TOWER.merc.ms);
+    }
     if (now < p.kbUntil && p.role === 1) {
       p.x += p.kbx * dt; p.y += p.kby * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
@@ -1259,6 +1391,7 @@ setInterval(() => {
   stepSanct(now);
   stepArrows(dt, now);
   stepBombs(now);
+  stepUnits(dt, now); stepBalls(now);
   const list = [], hidden = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
@@ -1271,9 +1404,14 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0 };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);
+  }
+  for (const u of units.values()) {
+    const e = { id: u.id, name: '', hue: 0, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, f: u.face, a: Math.round(u.aim * 100) / 100, m: u.moving ? 1 : 0, c: u.cls, ut: u.ut, ow: u.owner, r: 0, o: 1,
+      hp: Math.max(0, Math.round(u.hp)), mh: u.mh, su: Math.max(0, u.stunUntil - now), sl: now < u.slowUntil ? 1 : 0, kb: now < u.kbUntil ? 1 : 0 };
+    list.push(e); hidden.push(e);
   }
   const ff = [];
   for (const p of players.values()) if (p.joined) for (const f of p.fires) ff.push({ id: f.id, o: p.id, x: Math.round(f.x), y: Math.round(f.y) });
