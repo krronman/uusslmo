@@ -164,7 +164,7 @@ const GUMIHO = {
 const BURN = { tick: 35, tickMs: 1000 };
 const LUC = {
   base: { hp: 1300, dmg: 150, atkCd: 900, range: 4 * RADPX, spd: 900, radius: 0.3 * RADPX },
-  angel: { hp: 1300, dmg: 130, atkCd: 800, range: 3 * RADPX, spd: 900, radius: 0.3 * RADPX },
+  angel: { hp: 1300, dmg: 130, atkCd: 800, range: 4 * RADPX, spd: 900, radius: 0.3 * RADPX },
   devil: { hp: 1300, dmg: 180, atkCd: 1000, range: 4 * RADPX, spd: 900, radius: 0.3 * RADPX },
   G: { cd: 30000, atkCut: 1000, skillCut: 1500, afterCd: 5000 },
   Q: { cd: 10000, range: 3 * RADPX, dmg: 270, spd: 800, radius: 0.3 * RADPX, sc: 1.6 },
