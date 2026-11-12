@@ -30,7 +30,8 @@ let nextId = 1;
 
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
 const send = (ws, o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
-const broadcast = o => { const m = JSON.stringify(o); for (const p of players.values()) if (p.ws.readyState === 1) p.ws.send(m); };
+let curTint = null;
+const broadcast = o => { if (curTint && (o.t === 'fx' || o.t === 'arrow') && !o.tint) o.tint = curTint; const m = JSON.stringify(o); for (const p of players.values()) if (p.ws.readyState === 1) p.ws.send(m); };
 
 const CHAT_TTL = 10 * 60 * 1000;
 const ROUND_MS = 4 * 60 * 1000;
@@ -116,7 +117,8 @@ const CLASS_STATS = {
   Gumiho: { hp: 1100, dmg: 130, reduce: 0, atkCd: 700 },
   Gambler: { hp: 1000, dmg: 180, reduce: 0, atkCd: 600 },
   SwordMaster: { hp: 1200, dmg: 160, reduce: 0, atkCd: 600 },
-  Tower: { hp: 2500, dmg: 100, reduce: 0, atkCd: 2000 }
+  Tower: { hp: 2200, dmg: 100, reduce: 0, atkCd: 2000 },
+  Gamer: { hp: 1000, dmg: 150, reduce: 0, atkCd: 700 }
 };
 const statsOf = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : CLASS_STATS[p.cls] || BASE;
 const RADPX = 112.5;
@@ -186,7 +188,7 @@ const GAMBLER = {
 };
 const lForm = p => p.lf === 'a' ? LUC.angel : p.lf === 'd' ? LUC.devil : LUC.base;
 const atkSpeed = (p, now) => now < p.asUntil ? 1 + p.asBonus : 1;
-const breakStealth = p => { if (p.cls === 'Assassin') p.invisUntil = 0; };
+const breakStealth = p => { if (p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) { p.invisUntil = 0; p.gInvis = false; } };
 
 function setAim(p, a) {
   if (!Number.isFinite(a)) return;
@@ -320,6 +322,7 @@ function resetCombat(p) {
   for (const u of units.values()) if (u.owner === p.id) units.delete(u.id);
   p.smN = 0; p.smAura = false; p.smAwkUntil = 0; p.smLast = null; p.smSaved = false;
   p.ch = null; p.chi = 0; p.reloadUntil = 0; p.myTurn = false; p.gbUntil = p.gbPlusUntil = p.fastUntil = 0;
+  p.gCopy = []; p.gSlots = 1; p.gNext = 0; p.gCheatUntil = p.gtUntil = 0; p.gtint = ''; p.gInvis = p.gPierce = false; send(p.ws, { t: 'gc', l: [], s: 1, ch: 0 });
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
   if (p.cls === 'Gambler') loadRevolver(p); else send(p.ws, { t: 'rv', n: 0 });
   if (p.cls === 'Lucifer' && phase === 'round') { p.cdR = Date.now() + LUC.G.cd; send(p.ws, { t: 'cd', k: 'R', ms: LUC.G.cd }); }
@@ -343,7 +346,7 @@ function shieldBlocks(t, src) {
 
 function dmgTo(t, amount, now, src) {
   if (inSanct(t, now)) return;
-  const type = (src && src.type) || (src && src.by && src.by.cls === 'Assassin' ? 'pierce' : 'phys');
+  const type = (src && src.type) || (src && src.by && (src.by.cls === 'Assassin' || src.by.gPierce) ? 'pierce' : 'phys');
   const pierce = type === 'pierce', magic = type === 'magic';
   if (!pierce && now < (t.invulnUntil || 0)) return;
   let cut = 0, blocked = false;
@@ -402,6 +405,7 @@ function doAttack(p, m) {
   if (p.cls === 'Lucifer') return luciferAttack(p, m, now);
   if (p.cls === 'Gambler') return gamblerAttack(p, m, now);
   if (p.cls === 'SwordMaster') return swordmasterAttack(p, m, now);
+  if (p.cls === 'Gamer') return gamerAttack(p, m, now);
   if (now < p.atkReady) return;
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
@@ -420,7 +424,8 @@ function doAttack(p, m) {
 }
 function doSkill(p, k, m) {
   const now = Date.now();
-  if (!['Q', 'E', 'R'].includes(k) || !canAct(p, now) || now < p['cd' + k]) return;
+  if (!['Q', 'E', 'R'].includes(k) || !canAct(p, now)) return;
+  if (now < p['cd' + k] && !(p.cls === 'Gamer' && k === 'Q' && p.gCopy && p.gCopy.length)) return;
   if (p.cls === 'Knight') knightSkill(p, k, m, now);
   else if (p.cls === 'Archer') archerSkill(p, k, m, now);
   else if (p.cls === 'Shielder') shielderSkill(p, k, m, now);
@@ -431,6 +436,7 @@ function doSkill(p, k, m) {
   else if (p.cls === 'SwordMaster') swordmasterSkill(p, k, m, now);
   else if (p.cls === 'Tower') towerSkill(p, k, m, now);
   else if (p.cls === 'Financier') financierSkill(p, k, m, now);
+  else if (p.cls === 'Gamer') gamerSkill(p, k, m, now);
 }
 function archerSkill(p, k, m, now) {
   const S = ARCHER[k], o = originOf(p, m), lag = lagOf(m);
@@ -672,6 +678,7 @@ function lucTransform(p, form, now) {
 }
 function lucHit(ar, t, now) {
   const p = players.get(ar.owner);
+  if (p && p.cls === 'Gamer' && p.role === 1) { if (ar.luc === 'E') applyBurn(t, p, LUC.E.burnMs, now); return; }
   if (!p || p.cls !== 'Lucifer' || p.role !== 1) return;
   const cut = ms => { if (!p.lUsed) { p.cdR = Math.max(now, p.cdR - ms); send(p.ws, { t: 'cd', k: 'R', ms: p.cdR - now }); } };
   if (ar.luc === 'Q' || ar.luc === 'E') {
@@ -835,12 +842,15 @@ const FIN = {
 };
 const stockPL = (f, t) => (f.buyDealt + (t.hp - f.buyHp0)) / 100;
 function stockClear(p) { if (p.buy) send(p.ws, { t: 'stk', id: 0 }); p.buy = 0; }
-function stepFinancier(p, now) {
-  for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.mul; p.hp *= FIN.passive.mul; p.fDmg *= FIN.passive.mul; }
+function stepIns(p, now) {
   if (p.insUntil && now >= p.insUntil) {
     const a = Math.round(p.insAcc); p.insUntil = 0; p.insAcc = 0;
     heal(p, a); fxTxt(p.x, p.y - 30, '🛡️ +' + a, '#9dffb0');
   }
+}
+function stepFinancier(p, now) {
+  for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.mul; p.hp *= FIN.passive.mul; p.fDmg *= FIN.passive.mul; }
+  stepIns(p, now);
   if (p.depUntil) {
     while (p.depNext <= p.depUntil && now >= p.depNext) { p.hp = Math.max(1, p.hp - FIN.R.drain); p.depNext += 1000; }
     if (now >= p.depUntil) {
@@ -894,8 +904,8 @@ const TOWER = {
   Q: { cd: 10000, dmg: 220, radius: 1.5 * RADPX, speed: 800 },
   E: { cd: 15000, heal: 0.2 },
   R: { cd: 25000, dur: 10000, dmg: 150, range: 4 * RADPX, gap: 22 },
-  INF: { hp: 400, dmg: 50, atkCd: 700, speed: SPEED * 0.8, range: 1 * RADPX },
-  ARC: { hp: 250, dmg: 60, atkCd: 1000, speed: SPEED * 0.7, range: 3 * RADPX, keep: 2.4 * RADPX },
+  INF: { hp: 350, dmg: 50, atkCd: 700, speed: SPEED * 0.8, range: 1 * RADPX },
+  ARC: { hp: 200, dmg: 60, atkCd: 1000, speed: SPEED * 0.7, range: 3 * RADPX, keep: 2.4 * RADPX },
   aggro: 6 * RADPX
 };
 function spawnUnit(p, type, now) {
@@ -975,7 +985,7 @@ function stepBalls(now) {
     if (now < b.at) continue;
     balls.splice(i, 1);
     const own = players.get(b.owner);
-    broadcast({ t: 'fx', type: 'ring', x: b.x, y: b.y, r: TOWER.Q.radius, c: '#ff9a3c', dur: 450 });
+    curTint = b.tint || null; broadcast({ t: 'fx', type: 'ring', x: b.x, y: b.y, r: TOWER.Q.radius, c: '#ff9a3c', dur: 450 }); curTint = null;
     if (!own || phase !== 'round') continue;
     for (const t of targetsOf(own)) if (Math.hypot(t.x - b.x, (t.y - b.y) / 0.8) <= TOWER.Q.radius + (t.hr || 0)) dmgTo(t, TOWER.Q.dmg, now, { x: b.x, y: b.y, by: own, type: 'phys' });
     checkRoundEnd();
@@ -989,7 +999,7 @@ function towerSkill(p, k, m, now) {
     let tx = Number(m && m.cx), ty = Number(m && m.cy);
     if (!Number.isFinite(tx) || !Number.isFinite(ty)) { tx = o.x + Math.cos(p.aim) * 5 * RADPX; ty = o.y + Math.sin(p.aim) * 5 * RADPX * 0.8; }
     const c = clampArena({ x: tx, y: ty }), ms = Math.max(350, Math.round(Math.hypot(c.x - o.x, (c.y - o.y) / 0.8) / T.Q.speed * 1000));
-    balls.push({ owner: p.id, x: c.x, y: c.y, at: now + ms });
+    balls.push({ owner: p.id, x: c.x, y: c.y, at: now + ms, tint: curTint });
     broadcast({ t: 'fx', type: 'cannon', x0: o.x, y0: o.y, x1: c.x, y1: c.y, dur: ms });
   } else if (k === 'E') {
     cd(T.E.cd);
@@ -1137,6 +1147,105 @@ function gamblerSkill(p, k, m, now) {
     fxTxt(p.x, p.y, '🎲 내 차례', '#ff8a8a');
   }
   checkRoundEnd();
+}
+// ---- Gamer ----
+const GAMER = {
+  atk: { range: 4 * RADPX },
+  Q: { cd: 10000 },
+  E: { cd: 15000, potion: 250, windMs: 4000, wind: 0.5 },
+  R: { cd: 25000, dur: 10000 }
+};
+const GFN = { Knight: knightSkill, Archer: archerSkill, Shielder: shielderSkill, Assassin: assassinSkill, Lucifer: luciferSkill, SwordMaster: swordmasterSkill, Tower: towerSkill, Financier: financierSkill };
+const GCOPY = [
+  { cls: 'Knight', k: 'Q', n: '검격' }, { cls: 'Knight', k: 'E', n: '수호 돌진' },
+  { cls: 'Archer', k: 'Q', n: '애로우 레인' },
+  { cls: 'Shielder', k: 'Q', n: '도발' }, { cls: 'Shielder', k: 'E', n: '실드 태클' },
+  { cls: 'Assassin', k: 'Q', n: '소드 샤우트' }, { cls: 'Assassin', k: 'E', n: '은신' },
+  { cls: 'Lucifer', k: 'Q', n: '라이트 샷', lf: '' }, { cls: 'Lucifer', k: 'E', n: '파이어 샷', lf: '' },
+  { cls: 'Lucifer', k: 'Q', n: '라이트 빔', lf: 'a' }, { cls: 'Lucifer', k: 'E', n: '성역', lf: 'a' },
+  { cls: 'Lucifer', k: 'Q', n: '화염탄', lf: 'd' },
+  { cls: 'SwordMaster', k: 'Q', n: '검기' }, { cls: 'SwordMaster', k: 'E', n: '세이브' },
+  { cls: 'Tower', k: 'Q', n: '포격' }, { cls: 'Tower', k: 'E', n: '수리' },
+  { cls: 'Financier', k: 'E', n: '보험' }
+];
+function randTint() {
+  const h = Math.random() * 360, s = 0.85, l = 0.55, a = s * Math.min(l, 1 - l);
+  const f = n => { const k = (n + h / 30) % 12; return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0'); };
+  return '#' + f(0) + f(8) + f(4);
+}
+const sendGc = (p, now) => send(p.ws, { t: 'gc', l: (p.gCopy || []).map(e => e.n), s: p.gSlots || 1, ch: Math.max(0, (p.gCheatUntil || 0) - (now || Date.now())) });
+function gamerAttack(p, m, now) {
+  if (now < p.atkReady) return;
+  const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
+  p.atkReady = now + st.atkCd / atkSpeed(p, now);
+  breakStealth(p);
+  const ranged = p.gNext === 1;
+  p.gNext = ranged ? 0 : 1;
+  if (ranged) {
+    spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg, spd: ARROW.speed, range: GAMER.atk.range, kind: 'atk', type: 'magic' });
+    return;
+  }
+  broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
+  for (const t of targetsOf(p)) {
+    const tp = posAt(t, now - lag);
+    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) dmgTo(t, st.dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'magic' });
+  }
+  checkRoundEnd();
+}
+function castCopied(p, e, m, now) {
+  const keep = { Q: p.cdQ, E: p.cdE, R: p.cdR }, lf0 = p.lf, tint = randTint();
+  p['cd' + e.k] = 0; p.gPierce = e.cls === 'Assassin'; p.lf = e.lf || ''; curTint = tint;
+  try { GFN[e.cls](p, e.k, m, now); } finally { curTint = null; }
+  const fired = p['cd' + e.k] > 0;
+  p.gPierce = false; p.lf = lf0;
+  for (const k of ['Q', 'E', 'R']) { p['cd' + k] = keep[k]; send(p.ws, { t: 'cd', k, ms: Math.max(0, keep[k] - now) }); }
+  if (fired) {
+    if (e.cls === 'Assassin' && e.k === 'E') p.gInvis = true; else if (e.cls === 'Archer') p.gInvis = false;
+    const u = e.cls === 'Knight' && e.k === 'E' ? p.guardUntil : e.cls === 'Financier' ? p.insUntil : 0;
+    if (u) { p.gtint = tint; p.gtUntil = u; }
+  }
+  return fired;
+}
+function gamerSkill(p, k, m, now) {
+  const G = GAMER;
+  if (k === 'Q') {
+    if (p.gCopy.length) {
+      const list = p.gCopy; p.gCopy = [];
+      for (const e of list) if (!castCopied(p, e, m, now)) p.gCopy.push(e);
+      sendGc(p, now);
+      checkRoundEnd();
+      return;
+    }
+    const have = new Set();
+    for (const q of players.values()) if (q !== p && q.joined && q.cls !== 'Gamer') have.add(q.cls);
+    const pool = GCOPY.filter(e => have.has(e.cls));
+    if (!pool.length) return fxTxt(p.x, p.y - 30, '복사할 스킬이 없습니다', '#cfcfcf');
+    const got = [];
+    for (let i = 0, n = Math.min(p.gSlots, pool.length); i < n; i++) got.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    p.gCopy = got;
+    const ms = now < p.gCheatUntil ? 0 : G.Q.cd;
+    p.cdQ = now + ms; send(p.ws, { t: 'cd', k: 'Q', ms });
+    sendGc(p, now);
+    broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.1 * RADPX, c: '#ffd66b', dur: 500 });
+    fxTxt(p.x, p.y - 40, '📋 ' + got.map(e => e.n).join(' + '), '#ffe08a');
+  } else if (k === 'E') {
+    p.cdE = now + G.E.cd; send(p.ws, { t: 'cd', k: 'E', ms: G.E.cd });
+    const all = now < p.gCheatUntil, opts = ['slot', 'potion', 'wind'], pick = all ? opts : [opts[Math.floor(Math.random() * 3)]], msg = [];
+    for (const o of pick) {
+      if (o === 'slot') { p.gSlots = 2; msg.push('🎰 Extra Slot'); }
+      else if (o === 'potion') { heal(p, G.E.potion); msg.push('🧪 Health Potion'); }
+      else { p.asUntil = now + G.E.windMs; p.asBonus = G.E.wind; msg.push('🌪 Wind Rune'); }
+    }
+    sendGc(p, now);
+    broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.2 * RADPX, c: '#9dffb0', dur: 600 });
+    fxTxt(p.x, p.y - 40, msg.join(' · '), '#9dffb0');
+  } else {
+    p.cdR = now + G.R.cd; send(p.ws, { t: 'cd', k: 'R', ms: G.R.cd });
+    p.gCheatUntil = now + G.R.dur; p.cdQ = 0; send(p.ws, { t: 'cd', k: 'Q', ms: 0 });
+    sendGc(p, now);
+    broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.5 * RADPX, c: '#ff6bd5', dur: 700 });
+    fxTxt(p.x, p.y - 40, '💻 치트', '#ff9be8');
+  }
 }
 function checkTimeout(now) {
   if (phase !== 'round' || now - roundStart < ROUND_MS) return;
@@ -1358,7 +1467,7 @@ wss.on('connection', (ws, req) => {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
-      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'map') {
       if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
     } else if (m.t === 'tequip') {
@@ -1427,7 +1536,8 @@ setInterval(() => {
     if (p.role === 1 && p.burnUntil) {
       while (p.role === 1 && p.burnNext <= p.burnUntil && now >= p.burnNext) { dmgTo(p, BURN.tick, now, { kill: players.get(p.burnBy), type: 'phys' }); p.burnNext += BURN.tickMs; needEnd = true; }
     }
-    if (p.cls === 'Lucifer' && (p.beam || p.pure) && stepLucifer(p, now)) needEnd = true;
+    if ((p.cls === 'Lucifer' || p.cls === 'Gamer') && (p.beam || p.pure) && stepLucifer(p, now)) needEnd = true;
+    if (p.cls === 'Gamer' && p.role === 1 && phase === 'round' && p.insUntil) stepIns(p, now);
     if (p.cls === 'Lucifer' && p.lf === 'a' && p.role === 1 && phase === 'round') heal(p, ANGEL.regen * dt);
     if (p.cls === 'Gambler' && p.reloadUntil && now >= p.reloadUntil) loadRevolver(p);
     if (p.cls === 'Tower' && p.role === 1 && phase === 'round' && now >= p.mercNext) {
@@ -1442,7 +1552,7 @@ setInterval(() => {
     }
     if (dx || dy) {
       const l = Math.hypot(dx, dy); dx /= l; dy /= l;
-      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * (p.cls === 'Assassin' && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1);
+      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1);
       p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
@@ -1469,7 +1579,7 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, gt: now < p.gtUntil ? p.gtint : '' };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);
   }
