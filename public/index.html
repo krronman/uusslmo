@@ -333,7 +333,7 @@ let chargeT0=0,hasteLocal=0;const CHARGE_MS=2000;
 let foxes=[],ghosts=[],toastT=0;
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>{el.style.display='none'},1500)}
 let rtt=60,lastSent='',atkLocal=0,myAim=0,mWx=0,mWy=0,mouseOn=false,aimSent=0,aimSentT=0;
-const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700,Lucifer:900,Gambler:600,SwordMaster:600,Tower:2500,Financier:900},arrowsC=[];
+const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700,Lucifer:900,Gambler:600,SwordMaster:600,Tower:2000,Financier:900},arrowsC=[];
 const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b)),lerpAng=(a,b,t)=>a+angDiff(b,a)*t;
 let mcx=0,mcy=0,camX=W/2,camY=W/2;
 addEventListener('mousemove',e=>{mcx=e.clientX;mcy=e.clientY;mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale;mouseOn=true});
@@ -376,7 +376,7 @@ function localCone(r,span,c,dur){const o=others.get(myId);if(!o||myRole===2||o.s
  fxs.push({type:'cone',by:myId,x:o.x,y:o.y,a:myAim,span,r,c,dur,t0:performance.now()});startSwing(o,myAim,span,dur)}
 function localAttack(){const o=others.get(myId);if(!o||myRole===2||o.su>0||o.cm)return;
  if(myCls==='Gumiho'){localOrb(o);return}
-  if(myCls==='Tower')return;
+  if(myCls==='Tower'){localCone(RADPX+36,100*Math.PI/180,'rgba(255,255,255,.6)',220);return}
   if(myCls==='SwordMaster'){startSwing(o,myAim,100*Math.PI/180,240);return}
   if(myCls==='Lucifer'||myCls==='Gambler')return;
  localCone(RADPX,100*Math.PI/180,'rgba(255,255,255,.6)',220)}
@@ -428,15 +428,15 @@ const CHARS=[
   style:'근접 암살형 딜러. 은신으로 접근해 모든 방어를 무시하는 일격을 꽂아 넣습니다.',
   skills:[
    {icon:'🎯',name:'피어스',key:'패시브',types:['buff'],desc:'모든 공격이 대상의 피해 감소와 무적 효과를 무시합니다.'},
-   {icon:'🔪',name:'소드 샤우트',key:'Q · 10초',types:['pierce','debuff'],desc:'검을 찔러 250 피해, 적중한 적이 받는 피해 20% 증가(3초).'},
+   {icon:'🔪',name:'소드 샤우트',key:'Q · 8초',types:['pierce','debuff'],desc:'검을 찔러 250 피해, 적중한 적이 받는 피해 20% 증가(3초).'},
    {icon:'👻',name:'은신',key:'E · 10초',types:['util','buff'],desc:'2.5초간 투명화, 이동속도 15% 증가. 공격하면 해제.'},
-   {icon:'🌀',name:'암살',key:'R · 25초',types:['util','pierce','buff'],desc:'커서로 순간이동, 1 radpx 내 적에게 250 피해. 3초간 공격속도 +10%(적중당 +10%).'}]},
+   {icon:'🌀',name:'암살',key:'R · 25초',types:['util','pierce','buff'],desc:'커서로 순간이동, 1 radpx 내 적에게 250 피해. 적을 적중하면 Q 쿨타임 즉시 초기화.'}]},
  {id:'Gumiho',ko:'구미호',img:'gumiho.png',stats:{hp:1100,atk:130},rng:'3.5 radpx (원거리)',
   style:'원거리 마법사. 여우불을 깔았다 터뜨려 적을 불태우고, 매혹으로 전장을 휘어잡습니다.',
   skills:[
    {icon:'🔥',name:'여우불',key:'패시브',types:['summon'],desc:'공격이 적에게 적중하면 70% 확률로 여우불 생성(최대 5개, 초과 시 가장 오래된 것 소멸).'},
    {icon:'✨',name:'요술',key:'Q · 8초',types:['util','magic'],desc:'커서의 여우불로 순간이동, 가까운 여우불 폭발(2 radpx): 120 피해+화상(초당 35 물리).'},
-   {icon:'💫',name:'미수옥',key:'E · 12초',types:['buff'],desc:'여우불을 모두 회수, 다음 기본 공격 강화: 개당 피해 +120, 폭발 범위 +0.75 radpx.'},
+   {icon:'💫',name:'미수옥',key:'E · 12초',types:['buff'],desc:'여우불을 모두 회수, 다음 기본 공격 강화: 개당 피해 +120, 폭발 범위 +0.6 radpx.'},
    {icon:'💗',name:'매혹',key:'R · 25초',types:['cc'],desc:'2.5 radpx 안의 적을 2.5초간 매혹: 공격·이동 불가, 나에게 끌려옴.'}]},
  {id:'Lucifer',ko:'루시퍼',img:'luciferCharacter.png',stats:{hp:1300,atk:150},rng:'4 radpx (원거리)',
    style:'선과 악의 양면을 지닌 변신형 원거리 딜러. 먼저 적중시킨 화살에 따라 천사 또는 악마로 영구 변신합니다. (캐릭터 이미지를 눌러 폼 정보 확인)',
@@ -468,12 +468,12 @@ const CHARS=[
   skills:[
    {icon:'🌀',name:'오라',key:'패시브',types:['magic','cc'],desc:'일반 공격 4번마다 다음 일반 공격이 180 마법 피해로 강화되고 적을 1 radpx 밀어냅니다.'},
    {icon:'🌙',name:'검기',key:'Q · 12초',types:['phys'],desc:'반경 1.5 radpx 원형 검기를 빠르게 발사: 200 + 현재 체력 15% 피해.'},
-   {icon:'💾',name:'세이브',key:'E · 쿨타임 없음',types:['util'],desc:'직전의 일반 공격/검기를 현재 위치·방향으로 50% 피해로 재시전. 오라 공격이면 1 radpx 넉백, 일반 공격 재시전 시 바라보는 방향으로 2 radpx 돌진.'},
+   {icon:'💾',name:'세이브',key:'E · 쿨타임 없음',types:['util'],desc:'직전의 일반 공격/검기를 지연 없이 즉시 현재 위치·방향으로 50% 피해로 재시전. 오라 공격이면 1 radpx 넉백, 일반 공격 재시전 시 바라보는 방향으로 2 radpx 돌진.'},
    {icon:'✨',name:'각성',key:'R · 25초',types:['buff'],desc:'10초간 오라 필요 횟수 4→2, 세이브 쿨타임 1초, 재시전 피해 80%.'}]},
-{id:'Tower',ko:'타워',img:'tower.png',stats:{hp:2500,atk:150},rng:'근접',
+{id:'Tower',ko:'타워',img:'tower.png',stats:{hp:2500,atk:100},rng:'근접',
   style:'덩치 큰 요새. 용병을 끊임없이 소환해 전선을 만들고, 포격으로 한 번에 쓸어버립니다.',
   skills:[
-   {icon:'🏹',name:'용병',key:'패시브',types:['summon'],desc:'8초마다 보병 또는 궁수를 무작위로 1기 소환. (보병 HP 800·공격 100 / 궁수 HP 500·공격 120·사거리 4 radpx)'},
+   {icon:'🏹',name:'용병',key:'패시브',types:['summon'],desc:'8초마다 보병 또는 궁수를 무작위로 1기 소환. (보병 HP 400·공격 50 / 궁수 HP 250·공격 60·사거리 3 radpx)'},
    {icon:'💣',name:'포격',key:'Q · 10초',types:['phys'],desc:'마우스 위치로 포탄 발사: 반경 1.5 radpx 안의 모든 적에게 220 물리 피해.'},
    {icon:'🔧',name:'수리',key:'E · 15초',types:['heal','summon'],desc:'잃은 체력의 20%를 회복하고 보병 1기를 즉시 소환합니다.'},
    {icon:'🛡️',name:'항전',key:'R · 25초',types:['buff'],desc:'10초간 일반 공격마다 화살 2발(각 150 단일 물리, 사거리 4 radpx) 추가 발사, 용병 소환 주기 3초.'}]},
