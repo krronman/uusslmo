@@ -118,7 +118,7 @@ const CLASS_STATS = {
   SwordMaster: { hp: 1200, dmg: 160, reduce: 0, atkCd: 600 },
   Tower: { hp: 2500, dmg: 150, reduce: 0, atkCd: 2500 }
 };
-const statsOf = p => p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : CLASS_STATS[p.cls] || BASE;
+const statsOf = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : CLASS_STATS[p.cls] || BASE;
 const RADPX = 112.5;
 const MAP = 1254;
 const ARROW = { speed: 800, range: 5 * RADPX, radius: 28 };
@@ -314,6 +314,8 @@ function resetCombat(p) {
   p.tauntUntil = p.tauntBy = p.kbUntil = p.hornUntil = 0; p.dash = null;
   p.markUntil = p.asUntil = p.asBonus = 0;
   p.fires = []; p.qNext = false; p.eNext = 0; p.lastBy = 0; p.charmUntil = p.charmBy = p.burnUntil = p.burnNext = 0;
+  p.fDmg = 90; p.finNext = Date.now() + 5000; p.insUntil = p.depUntil = 0; p.insAcc = 0; p.stkNext = 0; p.buyDealt = 0; p.buyHp0 = 0;
+  if (p.buy) send(p.ws, { t: 'stk', id: 0 }); p.buy = 0;
   p.hr = p.cls === 'Tower' ? TOWER.hr : 0; p.towerRUntil = 0; p.mercNext = Date.now() + TOWER.merc.ms;
   for (const u of units.values()) if (u.owner === p.id) units.delete(u.id);
   p.smN = 0; p.smAura = false; p.smAwkUntil = 0; p.smLast = null; p.smSaved = false;
@@ -357,6 +359,9 @@ function dmgTo(t, amount, now, src) {
   if (d > 0 && now < t.markUntil) d = Math.round(d * (1 + ASSASSIN.Q.mark));
   if (d > 0 && now < t.dmUntil) { const mo = players.get(t.dmBy); d = Math.round(d * (1 + (mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp))); }
   t.hp -= d;
+  if (now < (t.insUntil || 0)) t.insAcc += d;
+  const atkr = src && (src.by || src.kill);
+  if (atkr && !t.unit && atkr.id !== t.id) for (const f of players.values()) if (f.cls === 'Financier' && f.buy === atkr.id) f.buyDealt += d;
   if (src && (src.by || src.kill)) { t.lastBy = (src.by || src.kill).id; t.lastByT = now; }
   broadcast({ t: 'hit', id: t.id, dmg: d, bl: blocked ? 1 : 0 });
   if (blocked && src.by && now < t.hornUntil && src.by.role === 1) {
@@ -425,6 +430,7 @@ function doSkill(p, k, m) {
   else if (p.cls === 'Gambler') gamblerSkill(p, k, m, now);
   else if (p.cls === 'SwordMaster') swordmasterSkill(p, k, m, now);
   else if (p.cls === 'Tower') towerSkill(p, k, m, now);
+  else if (p.cls === 'Financier') financierSkill(p, k, m, now);
 }
 function archerSkill(p, k, m, now) {
   const S = ARCHER[k], o = originOf(p, m), lag = lagOf(m);
@@ -819,6 +825,67 @@ function luciferSkill(p, k, m, now) {
     }
   }
   checkRoundEnd();
+}
+// ---- Financier ----
+const FIN = {
+  passive: { ms: 5000, mul: 1.02 },
+  Q: { cd: 500, cost: 100, pick: 48 },
+  E: { cd: 15000, min: 200, cost: 200, ms: 2000 },
+  R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1200, atkMul: 1.1 }
+};
+const stockPL = (f, t) => (f.buyDealt + (t.hp - f.buyHp0)) / 100;
+function stockClear(p) { if (p.buy) send(p.ws, { t: 'stk', id: 0 }); p.buy = 0; }
+function stepFinancier(p, now) {
+  for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.mul; p.hp *= FIN.passive.mul; p.fDmg *= FIN.passive.mul; }
+  if (p.insUntil && now >= p.insUntil) {
+    const a = Math.round(p.insAcc); p.insUntil = 0; p.insAcc = 0;
+    heal(p, a); fxTxt(p.x, p.y - 30, '🛡️ +' + a, '#9dffb0');
+  }
+  if (p.depUntil) {
+    while (p.depNext <= p.depUntil && now >= p.depNext) { p.hp = Math.max(1, p.hp - FIN.R.drain); p.depNext += 1000; }
+    if (now >= p.depUntil) {
+      p.depUntil = 0; p.mh *= FIN.R.hpMul; heal(p, FIN.R.heal); p.fDmg *= FIN.R.atkMul;
+      fxTxt(p.x, p.y - 30, '🏦 만기!', '#ffe08a');
+      broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.4 * RADPX, c: '#ffd66b', dur: 700 });
+    }
+  }
+  if (p.buy) {
+    const t = players.get(p.buy);
+    if (!t || t.role !== 1) stockClear(p);
+    else if (now >= p.stkNext) { p.stkNext = now + 200; send(p.ws, { t: 'stk', id: t.id, n: t.name, pl: Math.round(stockPL(p, t) * 100) / 100 }); }
+  }
+}
+function financierSkill(p, k, m, now) {
+  const cd = ms => { p['cd' + k] = now + ms; send(p.ws, { t: 'cd', k, ms }); };
+  if (k === 'Q') {
+    if (p.buy) {
+      const t = players.get(p.buy);
+      if (!t || t.role !== 1) return stockClear(p);
+      const pl = stockPL(p, t), gain = Math.max(0, 100 + pl);
+      cd(FIN.Q.cd); heal(p, gain); p.fDmg *= Math.max(0.1, 1 + pl / 100); stockClear(p);
+      fxTxt(p.x, p.y - 30, '📈 ' + (pl >= 0 ? '+' : '') + pl.toFixed(1) + '% · +' + Math.round(gain) + ' HP', pl >= 0 ? '#9dffb0' : '#ff8a8a');
+    } else {
+      const cx = Number(m && m.cx), cy = Number(m && m.cy);
+      if (!Number.isFinite(cx) || !Number.isFinite(cy) || p.hp <= FIN.Q.cost) return;
+      let best = null, bd = 1e9;
+      for (const t of players.values()) {
+        if (t === p || !t.joined || t.role !== 1) continue;
+        const d = Math.hypot(t.x - cx, t.y - 24 - cy);
+        if (d <= FIN.Q.pick + (t.hr || 0) * 1.4 && d < bd) { bd = d; best = t; }
+      }
+      if (!best) return;
+      cd(FIN.Q.cd); p.hp -= FIN.Q.cost; p.buy = best.id; p.buyDealt = 0; p.buyHp0 = best.hp; p.stkNext = 0;
+      fxTxt(p.x, p.y - 30, '-' + FIN.Q.cost, '#ff8a8a');
+    }
+  } else if (k === 'E') {
+    if (p.hp <= FIN.E.min) return;
+    cd(FIN.E.cd); p.hp -= FIN.E.cost; p.insUntil = now + FIN.E.ms; p.insAcc = 0;
+    broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.1 * RADPX, c: '#7fe0ff', dur: 600 });
+  } else {
+    cd(FIN.R.cd); p.depUntil = now + FIN.R.ms; p.depNext = now + 1000;
+    broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.3 * RADPX, c: '#ffd66b', dur: 600 });
+    fxTxt(p.x, p.y - 30, '🏦 정기예금', '#ffe08a');
+  }
 }
 // ---- Tower ----
 const TOWER = {
@@ -1294,7 +1361,7 @@ wss.on('connection', (ws, req) => {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
-      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'map') {
       if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
     } else if (m.t === 'tequip') {
@@ -1370,6 +1437,7 @@ setInterval(() => {
       spawnUnit(p, Math.random() < 0.5 ? 'i' : 'a', now);
       p.mercNext = now + (now < p.towerRUntil ? TOWER.merc.msAwk : TOWER.merc.ms);
     }
+    if (p.cls === 'Financier' && p.role === 1 && phase === 'round') stepFinancier(p, now);
     if (now < p.kbUntil && p.role === 1) {
       p.x += p.kbx * dt; p.y += p.kby * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
@@ -1400,11 +1468,11 @@ setInterval(() => {
     p.wasIv = iv;
     const e = { id: p.id, name: p.name, hue: p.hue, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
       f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role,
-      hp: Math.max(0, Math.round(p.hp)), mh: p.mh, su: Math.max(0, p.stunUntil - now), gd: now < p.guardUntil ? 1 : 0, sl: now < p.slowUntil ? 1 : 0,
+      hp: Math.max(0, Math.round(p.hp)), mh: Math.round(p.mh), su: Math.max(0, p.stunUntil - now), gd: now < p.guardUntil ? 1 : 0, sl: now < p.slowUntil ? 1 : 0,
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0 };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);
   }
