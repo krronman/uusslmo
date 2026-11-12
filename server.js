@@ -94,6 +94,7 @@ function checkRoundEnd() {
   endRound(winner);
 }
 function endRound(winner, tied) {
+  const gw = !tied && winner && winner.user && !winner.obs && winner.inRound ? winner : null;
   phase = 'lobby'; arrows.clear(); bombs.clear(); units.clear(); balls.length = 0;
   for (const p of players.values()) {
     if (p.inRound) { p.x = p.lx; p.y = p.ly; }
@@ -104,6 +105,16 @@ function endRound(winner, tied) {
   if (tied && tied.length) { const names = tied.join(', '); sysChat('⏱ Time is up! 2nd place: ' + names); broadcast({ t: 'winner', name: names, second: true }); }
   else if (winner) { sysChat('🏆 1st place: ' + winner.name); broadcast({ t: 'winner', name: winner.name }); }
   else sysChat('Round ended with no winner.');
+  if (gw) awardGold(gw, WIN_GOLD);
+}
+// ---- gold ----
+const WIN_GOLD = 5;
+async function awardGold(p, n) {
+  try {
+    p.gold = (p.gold || 0) + n; send(p.ws, { t: 'gold', g: p.gold, d: n });
+    const v = Number(await db.incrby('gold:' + p.user, n));
+    if (Number.isFinite(v) && p.user) { p.gold = v; send(p.ws, { t: 'gold', g: v }); }
+  } catch (e) { console.error('gold award failed:', e.message); }
 }
 
 // ---- combat ----
@@ -118,7 +129,8 @@ const CLASS_STATS = {
   Gambler: { hp: 1000, dmg: 180, reduce: 0, atkCd: 600 },
   SwordMaster: { hp: 1200, dmg: 160, reduce: 0, atkCd: 600 },
   Tower: { hp: 2200, dmg: 100, reduce: 0, atkCd: 2000 },
-  Gamer: { hp: 1000, dmg: 150, reduce: 0, atkCd: 700 }
+  Gamer: { hp: 1000, dmg: 150, reduce: 0, atkCd: 700 },
+  Celestial: { hp: 1500, dmg: 100, reduce: 0, atkCd: 800 }
 };
 const statsOf = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : CLASS_STATS[p.cls] || BASE;
 const RADPX = 112.5;
@@ -322,7 +334,8 @@ function resetCombat(p) {
   for (const u of units.values()) if (u.owner === p.id) units.delete(u.id);
   p.smN = 0; p.smAura = false; p.smAwkUntil = 0; p.smLast = null; p.smSaved = false;
   p.ch = null; p.chi = 0; p.reloadUntil = 0; p.myTurn = false; p.gbUntil = p.gbPlusUntil = p.fastUntil = 0;
-  p.gCopy = []; p.gSlots = 1; p.gNext = 0; p.gCheatUntil = p.gtUntil = 0; p.gtint = ''; p.gInvis = p.gPierce = false; send(p.ws, { t: 'gc', l: [], s: 1, ch: 0 });
+  p.dim = p.nextBonus = 0; p.celKey = ''; for (const arr of [planets, galaxies]) for (let i = arr.length - 1; i >= 0; i--) if (arr[i].owner === p.id) arr.splice(i, 1);
+  p.gCopy = []; p.gSlots = 1; p.gBig = false; p.gLast = null; p.gNext = 0; p.gCheatUntil = p.gtUntil = 0; p.gtint = ''; p.gInvis = p.gPierce = false; send(p.ws, { t: 'gc', l: [], s: 1, ch: 0 });
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
   if (p.cls === 'Gambler') loadRevolver(p); else send(p.ws, { t: 'rv', n: 0 });
   if (p.cls === 'Lucifer' && phase === 'round') { p.cdR = Date.now() + LUC.G.cd; send(p.ws, { t: 'cd', k: 'R', ms: LUC.G.cd }); }
@@ -362,6 +375,7 @@ function dmgTo(t, amount, now, src) {
   if (d > 0 && now < t.markUntil) d = Math.round(d * (1 + ASSASSIN.Q.mark));
   if (d > 0 && now < t.dmUntil) { const mo = players.get(t.dmBy); d = Math.round(d * (1 + (mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp))); }
   t.hp -= d;
+  if (t.cls === 'Celestial' && t.role === 1 && d > 0) { t.dim = Math.min(CEL.cap, (t.dim || 0) + d * CEL.store); if (t.hp > 0) t.hp = Math.min(t.mh, t.hp + d * CEL.heal); }
   if (now < (t.insUntil || 0)) t.insAcc += d;
   const atkr = src && (src.by || src.kill);
   if (atkr && !t.unit && atkr.id !== t.id) for (const f of players.values()) if (f.cls === 'Financier' && f.buy === atkr.id) f.buyDealt += d;
@@ -373,7 +387,7 @@ function dmgTo(t, amount, now, src) {
   }
   if (t.hp <= 0) { if (t.unit) units.delete(t.id); else killPlayer(t); }
 }
-const units = new Map(); let unitSeq = 0; const balls = [];
+const units = new Map(); let unitSeq = 0; const balls = [], planets = [], galaxies = [];
 const targetsOf = p => phase !== 'round' ? [] : [...players.values(), ...units.values()].filter(t => t !== p && (t.unit ? t.owner !== p.id : (t.joined && t.role === 1)));
 function inConeAt(ox, oy, aim, tx, ty, range, span, ext = 0) {
   const dx = tx - ox, dy = (ty - oy) / 0.8, d = Math.hypot(dx, dy);
@@ -406,6 +420,7 @@ function doAttack(p, m) {
   if (p.cls === 'Gambler') return gamblerAttack(p, m, now);
   if (p.cls === 'SwordMaster') return swordmasterAttack(p, m, now);
   if (p.cls === 'Gamer') return gamerAttack(p, m, now);
+  if (p.cls === 'Celestial') return celestialAttack(p, m, now);
   if (now < p.atkReady) return;
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
@@ -425,7 +440,7 @@ function doAttack(p, m) {
 function doSkill(p, k, m) {
   const now = Date.now();
   if (!['Q', 'E', 'R'].includes(k) || !canAct(p, now)) return;
-  if (now < p['cd' + k] && !(p.cls === 'Gamer' && k === 'Q' && p.gCopy && p.gCopy.length)) return;
+  if (now < p['cd' + k]) return;
   if (p.cls === 'Knight') knightSkill(p, k, m, now);
   else if (p.cls === 'Archer') archerSkill(p, k, m, now);
   else if (p.cls === 'Shielder') shielderSkill(p, k, m, now);
@@ -437,6 +452,7 @@ function doSkill(p, k, m) {
   else if (p.cls === 'Tower') towerSkill(p, k, m, now);
   else if (p.cls === 'Financier') financierSkill(p, k, m, now);
   else if (p.cls === 'Gamer') gamerSkill(p, k, m, now);
+  else if (p.cls === 'Celestial') celestialSkill(p, k, m, now);
 }
 function archerSkill(p, k, m, now) {
   const S = ARCHER[k], o = originOf(p, m), lag = lagOf(m);
@@ -1148,6 +1164,95 @@ function gamblerSkill(p, k, m, now) {
   }
   checkRoundEnd();
 }
+// ---- Celestial ----
+const CEL = {
+  cap: 300, store: 0.4, heal: 0.1,
+  Q: { cd: 5000, r: 2 * RADPX, delay: 1000, dmg: 400, back: 0.2 },
+  E: { cd: 1000 },
+  R: { cd: 25000, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.3, burstR: RADPX, burst: 300 }
+};
+function celestialAttack(p, m, now) {
+  if (now < p.atkReady) return;
+  const st = statsOf(p), o = originOf(p, m), lag = lagOf(m), dmg = st.dmg + (p.nextBonus || 0);
+  p.nextBonus = 0;
+  p.atkReady = now + st.atkCd / atkSpeed(p, now);
+  broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
+  for (const t of targetsOf(p)) {
+    const tp = posAt(t, now - lag);
+    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'magic' });
+  }
+  checkRoundEnd();
+}
+function celestialSkill(p, k, m, now) {
+  const o = originOf(p, m), S = CEL[k];
+  if (k === 'E') {
+    if (!(p.dim > 0)) return;
+    const n = Math.round(p.dim);
+    p.cdE = now + S.cd; send(p.ws, { t: 'cd', k, ms: S.cd });
+    p.nextBonus = (p.nextBonus || 0) + n; p.dim = 0;
+    broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.1 * RADPX, c: '#ffffff', dur: 450 });
+    fxTxt(p.x, p.y - 40, '⚪ +' + n, '#ffffff');
+    return;
+  }
+  p['cd' + k] = now + S.cd; send(p.ws, { t: 'cd', k, ms: S.cd });
+  if (k === 'Q') {
+    planets.push({ owner: p.id, x: o.x, y: o.y, at: now + S.delay, tint: curTint });
+    broadcast({ t: 'fx', type: 'disc', x: o.x, y: o.y, r: S.r, c: 'rgba(150,120,255,.3)', s: '#b69cff', dur: S.delay });
+  } else {
+    galaxies.push({ owner: p.id, x: o.x, y: o.y, until: now + S.ms, next: now + S.tickMs, tint: curTint });
+    broadcast({ t: 'fx', type: 'disc', x: o.x, y: o.y, r: S.r, c: 'rgba(90,60,200,.25)', s: '#7a5cff', dur: S.ms });
+  }
+}
+function stepCelestial(dt, now) {
+  let any = false;
+  for (let i = planets.length - 1; i >= 0; i--) {
+    const b = planets[i];
+    if (now < b.at) continue;
+    planets.splice(i, 1);
+    curTint = b.tint || null;
+    broadcast({ t: 'fx', type: 'ring', x: b.x, y: b.y, r: CEL.Q.r, c: '#b69cff', dur: 400 });
+    curTint = null;
+    const own = players.get(b.owner);
+    if (!own || own.role !== 1 || phase !== 'round') continue;
+    let total = 0;
+    for (const t of targetsOf(own)) {
+      if (Math.hypot(t.x - b.x, (t.y - b.y) / 0.8) > CEL.Q.r + (t.hr || 0)) continue;
+      const before = t.hp;
+      dmgTo(t, CEL.Q.dmg, now, { x: b.x, y: b.y, by: own, type: 'phys' });
+      total += Math.max(0, Math.min(before, before - t.hp));
+    }
+    own.dim = Math.min(CEL.cap, (own.dim || 0) + total * CEL.Q.back);
+    any = true;
+  }
+  for (let i = galaxies.length - 1; i >= 0; i--) {
+    const g = galaxies[i], own = players.get(g.owner), R = CEL.R;
+    if (!own || own.role !== 1 || phase !== 'round') { galaxies.splice(i, 1); continue; }
+    const live = targetsOf(own).filter(t => Math.hypot(t.x - g.x, (t.y - g.y) / 0.8) <= R.r + (t.hr || 0));
+    for (const t of live) {
+      const dx = g.x - t.x, dy = (g.y - t.y) / 0.8, d = Math.hypot(dx, dy);
+      if (d < 1) continue;
+      const st = Math.min(d, SPEED * R.pull * dt), c = clampArena({ x: t.x + dx / d * st, y: t.y + dy / d * st * 0.8 });
+      t.x = c.x; t.y = c.y;
+    }
+    while (g.next <= g.until && now >= g.next) {
+      g.next += R.tickMs;
+      for (const t of live) { dmgTo(t, R.tick, now, { x: g.x, y: g.y, kill: own, type: 'pierce' }); any = true; }
+    }
+    if (now >= g.until) {
+      galaxies.splice(i, 1);
+      curTint = g.tint || null;
+      broadcast({ t: 'fx', type: 'ring', x: g.x, y: g.y, r: R.burstR, c: '#ffffff', dur: 450 });
+      curTint = null;
+      for (const t of targetsOf(own)) if (Math.hypot(t.x - g.x, (t.y - g.y) / 0.8) <= R.burstR + (t.hr || 0)) { dmgTo(t, R.burst, now, { x: g.x, y: g.y, kill: own, type: 'pierce' }); any = true; }
+    }
+  }
+  for (const p of players.values()) {
+    if (p.cls !== 'Celestial' && p.cls !== 'Gamer') continue;
+    const key = Math.round(p.dim || 0) + '|' + (p.nextBonus || 0);
+    if (key !== p.celKey) { p.celKey = key; send(p.ws, { t: 'cel', d: Math.round(p.dim || 0), b: p.nextBonus || 0 }); }
+  }
+  if (any) checkRoundEnd();
+}
 // ---- Gamer ----
 const GAMER = {
   atk: { range: 4 * RADPX },
@@ -1155,7 +1260,7 @@ const GAMER = {
   E: { cd: 15000, potion: 250, windMs: 4000, wind: 0.5 },
   R: { cd: 25000, dur: 10000 }
 };
-const GFN = { Knight: knightSkill, Archer: archerSkill, Shielder: shielderSkill, Assassin: assassinSkill, Lucifer: luciferSkill, SwordMaster: swordmasterSkill, Tower: towerSkill, Financier: financierSkill };
+const GFN = { Knight: knightSkill, Archer: archerSkill, Shielder: shielderSkill, Assassin: assassinSkill, Lucifer: luciferSkill, Celestial: celestialSkill, SwordMaster: swordmasterSkill, Tower: towerSkill, Financier: financierSkill };
 const GCOPY = [
   { cls: 'Knight', k: 'Q', n: '검격' }, { cls: 'Knight', k: 'E', n: '수호 돌진' },
   { cls: 'Archer', k: 'Q', n: '애로우 레인' },
@@ -1166,7 +1271,8 @@ const GCOPY = [
   { cls: 'Lucifer', k: 'Q', n: '화염탄', lf: 'd' },
   { cls: 'SwordMaster', k: 'Q', n: '검기' }, { cls: 'SwordMaster', k: 'E', n: '세이브' },
   { cls: 'Tower', k: 'Q', n: '포격' }, { cls: 'Tower', k: 'E', n: '수리' },
-  { cls: 'Financier', k: 'E', n: '보험' }
+  { cls: 'Financier', k: 'E', n: '보험' },
+  { cls: 'Celestial', k: 'Q', n: '행성 폭발' }, { cls: 'Celestial', k: 'E', n: '화이트홀' }
 ];
 function randTint() {
   const h = Math.random() * 360, s = 0.85, l = 0.55, a = s * Math.min(l, 1 - l);
@@ -1176,27 +1282,41 @@ function randTint() {
 const sendGc = (p, now) => send(p.ws, { t: 'gc', l: (p.gCopy || []).map(e => e.n), s: p.gSlots || 1, ch: Math.max(0, (p.gCheatUntil || 0) - (now || Date.now())) });
 function gamerAttack(p, m, now) {
   if (now < p.atkReady) return;
-  const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
+  const st = statsOf(p), o = originOf(p, m), lag = lagOf(m), bonus = p.nextBonus || 0;
+  p.nextBonus = 0;
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
   breakStealth(p);
   const ranged = p.gNext === 1;
   p.gNext = ranged ? 0 : 1;
+  p.gLast = { ranged, dmg: st.dmg + bonus };
+  gamerStrike(p, o, lag, now, ranged, st.dmg + bonus, 'atk');
+}
+function gamerStrike(p, o, lag, now, ranged, dmg, kind) {
   if (ranged) {
-    spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg, spd: ARROW.speed, range: GAMER.atk.range, kind: 'atk', type: 'magic' });
+    spawnArrow(p, o, lag, now, { a: p.aim, dmg, spd: ARROW.speed, range: GAMER.atk.range, kind: 'atk', type: 'magic' });
     return;
   }
   broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
-    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) dmgTo(t, st.dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'magic' });
+    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'magic' });
   }
   checkRoundEnd();
 }
 function castCopied(p, e, m, now) {
   const keep = { Q: p.cdQ, E: p.cdE, R: p.cdR }, lf0 = p.lf, tint = randTint();
   p['cd' + e.k] = 0; p.gPierce = e.cls === 'Assassin'; p.lf = e.lf || ''; curTint = tint;
-  try { GFN[e.cls](p, e.k, m, now); } finally { curTint = null; }
-  const fired = p['cd' + e.k] > 0;
+  let fired;
+  try {
+    if (e.cls === 'SwordMaster' && e.k === 'E') {
+      fired = !!p.gLast;
+      if (fired) {
+        const L = p.gLast, o2 = L.ranged ? originOf(p, m) : { x: p.x, y: p.y };
+        broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 0.7 * RADPX, c: '#8fe3ff', dur: 450 });
+        gamerStrike(p, o2, 0, now, L.ranged, Math.round(L.dmg * SM.E.mult), 'atk');
+      } else fxTxt(p.x, p.y, '직전 공격 없음', '#cfcfcf');
+    } else { GFN[e.cls](p, e.k, m, now); fired = p['cd' + e.k] > 0; }
+  } finally { curTint = null; }
   p.gPierce = false; p.lf = lf0;
   for (const k of ['Q', 'E', 'R']) { p['cd' + k] = keep[k]; send(p.ws, { t: 'cd', k, ms: Math.max(0, keep[k] - now) }); }
   if (fired) {
@@ -1211,20 +1331,22 @@ function gamerSkill(p, k, m, now) {
   if (k === 'Q') {
     if (p.gCopy.length) {
       const list = p.gCopy; p.gCopy = [];
-      for (const e of list) if (!castCopied(p, e, m, now)) p.gCopy.push(e);
+      let used = 0;
+      for (const e of list) if (!castCopied(p, e, m, now)) p.gCopy.push(e); else used++;
+      if (used) {
+        if (p.gBig) { p.gSlots = 1; p.gBig = false; }
+        const ms = now < p.gCheatUntil ? 0 : G.Q.cd;
+        p.cdQ = now + ms; send(p.ws, { t: 'cd', k: 'Q', ms });
+      }
       sendGc(p, now);
       checkRoundEnd();
       return;
     }
-    const have = new Set();
-    for (const q of players.values()) if (q !== p && q.joined && q.cls !== 'Gamer') have.add(q.cls);
-    const pool = GCOPY.filter(e => have.has(e.cls));
-    if (!pool.length) return fxTxt(p.x, p.y - 30, '복사할 스킬이 없습니다', '#cfcfcf');
+    const pool = GCOPY.slice();
     const got = [];
     for (let i = 0, n = Math.min(p.gSlots, pool.length); i < n; i++) got.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
-    p.gCopy = got;
-    const ms = now < p.gCheatUntil ? 0 : G.Q.cd;
-    p.cdQ = now + ms; send(p.ws, { t: 'cd', k: 'Q', ms });
+    p.gCopy = got; p.gBig = p.gSlots > 1;
+    p.cdQ = 0; send(p.ws, { t: 'cd', k: 'Q', ms: 0 });
     sendGc(p, now);
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.1 * RADPX, c: '#ffd66b', dur: 500 });
     fxTxt(p.x, p.y - 40, '📋 ' + got.map(e => e.n).join(' + '), '#ffe08a');
@@ -1270,6 +1392,7 @@ const db = (UP_URL && UP_TOKEN) ? {
   setex: (k, sec, v) => upstash('SET', KEY + k, v, 'EX', sec),
   del: k => upstash('DEL', KEY + k),
   incr: k => upstash('INCR', KEY + k),
+  incrby: (k, n) => upstash('INCRBY', KEY + k, String(n)),
   expire: (k, sec) => upstash('EXPIRE', KEY + k, sec)
 } : {
   get: async k => { const e = memGet(k); return e ? e.v : null; },
@@ -1277,6 +1400,7 @@ const db = (UP_URL && UP_TOKEN) ? {
   setnx: async (k, v) => { if (memGet(k)) return false; mem.set(k, { v }); return true; },
   setex: async (k, sec, v) => { mem.set(k, { v, exp: Date.now() + sec * 1000 }); },
   del: async k => { mem.delete(k); },
+  incrby: async (k, n) => { const e = memGet(k), v = (e ? Number(e.v) : 0) + n; mem.set(k, { v: String(v), exp: e && e.exp }); return v; },
   incr: async k => { const e = memGet(k), n = (e ? Number(e.v) : 0) + 1; mem.set(k, { v: String(n), exp: e && e.exp }); return n; },
   expire: async (k, sec) => { const e = memGet(k); if (e) e.exp = Date.now() + sec * 1000; }
 };
@@ -1367,7 +1491,7 @@ async function loginOk(p, rec, token) {
   kickOld(rec.id, p);
   p.user = rec.id; p.name = rec.nick;
   if (rec.id === OBS_ID) {
-    p.obs = true; p.titles = []; p.eq = null;
+    p.obs = true; p.titles = []; p.eq = null; p.gold = 0;
     send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token, admin: 0, obs: 1 });
     const all = {};
     for (const q of players.values()) if (q.joined) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
@@ -1375,9 +1499,10 @@ async function loginOk(p, rec, token) {
   }
   const ti = await loadTitles(rec.id);
   p.titles = ti.list; p.eq = ti.eq;
+  try { p.gold = Math.max(0, parseInt(await db.get('gold:' + rec.id), 10) || 0); } catch (e) { p.gold = 0; }
   if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }
   send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token, admin: rec.id === ADMIN_ID ? 1 : 0 });
-  sendTinfo(p);
+  sendTinfo(p); send(p.ws, { t: 'gold', g: p.gold });
   const all = {};
   for (const q of players.values()) if (q.joined && q !== p) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
   send(p.ws, { t: 'ttls', m: all });
@@ -1467,7 +1592,7 @@ wss.on('connection', (ws, req) => {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
-      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+      if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'map') {
       if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
     } else if (m.t === 'tequip') {
@@ -1566,7 +1691,7 @@ setInterval(() => {
   stepSanct(now);
   stepArrows(dt, now);
   stepBombs(now);
-  stepUnits(dt, now); stepBalls(now);
+  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now);
   const list = [], hidden = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
