@@ -434,28 +434,28 @@ const CHARS=[
  {id:'Gumiho',ko:'구미호',img:'gumiho.png',stats:{hp:1100,atk:130},rng:'3.5 radpx (원거리)',
   style:'원거리 마법사. 여우불을 깔았다 터뜨려 적을 불태우고, 매혹으로 전장을 휘어잡습니다.',
   skills:[
-   {icon:'🔥',name:'여우불',key:'패시브',types:['summon'],desc:'공격이 적에게 적중하면 75% 확률로 여우불 생성(최대 5개, 초과 시 가장 오래된 것 소멸).'},
+   {icon:'🔥',name:'여우불',key:'패시브',types:['summon'],desc:'공격이 적에게 적중하면 70% 확률로 여우불 생성(최대 5개, 초과 시 가장 오래된 것 소멸).'},
    {icon:'✨',name:'요술',key:'Q · 8초',types:['util','magic'],desc:'커서의 여우불로 순간이동, 가까운 여우불 폭발(2 radpx): 120 피해+화상(초당 35 물리).'},
-   {icon:'💫',name:'미수옥',key:'E · 12초',types:['buff'],desc:'여우불을 모두 회수, 다음 기본 공격 강화: 개당 피해 +120, 폭발 범위 +0.5 radpx.'},
-   {icon:'💗',name:'매혹',key:'R · 25초',types:['cc'],desc:'2.5 radpx 안의 적을 3초간 매혹: 공격·이동 불가, 나에게 끌려옴.'}]},
- {id:'Lucifer',ko:'루시퍼',img:'luciferCharacter.png',stats:{hp:1200,atk:150},rng:'3.5 radpx (원거리)',
+   {icon:'💫',name:'미수옥',key:'E · 12초',types:['buff'],desc:'여우불을 모두 회수, 다음 기본 공격 강화: 개당 피해 +120, 폭발 범위 +0.75 radpx.'},
+   {icon:'💗',name:'매혹',key:'R · 25초',types:['cc'],desc:'2.5 radpx 안의 적을 2.5초간 매혹: 공격·이동 불가, 나에게 끌려옴.'}]},
+ {id:'Lucifer',ko:'루시퍼',img:'luciferCharacter.png',stats:{hp:1300,atk:150},rng:'4 radpx (원거리)',
    style:'선과 악의 양면을 지닌 변신형 원거리 딜러. 먼저 적중시킨 화살에 따라 천사 또는 악마로 영구 변신합니다. (캐릭터 이미지를 눌러 폼 정보 확인)',
    forms:[
-   {tag:'기본',img:'luciferCharacter.png',stats:{hp:1200,atk:150},rng:'3.5 radpx (원거리)',skills:[
+   {tag:'기본',img:'luciferCharacter.png',as:0.9,stats:{hp:1300,atk:150},rng:'4 radpx (원거리)',skills:[
     {icon:'🌈',name:'축복',key:'패시브',types:['buff'],desc:'선과 악은 시작 쿨타임 후 단 1회 사용. 일반 공격 적중 시 쿨타임 1초, 스킬 적중 시 1.5초 감소.'},
     {icon:'☀️',name:'라이트 샷',key:'Q · 10초',types:['magic'],desc:'직선 빛 화살(3 radpx): 적중한 적 1명에게 270 피해.'},
     {icon:'🔥',name:'파이어 샷',key:'E · 10초',types:['magic'],desc:'불꽃 발사(3 radpx): 120 피해 + 화상 4초(초당 35 물리).'},
-    {icon:'⚖️',name:'선악',key:'R · 30초',types:['buff'],desc:'빛/불 화살 5초로 단축. 먼저 적중한 쪽으로 영구 변신: 정화, 체력 전부 회복, 스킬 초기화, 8방향 빛/불 화살 발사.'}]},
-   {tag:'천사',img:'angelForm.png',stats:{hp:1200,atk:130},rng:'3 radpx (원거리)',skills:[
+    {icon:'⚖️',name:'선악',key:'R · 30초',types:['buff'],desc:'빛/불 화살 5초로 단축. 먼저 적중한 쪽으로 영구 변신: 정화, 체력 300 회복, 스킬 초기화, 8방향 빛/불 화살 발사.'}]},
+   {tag:'천사',img:'angelForm.png',as:0.8,stats:{hp:1300,atk:130},rng:'3 radpx (원거리)',skills:[
     {icon:'🕊️',name:'축복',key:'패시브',types:['heal'],desc:'초당 20 체력을 회복합니다.'},
     {icon:'🌟',name:'라이트 빔',key:'Q · 15초',types:['magic','heal'],desc:'1.5초간 화면 끝까지 닿는 광선: 적에게 0.1초마다 30 피해, 접촉 시 나는 0.1초마다 10 회복.'},
-    {icon:'⛪',name:'성역',key:'E · 18초',types:['def','summon','cc'],desc:'1.5 radpx 성역 3초: 적을 밀어내고 투사체 차단. 안의 나는 피해를 받지 않음.'},
+    {icon:'⛪',name:'성역',key:'E · 18초',types:['def','summon','cc'],desc:'1.5 radpx 성역 2초: 적을 밀어내고 투사체 차단. 안의 나는 피해를 받지 않음.'},
     {icon:'🏛️',name:'정화',key:'R · 25초',types:['magic','summon','heal'],desc:'0.5 radpx 기둥, 0.2초 뒤 1.5 radpx로 확장: 적 0.1초마다 50 피해, 나 20 회복+정화.'}]},
-   {tag:'악마',img:'devilForm.png',stats:{hp:1300,atk:180},rng:'4 radpx (원거리)',skills:[
+   {tag:'악마',img:'devilForm.png',as:1,stats:{hp:1300,atk:180},rng:'4 radpx (원거리)',skills:[
     {icon:'🎯',name:'낙인',key:'패시브',types:['debuff'],desc:'마지막 공격 대상에 2.5초 낙인: 받는 피해 +10%, 방어 효과 -20%. 최대 1명.'},
     {icon:'💣',name:'화염탄',key:'Q · 10초',types:['phys','cc'],desc:'벽까지 직진: 적중 시 1초 띄움, 닿는 동안 0.5초마다 50 피해.'},
     {icon:'🩸',name:'흡수',key:'E · 14초',types:['pierce','heal'],desc:'낙인 대상에 현재 체력의 25% 피해, 피해의 60% 회복. 낙인 제거.'},
-    {icon:'😈',name:'해방',key:'R · 25초',types:['buff'],desc:'10초간 이속 +20%, 공속 0.7초, 낙인 15%·3명, 흡수 85%·4초, 화염탄 4초+소형탄 2발.'}]}]},
+    {icon:'😈',name:'해방',key:'R · 25초',types:['buff'],desc:'10초간 이속 +20%, 공속 0.8초, 낙인 15%·3명, 흡수 85%·4초, 화염탄 4초+소형탄 2발.'}]}]},
 {id:'Gambler',ko:'도박사',img:'gambler.png',stats:{hp:1000,atk:180},rng:'4 radpx (원거리)',
   style:'리볼버 한 자루에 목숨을 거는 원거리 딜러. 실탄과 공포탄이 섞인 약실을 읽고 뒤집으며 승부수를 던집니다.',
   skills:[
@@ -468,22 +468,22 @@ const CHARS=[
   skills:[
    {icon:'🌀',name:'오라',key:'패시브',types:['magic','cc'],desc:'일반 공격 4번마다 다음 일반 공격이 180 마법 피해로 강화되고 적을 1 radpx 밀어냅니다.'},
    {icon:'🌙',name:'검기',key:'Q · 12초',types:['phys'],desc:'반경 1.5 radpx 원형 검기를 빠르게 발사: 200 + 현재 체력 15% 피해.'},
-   {icon:'💾',name:'세이브',key:'E · 4초',types:['util'],desc:'직전의 일반 공격/검기를 현재 위치·방향으로 50% 피해로 재시전. 오라 공격이면 1 radpx 넉백, 일반 공격 재시전 시 바라보는 방향으로 2 radpx 돌진.'},
+   {icon:'💾',name:'세이브',key:'E · 쿨타임 없음',types:['util'],desc:'직전의 일반 공격/검기를 현재 위치·방향으로 50% 피해로 재시전. 오라 공격이면 1 radpx 넉백, 일반 공격 재시전 시 바라보는 방향으로 2 radpx 돌진.'},
    {icon:'✨',name:'각성',key:'R · 25초',types:['buff'],desc:'10초간 오라 필요 횟수 4→2, 세이브 쿨타임 1초, 재시전 피해 80%.'}]},
-{id:'Tower',ko:'타워',img:'tower.png',stats:{hp:2500,atk:150},rng:'근접 (공격 속도 2.5초)',
+{id:'Tower',ko:'타워',img:'tower.png',stats:{hp:2500,atk:150},rng:'근접',
   style:'덩치 큰 요새. 용병을 끊임없이 소환해 전선을 만들고, 포격으로 한 번에 쓸어버립니다.',
   skills:[
-   {icon:'🏹',name:'용병',key:'패시브',types:['summon'],desc:'5초마다 보병 또는 궁수를 무작위로 1기 소환. (보병 HP 800·공격 100 / 궁수 HP 500·공격 120·사거리 4 radpx)'},
+   {icon:'🏹',name:'용병',key:'패시브',types:['summon'],desc:'8초마다 보병 또는 궁수를 무작위로 1기 소환. (보병 HP 800·공격 100 / 궁수 HP 500·공격 120·사거리 4 radpx)'},
    {icon:'💣',name:'포격',key:'Q · 10초',types:['phys'],desc:'마우스 위치로 포탄 발사: 반경 1.5 radpx 안의 모든 적에게 220 물리 피해.'},
    {icon:'🔧',name:'수리',key:'E · 15초',types:['heal','summon'],desc:'잃은 체력의 20%를 회복하고 보병 1기를 즉시 소환합니다.'},
-   {icon:'🛡️',name:'항전',key:'R · 25초',types:['buff'],desc:'10초간 일반 공격마다 화살 2발(각 150 단일 물리, 사거리 4 radpx) 추가 발사, 용병 소환 주기 2초.'}]},
-{id:'Financier',ko:'금융업자',img:'financier.png',stats:{hp:1000,atk:90},rng:'1 radpx (근접)',
+   {icon:'🛡️',name:'항전',key:'R · 25초',types:['buff'],desc:'10초간 일반 공격마다 화살 2발(각 150 단일 물리, 사거리 4 radpx) 추가 발사, 용병 소환 주기 3초.'}]},
+{id:'Financier',ko:'금융인',img:'financier.png',stats:{hp:1000,atk:90},rng:'1 radpx (근접)',
   style:'시간이 지날수록 불어나는 복리형 근접 딜러. 상대에게 투자해 수익을 거두고, 보험과 예금으로 체력을 굴립니다.',
   skills:[
    {icon:'💰',name:'적금',key:'패시브',types:['buff'],desc:'5초마다 최대 체력·현재 체력·공격력이 2%씩 복리로 증가합니다.'},
    {icon:'📈',name:'주식',key:'Q · 0.5초',types:['buff'],desc:'커서 아래 적에게 \'구매\'(체력 100 소모). 다시 사용하면 매각: 손익률만큼 체력(100×(100+손익)%)과 공격력 증가. 손익 = (대상이 준 피해 + 체력 변화)/100.'},
    {icon:'🛡️',name:'보험',key:'E · 15초',types:['heal'],desc:'체력 200 초과 시 사용. 체력 200 소모 후 2초간 받은 피해를 모아 종료 시 모두 회복.'},
-   {icon:'🏦',name:'정기예금',key:'R · 25초',types:['heal','buff'],desc:'10초간 매초 체력 70 차감. 만기 시 최대 체력 +20%, 체력 1200 회복, 공격력 +10%.'}]},
+   {icon:'🏦',name:'정기적금',key:'R · 25초',types:['heal','buff'],desc:'10초간 매초 체력 70 차감. 만기 시 최대 체력 +20%, 체력 1000 회복, 공격력 +10%.'}]},
  ...new Array(10).fill(null)
 ];
 const csScreen=document.getElementById('csScreen'),csBox=document.getElementById('csBox');
@@ -522,7 +522,7 @@ function csRender(){
  const c0=CHARS[csSel],c=c0&&c0.forms?Object.assign({},c0,c0.forms[csForm%c0.forms.length]):c0;
  csImg.style.cursor=c0&&c0.forms?'pointer':'';csImg.style.display=c?'block':'none';csQ.style.display=c?'none':'block';if(c){csImg.src=c.id==='Tower'?towerPrev():c.img;csImg.style.height=c.id==='Tower'?'100%':''}
  csNmL.textContent=c?c.id+(c.ko?' / '+c.ko:'')+(c0.forms?' ['+c.tag+']':''):'???';
- csNmR.textContent=c&&c.stats?'HP '+c.stats.hp+'   ATK '+c.stats.atk+'\n사거리 '+c.rng:'HP ?   ATK ?\n사거리 ?';
+ csNmR.textContent=c&&c.stats?'HP '+c.stats.hp+'   ATK '+c.stats.atk+'\n공속 '+(c.as||(ATK_CD[c.id]||0)/1000)+'초\n사거리 '+c.rng:'HP ?   ATK ?\n공속 ?\n사거리 ?';
  const sk=(c&&c.skills)||[0,1,2,3].map(()=>({icon:'❔',name:'???',key:'',desc:c?'상세 정보 준비 중입니다.':'잠긴 캐릭터입니다.'}));
  csRows.forEach((r,i)=>{const k=sk[i];r.ic.textContent=k.icon;r.nm.textContent=k.name;r.ky.textContent=k.key;r.ds.textContent=k.desc;r.ds.title=k.desc;r.tp.textContent='';(k.types||[]).forEach(t=>{const e=document.createElement('em'),T=SKILL_TYPES[t];e.textContent=T[0];e.title=T[1];e.className='t-'+t;r.tp.appendChild(e)})});
  csStyleEl.textContent=c?(c.style||'직업 정보 준비 중입니다.'):'잠겨 있는 칸입니다.';
