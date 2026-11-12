@@ -132,7 +132,7 @@ const ATK = { range: 1 * RADPX, span: 100 * RAD };
 const SM = {
   atk: { need: 4, needAwk: 2, auraDmg: 180, kb: 1 * RADPX, kbMs: 250 },
   Q: { cd: 12000, dmg: 100, pct: 0.15, spd: 1500, range: 6 * RADPX, radius: 1.5 * RADPX },
-  E: { cd: 4000, cdAwk: 1000, mult: 0.5, multAwk: 0.8, dash: 2 * RADPX, dashMs: 200, dashDir: 1, delayMs: 500 },
+  E: { cd: 0, cdAwk: 0, mult: 0.5, multAwk: 0.8, dash: 2 * RADPX, dashMs: 200, dashDir: 1, delayMs: 500 },
   R: { cd: 25000, dur: 10000 }
 };
 const KNIGHT = {
@@ -155,27 +155,27 @@ const ASSASSIN = {
 };
 const GUMIHO = {
   atk: { range: 3.5 * RADPX, speed: 1020, radius: 30 },
-  fire: { chance: 0.65, max: 5, pick: 55, lift: 25 },
+  fire: { chance: 0.70, max: 5, pick: 55, lift: 25 },
   eff: { dmg: 120, ms: 2000, radius: 2 * RADPX },
   Q: { cd: 8000 },
-  E: { cd: 12000, pullMs: 500, dmg: 120, rad: 0.5 * RADPX },
-  R: { cd: 25000, radius: 2.5 * RADPX, ms: 3000, speed: 0.8, stop: 45 }
+  E: { cd: 12000, pullMs: 500, dmg: 120, rad: 0.75 * RADPX },
+  R: { cd: 25000, radius: 2.5 * RADPX, ms: 2500, speed: 0.8, stop: 45 }
 };
 const BURN = { tick: 35, tickMs: 1000 };
 const LUC = {
-  base: { hp: 1200, dmg: 150, atkCd: 900, range: 3.5 * RADPX, spd: 900, radius: 0.3 * RADPX },
-  angel: { hp: 1200, dmg: 130, atkCd: 800, range: 3 * RADPX, spd: 900, radius: 0.3 * RADPX },
+  base: { hp: 1300, dmg: 150, atkCd: 900, range: 4 * RADPX, spd: 900, radius: 0.3 * RADPX },
+  angel: { hp: 1300, dmg: 130, atkCd: 800, range: 3 * RADPX, spd: 900, radius: 0.3 * RADPX },
   devil: { hp: 1300, dmg: 180, atkCd: 1000, range: 4 * RADPX, spd: 900, radius: 0.3 * RADPX },
   G: { cd: 30000, atkCut: 1000, skillCut: 1500, afterCd: 5000 },
   Q: { cd: 10000, range: 3 * RADPX, dmg: 270, spd: 800, radius: 0.3 * RADPX, sc: 1.6 },
   E: { cd: 10000, range: 3 * RADPX, dmg: 120, spd: 800, radius: 0.3 * RADPX, sc: 1.6, burnMs: 4000 },
   beam: { cd: 15000, ms: 1500, tickMs: 100, dmg: 30, heal: 10, half: 50, pad: 400 },
-  sanct: { cd: 18000, ms: 3000, r: 1.5 * RADPX },
+  sanct: { cd: 18000, ms: 2000, r: 1.5 * RADPX },
   pure: { cd: 25000, r0: 0.5 * RADPX, r1: 1.5 * RADPX, delay: 200, ms: 1700, tickMs: 100, dmg: 50, heal: 20 },
   mark: { ms: 2500, amp: 0.1, ampLib: 0.15, defCut: 0.2, max: 1, maxLib: 3 },
   bomb: { cd: 10000, libCd: 4000, spd: 380, r: RADPX, dmg: 50, tickMs: 500, lift: 1000, small: { r: 0.7 * RADPX, dmg: 25, fan: 20 * RAD } },
   absorb: { cd: 14000, libCd: 4000, pct: 0.25, heal: 0.6, healLib: 0.85 },
-  lib: { cd: 25000, ms: 10000, speed: 1.2, atkCd: 700 }
+  lib: { cd: 25000, ms: 10000, speed: 1.2, atkCd: 800 }
 };
 const ANGEL = { regen: 20 };
 const GAMBLER = {
@@ -659,7 +659,7 @@ function devilMark(p, t, now) {
 }
 function lucTransform(p, form, now) {
   p.lf = form; p.lPend = false;
-  p.mh = statsOf(p).hp; p.hp = p.mh;
+  p.mh = statsOf(p).hp; heal(p, 300);
   cleanse(p); p.beam = p.pure = null;
   p.cdQ = p.cdE = p.cdR = 0;
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
@@ -831,7 +831,7 @@ const FIN = {
   passive: { ms: 5000, mul: 1.02 },
   Q: { cd: 500, cost: 100, pick: 48 },
   E: { cd: 15000, min: 200, cost: 200, ms: 2000 },
-  R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1200, atkMul: 1.1 }
+  R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1000, atkMul: 1.1 }
 };
 const stockPL = (f, t) => (f.buyDealt + (t.hp - f.buyHp0)) / 100;
 function stockClear(p) { if (p.buy) send(p.ws, { t: 'stk', id: 0 }); p.buy = 0; }
@@ -884,13 +884,13 @@ function financierSkill(p, k, m, now) {
   } else {
     cd(FIN.R.cd); p.depUntil = now + FIN.R.ms; p.depNext = now + 1000;
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.3 * RADPX, c: '#ffd66b', dur: 600 });
-    fxTxt(p.x, p.y - 30, '🏦 정기예금', '#ffe08a');
+    fxTxt(p.x, p.y - 30, '🏦 정기적금', '#ffe08a');
   }
 }
 // ---- Tower ----
 const TOWER = {
   hr: 36, maxUnits: 12,
-  merc: { ms: 5000, msAwk: 2000 },
+  merc: { ms: 8000, msAwk: 3000 },
   Q: { cd: 10000, dmg: 220, radius: 1.5 * RADPX, speed: 800 },
   E: { cd: 15000, heal: 0.2 },
   R: { cd: 25000, dur: 10000, dmg: 150, range: 4 * RADPX, gap: 22 },
