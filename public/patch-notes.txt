@@ -4,29 +4,29 @@
 
 - Display each character's attack speed in the character selection panel. 🔄
 
-### 구미호
+구미호
 - P [여우불]: Foxfire summon probability | 75% → 70% 🔽
 - E [미수옥]: AoE radius increase | 0.5 radpx → 0.75 radpx 🔼
 - R [매혹]: Duration | 3s → 2.5s 🔽
 
-### 루시퍼
+루시퍼
 - HP: 1200 → 1300
 - Attack Range: 3.5 radpx → 4 radpx 🔼
 - R [선악]: Restore all HP → Restore 300 HP 🔽
 
-### 루시퍼(천사 폼)
+루시퍼(천사 폼)
 - HP: 1200 → 1300 🔼
 - E [성역]: Duration | 3s → 2s 🔽
 
-### 루시퍼(악마 폼)
+루시퍼(악마 폼)
 - R [해방]: Attack Speed Buff Duration | 0.7s → 0.8s 🔽
 
-### 소드 마스터
+소드 마스터
 - E [세이브]: Remove the interval between activations. 🔼
 
-### 타워
+타워
 - P [용병]: Mercenary Summon Cooldown | 5s → 8s 🔽
 - R [항전]: Mercenary Summon Cooldown Buff | 2s → 3s 🔽
 
-### 금융인
+금융인
 - R [정기적금]: Healing Amount | 1200 → 1000 HP 🔽
