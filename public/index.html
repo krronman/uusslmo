@@ -175,7 +175,7 @@ const MAPS=['bg.jpg','map2.png'],bgs=MAPS.map(f=>{const i=new Image();i.src=f;re
 const spImg=new Image(); spImg.src='player.png';
 const swordImg=new Image();swordImg.src='sword.png';
 const towerImg=new Image(),tInfImg=new Image(),tArcImg=new Image(),cbImg=new Image();towerImg.src='tower.png';tInfImg.src='towerinfantry.png';const stkImg=new Image();stkImg.src='stock.png';tArcImg.src='towerarcher.png';cbImg.src='cannonball.png';
-const smSlashImg=new Image(),smQImg=new Image(),smSwordImg=new Image();smSlashImg.src='swordmaster_normalattack.png';smQImg.src='swordmaster_Qskill.png';smSwordImg.src='swordMasterSword.png';
+const smSlashImg=new Image(),smQImg=new Image(),smSwordImg=new Image();smSlashImg.src='swordmaster_normalattack.png';smQImg.src='swordmaster_Qskill.png';smSwordImg.src='swordMasterSword.png';const smAuraSwordImg=new Image();smAuraSwordImg.src='swordmasterAuraSword.png';
 const kshImg=new Image();kshImg.src='knightshield.png';
 const arrowImg=new Image();arrowImg.src='arrow.png';
 const bowImg=new Image();bowImg.src='bow.png';
@@ -624,7 +624,7 @@ function drawSword(o,h,lift){
  ctx.restore();
 }
 function drawSMSword(o,h,lift){
- if(!imOk(smSwordImg))return;
+ const swImg=o.sa&&imOk(smAuraSwordImg)?smAuraSwordImg:smSwordImg;if(!imOk(swImg))return;
  const now=performance.now(),sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,cx=o.x,cy=o.y-h*.5-lift,S=3.6;
  ctx.save();
  if(o.sa||o.sk){ctx.shadowColor=o.sk?'#ff9ad5':'#9fe8ff';ctx.shadowBlur=o.sk?22:18}
@@ -635,7 +635,7 @@ function drawSMSword(o,h,lift){
   const side=o.face,bob=Math.sin(now/260+o.x*.05)*3+(o.moving?Math.sin(o.phase*2)*2:0);
   ctx.translate(cx+side*30,cy+8+bob);if(side<0)ctx.scale(-1,1);ctx.rotate(.1);
  }
- ctx.drawImage(smSwordImg,0,0,15,15,-2*S,-12.5*S,15*S,15*S);ctx.restore();
+ ctx.drawImage(swImg,0,0,15,15,-2*S,-12.5*S,15*S,15*S);ctx.restore();
 }
 function drawSMSlash(f,k){
  if(!imOk(smSlashImg))return;
