@@ -116,7 +116,7 @@ const CLASS_STATS = {
   Gumiho: { hp: 1100, dmg: 130, reduce: 0, atkCd: 700 },
   Gambler: { hp: 1000, dmg: 180, reduce: 0, atkCd: 600 },
   SwordMaster: { hp: 1200, dmg: 160, reduce: 0, atkCd: 600 },
-  Tower: { hp: 2500, dmg: 150, reduce: 0, atkCd: 2500 }
+  Tower: { hp: 2500, dmg: 100, reduce: 0, atkCd: 2000 }
 };
 const statsOf = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : CLASS_STATS[p.cls] || BASE;
 const RADPX = 112.5;
@@ -132,7 +132,7 @@ const ATK = { range: 1 * RADPX, span: 100 * RAD };
 const SM = {
   atk: { need: 4, needAwk: 2, auraDmg: 180, kb: 1 * RADPX, kbMs: 250 },
   Q: { cd: 12000, dmg: 100, pct: 0.15, spd: 1500, range: 6 * RADPX, radius: 1.5 * RADPX },
-  E: { cd: 0, cdAwk: 0, mult: 0.5, multAwk: 0.8, dash: 2 * RADPX, dashMs: 200, dashDir: 1, delayMs: 500 },
+  E: { cd: 0, cdAwk: 0, mult: 0.5, multAwk: 0.8, dash: 2 * RADPX, dashMs: 200, dashDir: 1 },
   R: { cd: 25000, dur: 10000 }
 };
 const KNIGHT = {
@@ -149,16 +149,16 @@ const SHIELDER = {
 };
 
 const ASSASSIN = {
-  Q: { cd: 10000, range: 2 * RADPX, width: 45, dmg: 250, markMs: 3000, mark: 0.2 },
+  Q: { cd: 8000, range: 2 * RADPX, width: 45, dmg: 250, markMs: 3000, mark: 0.2 },
   E: { cd: 10000, dur: 2500, speed: 1.15 },
-  R: { cd: 25000, radius: RADPX, dmg: 250, asMs: 3000, as: 0.1, asPerHit: 0.1 }
+  R: { cd: 25000, radius: RADPX, dmg: 250 }
 };
 const GUMIHO = {
   atk: { range: 3.5 * RADPX, speed: 1020, radius: 30 },
   fire: { chance: 0.70, max: 5, pick: 55, lift: 25 },
   eff: { dmg: 120, ms: 2000, radius: 2 * RADPX },
   Q: { cd: 8000 },
-  E: { cd: 12000, pullMs: 500, dmg: 120, rad: 0.75 * RADPX },
+  E: { cd: 12000, pullMs: 500, dmg: 120, rad: 0.6 * RADPX },
   R: { cd: 25000, radius: 2.5 * RADPX, ms: 2500, speed: 0.8, stop: 45 }
 };
 const BURN = { tick: 35, tickMs: 1000 };
@@ -556,7 +556,7 @@ function assassinSkill(p, k, m, now) {
       if (Math.hypot(tp.x - tx, (tp.y - ty) / 0.8) > S.radius) continue;
       dmgTo(t, S.dmg, now, { x: tx, y: ty, by: p }); n++;
     }
-    p.asUntil = now + S.asMs; p.asBonus = S.as + S.asPerHit * n;
+    if (n > 0) { p.cdQ = 0; send(p.ws, { t: 'cd', k: 'Q', ms: 0 }); }
   }
   checkRoundEnd();
 }
@@ -894,8 +894,8 @@ const TOWER = {
   Q: { cd: 10000, dmg: 220, radius: 1.5 * RADPX, speed: 800 },
   E: { cd: 15000, heal: 0.2 },
   R: { cd: 25000, dur: 10000, dmg: 150, range: 4 * RADPX, gap: 22 },
-  INF: { hp: 800, dmg: 100, atkCd: 700, speed: SPEED * 0.8, range: 1 * RADPX },
-  ARC: { hp: 500, dmg: 120, atkCd: 1000, speed: SPEED * 0.7, range: 4 * RADPX, keep: 2.4 * RADPX },
+  INF: { hp: 400, dmg: 50, atkCd: 700, speed: SPEED * 0.8, range: 1 * RADPX },
+  ARC: { hp: 250, dmg: 60, atkCd: 1000, speed: SPEED * 0.7, range: 3 * RADPX, keep: 2.4 * RADPX },
   aggro: 6 * RADPX
 };
 function spawnUnit(p, type, now) {
@@ -1048,18 +1048,15 @@ function swordmasterSkill(p, k, m, now) {
     const mult = awk ? SM.E.multAwk : SM.E.mult;
     cd('E', awk ? SM.E.cdAwk : SM.E.cd);
     broadcast({ t: 'fx', type: 'ring', x: o.x, y: o.y, r: 0.7 * RADPX, c: '#8fe3ff', dur: 450 });
-    setTimeout(() => {
-      if (p.role !== 1 || phase !== 'round') return;
-      const n = Date.now(), o2 = { x: p.x, y: p.y };
-      if (L.k === 'Q') smCastQ(p, o2, 0, n, mult);
-      else {
-        smStrike(p, o2, 0, n, L.aura, mult);
-        if (L.aura) {
-          const v = SM.E.dash / (SM.E.dashMs / 1000) * SM.E.dashDir;
-          p.kbUntil = n + SM.E.dashMs; p.kbx = Math.cos(p.aim) * v; p.kby = Math.sin(p.aim) * v;
-        }
+    const o2 = { x: p.x, y: p.y };
+    if (L.k === 'Q') smCastQ(p, o2, 0, now, mult);
+    else {
+      smStrike(p, o2, 0, now, L.aura, mult);
+      if (L.aura) {
+        const v = SM.E.dash / (SM.E.dashMs / 1000) * SM.E.dashDir;
+        p.kbUntil = now + SM.E.dashMs; p.kbx = Math.cos(p.aim) * v; p.kby = Math.sin(p.aim) * v;
       }
-    }, SM.E.delayMs);
+    }
   } else {
     cd('R', SM.R.cd); p.smAwkUntil = now + SM.R.dur;
     if (p.smN >= SM.atk.needAwk && !p.smAura) { p.smAura = true; p.smN = 0; }
