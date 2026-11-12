@@ -1,32 +1,31 @@
 밸런스 패치🔼🔽🔄
 
-# Balance Patch 1.11
+밸패 1.12
 
-- Display each character's attack speed in the character selection panel. 🔄
+-타워 공격이 자신에게 보이지 않음 현상 수정 🔄
 
-구미호
-- P [여우불]: Foxfire summon probability | 75% → 70% 🔽
-- E [미수옥]: AoE radius increase | 0.5 radpx → 0.75 radpx 🔼
-- R [매혹]: Duration | 3s → 2.5s 🔽
+-구미호
 
-루시퍼
-- HP: 1200 → 1300
-- Attack Range: 3.5 radpx → 4 radpx 🔼
-- R [선악]: Restore all HP → Restore 300 HP 🔽
+-E[미수옥] : 범위 증가량 | 0.75 radpx -> 0.6 radpx 🔽
 
-루시퍼(천사 폼)
-- HP: 1200 → 1300 🔼
-- E [성역]: Duration | 3s → 2s 🔽
+-암살자
 
-루시퍼(악마 폼)
-- R [해방]: Attack Speed Buff Duration | 0.7s → 0.8s 🔽
+-Q[소드 샤우트] : 쿨타임 10초 -> 8초 🔼
 
-소드 마스터
-- E [세이브]: Remove the interval between activations. 🔼
+-R[암살] : 3초간 공격속도 증가 제거, 대신 적중 시 Q스킬 쿨타임 즉시 충전  🔽
 
-타워
-- P [용병]: Mercenary Summon Cooldown | 5s → 8s 🔽
-- R [항전]: Mercenary Summon Cooldown Buff | 2s → 3s 🔽
+-소드 마스터
 
-금융인
-- R [정기적금]: Healing Amount | 1200 → 1000 HP 🔽
+-E[세이브] : 재시전 시간의 텀을 없애기(E스킬 사용 즉시 이전 공격 재시전) 🔼
+
+-타워
+
+-공격력 : 150 -> 100 🔽
+
+-공격속도 : 2.5초 -> 2초 🔼
+
+-P[용병]
+
+보병 | HP : 800 -> 400, 공격력 : 100 -> 50 🔽
+
+궁병 | HP : 500 -> 250, 공격력 : 120 -> 60, 사거리 : 4 radpx -> 3 radpx 🔽
