@@ -211,7 +211,7 @@ const ATKR = 0.5 * RADPX;
 const ARCHER = {
   charge: { maxMs: 2000, min: 0.5, max: 1.5 },
   Q: { cd: 11000, arrows: 7, step: 10 * RAD, dmg: 130, invis: 1500 },
-  E: { cd: 15000, dur: 4000, chargeMul: 0.3 },
+  E: { cd: 15000, dur: 4000, chargeMul: 0 },
   R: { cd: 25000, dmg: 380, stun: 1000, scale: 8, radius: 90 }
 };
 const ATK = { range: 1 * RADPX, span: 100 * RAD };
@@ -471,12 +471,12 @@ function inConeAt(ox, oy, aim, tx, ty, range, span, ext = 0) {
 }
 const canAct = (p, now) => p.joined && p.role !== 2 && now >= p.stunUntil && now >= p.charmUntil && now >= (p.reloadUntil || 0);
 
-const chargeMax = (p, now) => ARCHER.charge.maxMs * (now < p.hasteUntil ? ARCHER.E.chargeMul : 1);
+const chargeMax = (p, now) => Math.max(1, ARCHER.charge.maxMs * (now < p.hasteUntil ? ARCHER.E.chargeMul : 1));
 function archerAttack(p, m, now) {
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m), C = ARCHER.charge;
   let f = 1;
   if (!p.chargeStart) return;
-  const em = chargeMax(p, now), ch = Math.min(now - p.chargeStart, em);
+  const em = chargeMax(p, now), ch = Math.min(Math.max(now - p.chargeStart, 1), em);
   f = C.min + (C.max - C.min) * ch / em;
   p.chargeStart = 0;
   if (now < p.atkReady - 60) return;
@@ -935,7 +935,7 @@ function luciferSkill(p, k, m, now) {
 }
 // ---- Financier ----
 const FIN = {
-  passive: { ms: 5000, mul: 1.02 },
+  passive: { ms: 5000, mul: 1.03 },
   Q: { cd: 500, cost: 100, pick: 48 },
   E: { cd: 15000, min: 200, cost: 200, ms: 2000 },
   R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1000, atkMul: 1.1 }
@@ -1240,7 +1240,6 @@ function gamblerSkill(p, k, m, now) {
   } else {
     if (phase !== 'round') return;
     cd(G.R.cd);
-    loadRevolver(p);
     p.cdE = 0; send(p.ws, { t: 'cd', k: 'E', ms: 0 });
     p.myTurn = true;
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: RADPX, c: '#ff4b4b', dur: 700 });
@@ -1253,7 +1252,7 @@ const CEL = {
   cap: 300, store: 0.4, heal: 0.1,
   Q: { cd: 5000, r: 2 * RADPX, delay: 1000, dmg: 400, back: 0.2 },
   E: { cd: 1000 },
-  R: { cd: 25000, delay: 600, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.3, burstR: RADPX, burst: 300 }
+  R: { cd: 25000, delay: 600, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.5, burstR: RADPX, burst: 300 }
 };
 function celestialAttack(p, m, now) {
   if (now < p.atkReady) return;
