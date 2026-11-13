@@ -1273,7 +1273,7 @@ const GCOPY = [
   { cls: 'SwordMaster', k: 'Q', n: '검기' }, { cls: 'SwordMaster', k: 'E', n: '세이브' },
   { cls: 'Tower', k: 'Q', n: '포격' }, { cls: 'Tower', k: 'E', n: '수리' },
   { cls: 'Financier', k: 'E', n: '보험' },
-  { cls: 'Celestial', k: 'Q', n: '행성 폭발' }, { cls: 'Celestial', k: 'E', n: '화이트홀' }
+  { cls: 'Celestial', k: 'Q', n: '행성 폭발' }
 ];
 function randTint() {
   const h = Math.random() * 360, s = 0.85, l = 0.55, a = s * Math.min(l, 1 - l);
