@@ -24,14 +24,17 @@ const server = http.createServer((req, res) => {
   });
 });
 
-const wss = new WebSocketServer({ server, maxPayload: 1024 });
+const wss = new WebSocketServer({ server, maxPayload: 1024, perMessageDeflate: false });
 const players = new Map();
 let nextId = 1;
 
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
-const send = (ws, o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+let outN = 0, curSk = null;
+const send = (ws, o) => { if (o && o.t === 'cd') outN++; return ws && ws.readyState === 1 && ws.send(JSON.stringify(o)); };
 let curTint = null;
-const broadcast = o => { if (curTint && (o.t === 'fx' || o.t === 'arrow') && !o.tint) o.tint = curTint; const m = JSON.stringify(o); for (const p of players.values()) if (p.ws.readyState === 1) p.ws.send(m); };
+const STATE_BUF = 64 * 1024;
+const sendState = (ws, msg) => { if (ws.readyState === 1 && ws.bufferedAmount < STATE_BUF) ws.send(msg); };
+const broadcast = o => { outN++; if (curSk && (o.t === 'fx' || o.t === 'arrow')) { o.sp = curSk.p; o.sq = curSk.q; } if (curTint && (o.t === 'fx' || o.t === 'arrow') && !o.tint) o.tint = curTint; const m = JSON.stringify(o); for (const p of players.values()) if (p.ws.readyState === 1) p.ws.send(m); };
 
 const CHAT_TTL = 10 * 60 * 1000;
 const ROUND_MS = 4 * 60 * 1000;
@@ -438,7 +441,19 @@ function doAttack(p, m) {
   }
   checkRoundEnd();
 }
+const predCfg = () => ({
+  Celestial: { Q: { cd: CEL.Q.cd, r: CEL.Q.r, fall: CEL.Q.delay }, E: { cd: CEL.E.cd, r: 1.1 * RADPX }, R: { cd: CEL.R.cd, r: CEL.R.r, fall: CEL.R.delay, ms: CEL.R.ms } },
+  Knight: { Q: { cd: KNIGHT.Q.cd, span: KNIGHT.Q.span, r: KNIGHT.Q.range } },
+  Shielder: { Q: { cd: SHIELDER.Q.cd, r: SHIELDER.Q.radius } },
+  Archer: { Q: { cd: ARCHER.Q.cd, n: ARCHER.Q.arrows, step: ARCHER.Q.step, spd: ARROW.speed, range: ARROW.range } }
+});
 function doSkill(p, k, m) {
+  const q = m && Number.isInteger(m.q) && m.q > 0 && m.q < 1e9 ? m.q : 0, n0 = outN, prev = curSk;
+  curSk = q ? { p: p.id, q } : null;
+  try { runSkill(p, k, m); } finally { curSk = prev; }
+  if (q) send(p.ws, { t: 'ack', q, ok: outN !== n0 ? 1 : 0 });
+}
+function runSkill(p, k, m) {
   const now = Date.now();
   if (!['Q', 'E', 'R'].includes(k) || !canAct(p, now)) return;
   if (now < p['cd' + k]) return;
@@ -1170,7 +1185,7 @@ const CEL = {
   cap: 300, store: 0.4, heal: 0.1,
   Q: { cd: 5000, r: 2 * RADPX, delay: 1000, dmg: 400, back: 0.2 },
   E: { cd: 1000 },
-  R: { cd: 25000, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.3, burstR: RADPX, burst: 300 }
+  R: { cd: 25000, delay: 600, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.3, burstR: RADPX, burst: 300 }
 };
 function celestialAttack(p, m, now) {
   if (now < p.atkReady) return;
@@ -1198,10 +1213,10 @@ function celestialSkill(p, k, m, now) {
   p['cd' + k] = now + S.cd; send(p.ws, { t: 'cd', k, ms: S.cd });
   if (k === 'Q') {
     planets.push({ owner: p.id, x: o.x, y: o.y, at: now + S.delay, tint: curTint });
-    broadcast({ t: 'fx', type: 'disc', x: o.x, y: o.y, r: S.r, c: 'rgba(150,120,255,.3)', s: '#b69cff', dur: S.delay });
+    broadcast({ t: 'fx', type: 'planet', x: o.x, y: o.y, r: S.r, fall: S.delay, dur: S.delay + 260 });
   } else {
-    galaxies.push({ owner: p.id, x: o.x, y: o.y, until: now + S.ms, next: now + S.tickMs, tint: curTint });
-    broadcast({ t: 'fx', type: 'disc', x: o.x, y: o.y, r: S.r, c: 'rgba(90,60,200,.25)', s: '#7a5cff', dur: S.ms });
+    galaxies.push({ owner: p.id, x: o.x, y: o.y, start: now + S.delay, until: now + S.delay + S.ms, next: now + S.delay + S.tickMs, tint: curTint });
+    broadcast({ t: 'fx', type: 'galaxy', x: o.x, y: o.y, r: S.r, fall: S.delay, dur: S.delay + S.ms });
   }
 }
 function stepCelestial(dt, now) {
@@ -1228,6 +1243,7 @@ function stepCelestial(dt, now) {
   for (let i = galaxies.length - 1; i >= 0; i--) {
     const g = galaxies[i], own = players.get(g.owner), R = CEL.R;
     if (!own || own.role !== 1 || phase !== 'round') { galaxies.splice(i, 1); continue; }
+    if (now < g.start) continue;
     const live = targetsOf(own).filter(t => Math.hypot(t.x - g.x, (t.y - g.y) / 0.8) <= R.r + (t.hr || 0));
     for (const t of live) {
       const dx = g.x - t.x, dy = (g.y - t.y) / 0.8, d = Math.hypot(dx, dy);
@@ -1567,7 +1583,7 @@ wss.on('connection', (ws, req) => {
     hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, fires: [], qNext: false, pull: null, charmUntil: 0, charmBy: 0, burnUntil: 0, burnNext: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
   players.set(id, p);
   pruneChat();
-  send(ws, { t: 'hello', id, map: mapId, arena: { CX, CY, RX, RY } });
+  send(ws, { t: 'hello', id, map: mapId, arena: { CX, CY, RX, RY }, pred: predCfg() });
   send(ws, { t: 'history', log: chatLog.map(c => ({ name: c.name, text: c.text, sys: c.sys ? 1 : 0, age: Date.now() - c.ts })) });
 
   ws.on('pong', () => { p.alive = true; });
@@ -1718,12 +1734,12 @@ setInterval(() => {
   const ff = [];
   for (const p of players.values()) if (p.joined) for (const f of p.fires) ff.push({ id: f.id, o: p.id, x: Math.round(f.x), y: Math.round(f.y) });
   const head = { t: 'state', ph: phase, left: phase === 'round' ? Math.max(0, ROUND_MS - (now - roundStart)) : 0, ff };
-  if (!list.some(e => e.iv)) { broadcast(Object.assign(head, { p: list })); return; }
+  if (!list.some(e => e.iv)) { const msg = JSON.stringify(Object.assign(head, { p: list })); for (const q of players.values()) sendState(q.ws, msg); return; }
   const common = JSON.stringify(Object.assign({}, head, { p: hidden }));
   for (const q of players.values()) {
     if (q.ws.readyState !== 1) continue;
-    if (q.joined && now < q.invisUntil) q.ws.send(JSON.stringify(Object.assign({}, head, { p: hidden.map((e, i) => list[i].id === q.id ? list[i] : e) })));
-    else q.ws.send(common);
+    if (q.joined && now < q.invisUntil) sendState(q.ws, JSON.stringify(Object.assign({}, head, { p: hidden.map((e, i) => list[i].id === q.id ? list[i] : e) })));
+    else sendState(q.ws, common);
   }
 }, 1000 / TICK);
 
