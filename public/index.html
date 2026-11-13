@@ -175,6 +175,17 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #buyYes{left:15.6%;width:33.2%}#buyNo{left:51.4%;width:32.9%}
 #buyYes:hover,#buyNo:hover{background:rgba(255,255,255,.14)}
 #buyCap{position:absolute;left:0;right:0;top:89%;text-align:center;font:700 16px 'Galmuri11',system-ui,sans-serif;color:#fff;text-shadow:2px 2px 0 #0b0a24}
+#setBtn{position:fixed;right:12px;bottom:calc(176px + env(safe-area-inset-bottom,0px));width:72px;height:72px;padding:0;border:0;cursor:pointer;background:url(settings_gear_button_transparent.png) center/contain no-repeat;z-index:4;display:none}
+#setBtn:hover{filter:brightness(1.15)}
+#kbScreen{position:fixed;inset:0;background:rgba(10,12,30,.74);display:none;align-items:center;justify-content:center;z-index:7}
+#kbScreen[style*="flex"] #kbClose{display:block}
+#kbBox{width:min(380px,92vw);max-height:90vh;overflow:auto;box-sizing:border-box;padding:18px 20px;background:#1b1d40;border:4px solid #7b72e8;box-shadow:0 0 0 3px #0e0f26,inset 0 0 0 3px #2c2e66;border-radius:6px;font:14px/1.4 'Galmuri11','Press Start 2P',monospace;color:#e9e6ff}
+#kbBox h2{margin:0 0 10px;font:inherit;font-size:18px;color:#ffd66b;text-align:center}
+#kbList .r{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
+#kbList button{min-width:120px;padding:6px 8px;background:#0f1030;color:#fff;border:2px solid #5b55a8;border-radius:4px;font:inherit;cursor:pointer}
+#kbList button:hover{border-color:#ffd66b}
+#kbList button.cap{border-color:#ffd66b;color:#ffd66b}
+#kbMsg{min-height:20px;margin-top:10px;font-size:13px;line-height:1.3;color:#b9b3ff}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css" rel="stylesheet">
@@ -191,6 +202,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <div id="goldBar"><span id="goldTx">0</span></div>
 <button id="readyBtn">0/2</button>
 <button id="patchBtn" aria-label="patch notes"></button>
+<button id="setBtn" aria-label="settings"></button>
 <div id="chatLog"><div id="clHead"><span>💬 Chat</span><span id="clArrow">▾</span></div><div id="clBody"></div></div>
 <div id="skillbar"><div class="sk" data-k="Q"><b>Q</b><span>⚔️</span><i></i></div><div class="sk" data-k="E"><b>E</b><span>💨</span><i></i></div><div class="sk" data-k="R"><b>R</b><span>🗡️</span><i></i></div></div>
 <div id="stkHud"><div id="stkT"></div><canvas id="stkCv" width="220" height="96"></canvas></div>
@@ -214,6 +226,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <label for="gmAmt">금액</label><input id="gmAmt" class="admIn" style="width:100%" type="number" min="0" max="1000000000" step="1" placeholder="골드 금액" autocomplete="off">
 <div class="gmBtns"><button id="gmSet" class="admBtn" type="button">설정 (=)</button><button id="gmAdd" class="admBtn" type="button">지급 (+)</button></div>
 <div id="gmMsg"></div></div><button id="gmClose" class="xBtn" aria-label="close">✕</button></div>
+<div id="kbScreen"><div id="kbBox"><h2>키 설정</h2><div id="kbList"></div><div class="gmBtns"><button id="kbReset" class="admBtn">기본값으로 초기화</button></div><div id="kbMsg"></div></div><button id="kbClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="pnScreen"><div id="pnBox"><h2>밸런스 패치 노트</h2><div id="pnBody"></div></div><button id="pnClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="killLog"></div>
 <div id="banner"></div><div id="fade"></div><div id="toast"></div>
@@ -336,7 +349,7 @@ function connect(){
    mapBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'':'none';mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
    if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose();shopClose();skClose();gmClose()}
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
-   goldBar.style.display=(joined&&!obs)?'block':'none';goldBar.classList.toggle('adm',isAdmin);
+   setBtn.style.display=joined?'block':'none';goldBar.style.display=(joined&&!obs)?'block':'none';goldBar.classList.toggle('adm',isAdmin);
    if(obs){readyBtn.style.display=titleBtn.style.display=shopBtn.style.display=skinBtn.style.display=skillbar.style.display='none';shopClose();skClose();gmClose();classBtn.style.display='';logoutBtn.style.display='block'}
   }
   else if(m.t==='chat'){addLog(m.name,m.text,m.sys,0);if(m.id)bubbles.set(m.id,{text:m.text,until:performance.now()+4000})}
@@ -399,7 +412,17 @@ logoutBtn.onclick=()=>{const tk=lsGet();lsDel();joined=false;if(ws.readyState===
 connect();
 
 // ---- input ----
-const keys={},map={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',ArrowUp:'w',ArrowLeft:'a',ArrowDown:'s',ArrowRight:'d'};
+const keys={};
+// ---- key binding data ----
+let kbCap=null;
+const KB_DEF={up:'KeyW',left:'KeyA',down:'KeyS',right:'KeyD',atk:'KeyF',Q:'KeyQ',E:'KeyE',R:'KeyR',chat:'Enter'};
+const KB_NAME={up:'위로 이동',left:'왼쪽 이동',down:'아래로 이동',right:'오른쪽 이동',atk:'공격',Q:'Q 스킬',E:'E 스킬',R:'R 스킬',chat:'채팅'};
+const kb=Object.assign({},KB_DEF),KB_ARROW={ArrowUp:'w',ArrowLeft:'a',ArrowDown:'s',ArrowRight:'d'};
+try{const o=JSON.parse(localStorage.getItem('kb')||'{}');for(const a in KB_DEF)if(typeof o[a]==='string'&&o[a])kb[a]=o[a];if(new Set(Object.values(kb)).size<Object.keys(kb).length)Object.assign(kb,KB_DEF)}catch(e){}
+const mvOf=c=>c===kb.up?'w':c===kb.left?'a':c===kb.down?'s':c===kb.right?'d':KB_ARROW[c]&&!Object.values(kb).includes(c)?KB_ARROW[c]:null;
+const skOfKey=c=>c===kb.Q?'Q':c===kb.E?'E':c===kb.R?'R':null;
+const isChatKey=c=>c===kb.chat||(kb.chat==='Enter'&&c==='NumpadEnter');
+function kbLabel(c){if(c.startsWith('Key'))return c.slice(3);if(c.startsWith('Digit'))return c.slice(5);if(c.startsWith('Numpad'))return'Num'+c.slice(6);return({ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',ShiftLeft:'LShift',ShiftRight:'RShift',ControlLeft:'LCtrl',ControlRight:'RCtrl',AltLeft:'LAlt',AltRight:'RAlt',Backquote:'`',Minus:'-',Equal:'=',BracketLeft:'[',BracketRight:']',Backslash:'\\',Semicolon:';',Quote:"'",Comma:',',Period:'.',Slash:'/'})[c]||c}
 let chargeT0=0,hasteLocal=0;const CHARGE_MS=2000;
 let foxes=[],ghosts=[],toastT=0;
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>{el.style.display='none'},1500)}
@@ -418,24 +441,25 @@ function updateAim(o){
 function sendInput(){const dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0),k=dx+','+dy;
  if(k!==lastSent&&ws.readyState===1){lastSent=k;ws.send(JSON.stringify({t:'input',dx,dy,a:+myAim.toFixed(3)}))}}
 addEventListener('keydown',e=>{
+ if(kbCap)return;
  if(document.activeElement===chatEl){
   if(e.key==='Enter'){const t=chatEl.value.trim();if(t&&ws.readyState===1)ws.send(JSON.stringify({t:'chat',text:t}));chatEl.value='';chatEl.style.display='none';chatEl.blur()}
   else if(e.key==='Escape'){chatEl.style.display='none';chatEl.blur();closeAllWins()}
   return}
  if(anyWinOpen()){if(e.key==='Escape')closeAllWins();return}
  if(!joined||obs)return;
- if(e.key==='Enter'){chatEl.style.display='block';chatEl.focus();for(const k in keys)keys[k]=false;sendInput();cancelCharge();e.preventDefault();return}
+ if(isChatKey(e.code)){chatEl.style.display='block';chatEl.focus();for(const k in keys)keys[k]=false;sendInput();cancelCharge();e.preventDefault();return}
  if(!e.repeat){
-  if(e.code==='KeyF'){if(myCls==='Archer'){archerPress();return}
+  if(e.code===kb.atk){if(myCls==='Archer'){archerPress();return}
    tx(Object.assign({t:'atk',a:+myAim.toFixed(3)},atkInfo()));const n=performance.now();if(n>=atkLocal){atkLocal=n+(ATK_CD[myCls]||600)/(1+((others.get(myId)||{}).as||0));localAttack()}return}
-  if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyR'){if(myCls==='Gumiho'&&e.code==='KeyQ'&&foxes.some(f=>f.o===myId)&&!hoverFox()){toast('Q: 커서를 여우불 위에 올려 주세요');return}
-   if(myCls==='Gumiho'&&e.code==='KeyE'&&!foxes.some(f=>f.o===myId)){toast('끌어당길 여우불이 없습니다');return}
-   const sq=predictSkill(e.code.slice(3));
-   tx(Object.assign({t:'skill',k:e.code.slice(3),a:+myAim.toFixed(3)},atkInfo(),sq?{q:sq}:{},((e.code==='KeyR'&&myCls==='Assassin')||(e.code==='KeyQ'&&(myCls==='Gumiho'||myCls==='Tower'||myCls==='Financier'||myCls==='Gamer')))&&mouseOn?{cx:Math.round(mWx),cy:Math.round(mWy)}:{}));
-   if(e.code==='KeyE'&&myCls==='Archer'&&performance.now()>=skCd.E){const o=others.get(myId);if(o&&myRole!==2&&!(o.su>0)){hasteLocal=performance.now()+4000}}
+  const sk=skOfKey(e.code);if(sk){if(myCls==='Gumiho'&&sk==='Q'&&foxes.some(f=>f.o===myId)&&!hoverFox()){toast('Q: 커서를 여우불 위에 올려 주세요');return}
+   if(myCls==='Gumiho'&&sk==='E'&&!foxes.some(f=>f.o===myId)){toast('끌어당길 여우불이 없습니다');return}
+   const sq=predictSkill(sk);
+   tx(Object.assign({t:'skill',k:sk,a:+myAim.toFixed(3)},atkInfo(),sq?{q:sq}:{},((sk==='R'&&myCls==='Assassin')||(sk==='Q'&&(myCls==='Gumiho'||myCls==='Tower'||myCls==='Financier'||myCls==='Gamer')))&&mouseOn?{cx:Math.round(mWx),cy:Math.round(mWy)}:{}));
+   if(sk==='E'&&myCls==='Archer'&&performance.now()>=skCd.E){const o=others.get(myId);if(o&&myRole!==2&&!(o.su>0)){hasteLocal=performance.now()+4000}}
    return}}
- if(map[e.code]){keys[map[e.code]]=true;sendInput();e.preventDefault()}});
-addEventListener('keyup',e=>{if(e.code==='KeyF'&&chargeT0)archerRelease();if(map[e.code]){keys[map[e.code]]=false;sendInput()}});
+ const mv=mvOf(e.code);if(mv){keys[mv]=true;sendInput();e.preventDefault()}});
+addEventListener('keyup',e=>{if(e.code===kb.atk&&chargeT0)archerRelease();const mv=mvOf(e.code);if(mv){keys[mv]=false;sendInput()}});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;sendInput();cancelCharge()});
 const readyBtn=document.getElementById('readyBtn'),classBtn=document.getElementById('classBtn'),skillbar=document.getElementById('skillbar');
 const mapBtn=document.getElementById('mapBtn');mapBtn.onclick=()=>{tx({t:'map',id:(mapId+1)%MAPS.length});mapBtn.blur()};
@@ -493,7 +517,7 @@ function hasteOn(o){return !!o.hs||performance.now()<hasteLocal}
 function archerPress(){const o=others.get(myId),n=performance.now();
  if(!o||myRole===2||o.su>0||o.cm||n<atkLocal||chargeT0)return;
  chargeT0=n;tx({t:'charge'})}
-const chMax=o=>CHARGE_MS*(o&&hasteOn(o)?.3:1);
+const chMax=o=>Math.max(1,CHARGE_MS*(o&&hasteOn(o)?0:1));
 function archerRelease(){const o=others.get(myId),n=performance.now(),ch=Math.min(n-chargeT0,chMax(o)),em=chMax(o);chargeT0=0;
  if(!o||myRole===2||o.su>0)return;
  tx(Object.assign({t:'atk',a:+myAim.toFixed(3)},atkInfo()));atkLocal=n+ATK_CD.Archer;localArrow(.5+ch/em)}
@@ -516,7 +540,7 @@ const CHARS=[
   skills:[
    {icon:'🏹',name:'활시위',key:'패시브',types:['buff'],desc:'기본 공격 최대 2초 차지: 피해·속도 50%~150%. 최대 후에도 유지 가능.'},
    {icon:'🌧️',name:'애로우 레인',key:'Q · 11초',types:['phys','util'],desc:'부채꼴로 화살 7발(각 130 피해) 발사, 1.5초간 투명화.'},
-   {icon:'⚡',name:'헤이스트',key:'E · 15초',types:['buff'],desc:'4초간 활시위 차징 시간 70% 단축 (훨씬 빠르게 차지).'},
+   {icon:'⚡',name:'헤이스트',key:'E · 15초',types:['buff'],desc:'4초간 활시위 차징 시간 100% 단축 (즉시 최대 차지).'},
    {icon:'🐉',name:'멸룡궁',key:'R · 25초',types:['phys','cc'],desc:'8배 큰 관통 화살: 적중한 적에게 380 피해, 1초 기절.'}]},
  {id:'Shielder',ko:'방패병',img:'shielder.png',stats:{hp:1600,atk:80},rng:'1 radpx (근접)',
   style:'최전선 수호자. 방패로 정면의 공격을 막아내고, 도발과 돌진으로 전장의 흐름을 쥐고 흔듭니다.',
@@ -563,7 +587,7 @@ const CHARS=[
    {icon:'🔫',name:'리볼버',key:'패시브',types:['util'],desc:'약실 6발이 실탄/공포탄 50%씩 장전, 위부터 시계방향 소모. 남은 수만 확인 가능. 소진 시 4초 재장전(공격·스킬 불가).'},
    {icon:'🔄',name:'밀수',key:'Q · 10초',types:['util'],desc:'장전된 모든 탄을 반전: 실탄은 공포탄으로, 공포탄은 실탄으로.'},
    {icon:'🎲',name:'도박',key:'E · 3초',types:['buff'],desc:'자신에게 발사: 실탄이면 200 피해, 공포탄이면 5초간 실탄 피해가 300으로 증가.'},
-   {icon:'🎰',name:'러시안 룰렛',key:'R · 25초',types:['pierce','heal','buff'],desc:'재장전 + E 초기화, \'내 차례\': F 전체 발사(실탄 400 관통 / 공포탄 적 이속+20%·150 회복), E 자신(실탄 200 관통 / 공포탄 피해+100·이속+20%·300 회복).'}]},
+   {icon:'🎰',name:'러시안 룰렛',key:'R · 25초',types:['pierce','heal','buff'],desc:'E 초기화, \'내 차례\': F 전체 발사(실탄 400 관통 / 공포탄 적 이속+20%·150 회복), E 자신(실탄 200 관통 / 공포탄 피해+100·이속+20%·300 회복).'}]},
 {id:'SwordMaster',ko:'소드마스터',img:'swordmaster.png',stats:{hp:1200,atk:160},rng:'1 radpx (근접)',
   style:'검기와 오라를 두르는 근접 검사. 방금 쓴 공격을 다시 베어내는 세이브로 연계를 이어갑니다.',
   skills:[
@@ -581,7 +605,7 @@ const CHARS=[
 {id:'Financier',ko:'금융인',img:'financier.png',stats:{hp:1000,atk:90},rng:'1 radpx (근접)',
   style:'시간이 지날수록 불어나는 복리형 근접 딜러. 상대에게 투자해 수익을 거두고, 보험과 예금으로 체력을 굴립니다.',
   skills:[
-   {icon:'💰',name:'적금',key:'패시브',types:['buff'],desc:'5초마다 최대 체력·현재 체력·공격력이 2%씩 복리로 증가합니다.'},
+   {icon:'💰',name:'적금',key:'패시브',types:['buff'],desc:'5초마다 최대 체력·현재 체력·공격력이 3%씩 복리로 증가합니다.'},
    {icon:'📈',name:'주식',key:'Q · 0.5초',types:['buff'],desc:'커서 아래 적에게 \'구매\'(체력 100 소모). 다시 사용하면 매각: 손익률만큼 체력(100×(100+손익)%)과 공격력 증가. 손익 = (대상이 준 피해 + 체력 변화)/100.'},
    {icon:'🛡️',name:'보험',key:'E · 15초',types:['heal'],desc:'체력 200 초과 시 사용. 체력 200 소모 후 2초간 받은 피해를 모아 종료 시 모두 회복.'},
    {icon:'🏦',name:'정기적금',key:'R · 25초',types:['heal','buff'],desc:'10초간 매초 체력 70 차감. 만기 시 최대 체력 +20%, 체력 1000 회복, 공격력 +10%.'}]},
@@ -598,7 +622,7 @@ const CHARS=[
    {icon:'🕳️',name:'블랙홀',key:'패시브',types:['buff'],desc:'받은 피해의 40%를 <4차원>에 저장(최대 300), 받은 피해의 10%만큼 체력 회복.'},
    {icon:'🪐',name:'행성 폭발',key:'Q · 5초',types:['phys'],desc:'자신의 위치에 반경 2 radpx 행성을 소환, 1초 뒤 폭발하여 범위 내 모든 적에게 400 물리 피해. 입힌 피해량의 20%를 <4차원>에 저장.'},
    {icon:'⚪',name:'화이트홀',key:'E · 1초',types:['buff'],desc:'저장된 <4차원> 피해를 모두 제거하고, 제거한 양만큼 다음 일반 공격 피해 증가.'},
-   {icon:'🌌',name:'은하 충돌',key:'R · 25초',types:['pierce','cc'],desc:'자신의 위치에 반경 3 radpx 은하를 4초간 생성: 범위 내 적에게 초당 40 관통 피해, 이동속도 30%의 힘으로 중심으로 끌어당김. 소멸 직후 중심 반경 1 radpx 내 적에게 300 관통 피해.'}]},
+   {icon:'🌌',name:'은하 충돌',key:'R · 25초',types:['pierce','cc'],desc:'자신의 위치에 반경 3 radpx 은하를 4초간 생성: 범위 내 적에게 초당 40 관통 피해, 이동속도 50%의 힘으로 중심으로 끌어당김. 소멸 직후 중심 반경 1 radpx 내 적에게 300 관통 피해.'}]},
  ...new Array(8).fill(null)
 ];
 const csScreen=document.getElementById('csScreen'),csBox=document.getElementById('csBox');
@@ -724,8 +748,26 @@ shopBtn.onclick=()=>{shopOpen();shopBtn.blur()};
 document.getElementById('shopClose').onclick=()=>shopClose();
 shopScreen.onclick=e=>{if(e.target===shopScreen)shopClose()};
 function goldSet(g,d){goldVal=Math.max(0,g|0);goldTx.textContent=goldVal.toLocaleString();if(d>0){toast('+'+d+' 골드');goldBar.classList.remove('pop');void goldBar.offsetWidth;goldBar.classList.add('pop')}}
-function anyWinOpen(){return csIsOpen()||ttIsOpen()||admIsOpen()||pnIsOpen()||shopIsOpen()||skIsOpen()||gmIsOpen()}
-function closeAllWins(){csClose();ttClose();admClose();pnClose();shopClose();skClose();gmClose()}
+function anyWinOpen(){return csIsOpen()||ttIsOpen()||admIsOpen()||pnIsOpen()||shopIsOpen()||skIsOpen()||gmIsOpen()||kbIsOpen()}
+function closeAllWins(){csClose();ttClose();admClose();pnClose();shopClose();skClose();gmClose();kbClose()}
+// ---- key binding ui ----
+const setBtn=document.getElementById('setBtn'),kbScreen=document.getElementById('kbScreen'),kbList=document.getElementById('kbList'),kbMsg=document.getElementById('kbMsg'),hintEl=document.getElementById('hint');
+function kbIsOpen(){return kbScreen.style.display==='flex'}
+function kbClose(){kbCap=null;kbScreen.style.display='none'}
+function kbApply(){skillbar.querySelectorAll('.sk').forEach(el=>{const b=el.querySelector('b');if(b)b.textContent=kbLabel(kb[el.dataset.k])});
+ const K=a=>'<kbd>'+kbLabel(kb[a])+'</kbd>';
+ hintEl.innerHTML='Aim 🖱 · Move '+K('up')+K('left')+K('down')+K('right')+' · Chat '+K('chat')+' · Attack '+K('atk')+' · Skills '+K('Q')+K('E')+K('R')}
+function kbSave(){try{localStorage.setItem('kb',JSON.stringify(kb))}catch(e){}kbApply()}
+function kbRender(){kbList.textContent='';for(const a in KB_DEF){const r=document.createElement('div'),n=document.createElement('span'),b=document.createElement('button');r.className='r';n.textContent=KB_NAME[a];b.textContent=kbCap===a?'키를 누르세요…':kbLabel(kb[a]);if(kbCap===a)b.className='cap';b.onclick=()=>{kbCap=kbCap===a?null:a;kbMsg.textContent=kbCap?'Esc: 취소':'';kbRender()};r.append(n,b);kbList.appendChild(r)}}
+function kbOpen(){closeAllWins();for(const k in keys)keys[k]=false;sendInput();cancelCharge();kbMsg.textContent='';kbScreen.style.display='flex';kbRender()}
+addEventListener('keydown',e=>{if(!kbCap)return;e.preventDefault();e.stopImmediatePropagation();
+ if(e.code==='Escape'){kbCap=null;kbMsg.textContent='';kbRender();return}
+ const a=kbCap,c=e.code,o=Object.keys(KB_DEF).find(x=>x!==a&&kb[x]===c);
+ kbMsg.textContent=o?KB_NAME[o]+' 키가 '+kbLabel(kb[a])+'(으)로 교체됨':'';
+ if(o)kb[o]=kb[a];kb[a]=c;kbCap=null;kbSave();kbRender()},true);
+document.getElementById('kbReset').onclick=()=>{Object.assign(kb,KB_DEF);kbCap=null;kbMsg.textContent='';kbSave();kbRender()};
+document.getElementById('kbClose').onclick=kbClose;kbScreen.onclick=e=>{if(e.target===kbScreen)kbClose()};
+setBtn.onclick=()=>{kbOpen();setBtn.blur()};kbApply();
 document.getElementById('pnClose').onclick=pnClose;pnScreen.onclick=e=>{if(e.target===pnScreen)pnClose()};
 function resetTitles(){isAdmin=false;myTitles=[];myEq=null;mySk={own:[],eqs:{}};titleMap.clear();ttRender();admClose();ttClose();skClose();gmClose();shopClose()}
 try{document.fonts.load("13px 'Galmuri11'","칭호가나다")}catch(e){}
@@ -1066,8 +1108,8 @@ function fxTint(f){
  const cn=f.x===undefined;
  return[cn?(f.x0+f.x1)/2:f.x,cn?(f.y0+f.y1)/2:f.y,Math.max(90,f.r||0,(f.len||0)*.6,cn?Math.hypot(f.x1-f.x0,f.y1-f.y0)/2+60:0,f.x2!==undefined?Math.hypot(f.x2-f.x,f.y2-f.y):0)]}
 function drawFx(t){
- for(let i=fxs.length-1;i>=0;i--){
-  const f=fxs[i],k=Math.max(0,(t-f.t0)/f.dur);
+ for(let ps=0;ps<2;ps++)for(let i=fxs.length-1;i>=0;i--){
+  const f=fxs[i];if((f.type==='galaxy')!==(ps===0))continue;const k=Math.max(0,(t-f.t0)/f.dur);
   if(k>=1){fxs.splice(i,1);continue}
   try{
    if(f.tint&&f.type!=='txt'){tintBegin();const[ax,ay,R]=fxTint(f);try{fxOne(f,k)}finally{tintEnd(f.tint,ax,ay,R)}}
