@@ -136,6 +136,7 @@ const statsOf = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, redu
 const RADPX = 112.5;
 const MAP = 1254;
 const ARROW = { speed: 800, range: 5 * RADPX, radius: 28 };
+const ATKR = 0.5 * RADPX;
 const ARCHER = {
   charge: { maxMs: 2000, min: 0.5, max: 1.5 },
   Q: { cd: 11000, arrows: 7, step: 10 * RAD, dmg: 130, invis: 1500 },
@@ -177,9 +178,9 @@ const GUMIHO = {
 };
 const BURN = { tick: 35, tickMs: 1000 };
 const LUC = {
-  base: { hp: 1300, dmg: 150, atkCd: 900, range: 4 * RADPX, spd: 900, radius: 0.3 * RADPX },
-  angel: { hp: 1300, dmg: 130, atkCd: 800, range: 4 * RADPX, spd: 900, radius: 0.3 * RADPX },
-  devil: { hp: 1300, dmg: 180, atkCd: 1000, range: 4 * RADPX, spd: 900, radius: 0.3 * RADPX },
+  base: { hp: 1300, dmg: 150, atkCd: 900, range: 4 * RADPX, spd: 900, radius: ATKR },
+  angel: { hp: 1300, dmg: 130, atkCd: 800, range: 4 * RADPX, spd: 900, radius: ATKR },
+  devil: { hp: 1300, dmg: 180, atkCd: 1000, range: 4 * RADPX, spd: 900, radius: ATKR },
   G: { cd: 30000, atkCut: 1000, skillCut: 1500, afterCd: 5000 },
   Q: { cd: 10000, range: 3 * RADPX, dmg: 270, spd: 800, radius: 0.3 * RADPX, sc: 1.6 },
   E: { cd: 10000, range: 3 * RADPX, dmg: 120, spd: 800, radius: 0.3 * RADPX, sc: 1.6, burnMs: 4000 },
@@ -409,7 +410,7 @@ function archerAttack(p, m, now) {
   p.chargeStart = 0;
   if (now < p.atkReady - 60) return;
   p.atkReady = now + st.atkCd;
-  spawnArrow(p, o, lag, now, { a: p.aim, dmg: Math.round(st.dmg * f), spd: ARROW.speed * f, kind: 'atk' });
+  spawnArrow(p, o, lag, now, { a: p.aim, dmg: Math.round(st.dmg * f), spd: ARROW.speed * f, radius: ATKR, kind: 'atk' });
 }
 function doAttack(p, m) {
   const now = Date.now();
@@ -433,7 +434,7 @@ function doAttack(p, m) {
   }
   if (p.cls === 'Tower' && now < p.towerRUntil) for (const sd of [-1, 1]) {
     const off = TOWER.R.gap * sd;
-    spawnArrow(p, { x: o.x - Math.sin(p.aim) * off, y: o.y + Math.cos(p.aim) * off * 0.8 }, lag, now, { a: p.aim, dmg: TOWER.R.dmg, spd: ARROW.speed, range: TOWER.R.range, kind: 'tarr' });
+    spawnArrow(p, { x: o.x - Math.sin(p.aim) * off, y: o.y + Math.cos(p.aim) * off * 0.8 }, lag, now, { a: p.aim, dmg: TOWER.R.dmg, spd: ARROW.speed, range: TOWER.R.range, radius: ATKR, kind: 'tarr' });
   }
   checkRoundEnd();
 }
@@ -507,7 +508,7 @@ function gumihoAttack(p, m, now) {
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd;
   const eff = p.qNext, n = p.eNext || 0; p.qNext = false; p.eNext = 0;
-  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg + n * GUMIHO.E.dmg, boom: n, spd: GUMIHO.atk.speed, range: GUMIHO.atk.range, radius: GUMIHO.atk.radius, kind: 'orb', orb: true, eff });
+  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg + n * GUMIHO.E.dmg, boom: n, spd: GUMIHO.atk.speed, range: GUMIHO.atk.range, radius: ATKR, kind: 'orb', orb: true, eff });
 }
 function gumihoSkill(p, k, m, now) {
   const G = GUMIHO, o = originOf(p, m), lag = lagOf(m);
@@ -710,7 +711,7 @@ function luciferAttack(p, m, now) {
   if (now < p.atkReady) return;
   const st = statsOf(p), F = lForm(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
-  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg, spd: F.spd, range: F.range, radius: F.radius, kind: 'lbase', type: p.lf === 'd' ? 'phys' : 'magic', luc: 'atk' });
+  spawnArrow(p, o, lag, now, { a: p.aim, dmg: st.dmg, spd: F.spd, range: F.range, radius: F.radius, kind: p.lf === 'a' ? 'lsa' : p.lf === 'd' ? 'lsd' : 'lbase', type: p.lf === 'd' ? 'phys' : 'magic', luc: 'atk' });
 }
 function spawnBomb(p, o, a, r, dmg, lift, now) {
   const id = ++arrowSeq, len = wallDist(o.x, o.y / 0.8, a);
@@ -964,7 +965,7 @@ function stepUnits(dt, now) {
           else if (d < D.keep) { dx = -ux; dy = -uy; }
           if (d <= D.range && now >= u.atkReady) {
             u.atkReady = now + D.atkCd;
-            spawnArrow(own, { x: u.x, y: u.y }, 0, now, { a, dmg: D.dmg, spd: ARROW.speed, range: D.range, kind: 'tarr' });
+            spawnArrow(own, { x: u.x, y: u.y }, 0, now, { a, dmg: D.dmg, spd: ARROW.speed, range: D.range, radius: ATKR, kind: 'tarr' });
           }
         }
       } else if (gdist(u, own) > 2.5 * RADPX) {
@@ -1120,7 +1121,7 @@ function gamblerAttack(p, m, now) {
   if (p.myTurn && phase === 'round') return rouletteShot(p, false, now);
   const live = fireChamber(p, now);
   if (!live) return broadcast({ t: 'fx', type: 'puff', g: p.id, x: o.x, y: o.y, a: p.aim, dur: 450 });
-  spawnArrow(p, o, lag, now, { a: p.aim, dmg: gamblerDmg(p, now), spd: GAMBLER.spd, range: GAMBLER.range, radius: GAMBLER.radius, kind: 'gbullet', type: 'phys' });
+  spawnArrow(p, o, lag, now, { a: p.aim, dmg: gamblerDmg(p, now), spd: GAMBLER.spd, range: GAMBLER.range, radius: ATKR, kind: 'gbullet', type: 'phys' });
 }
 function rouletteShot(p, self, now) {
   const R = GAMBLER.R, live = fireChamber(p, now);
@@ -1293,10 +1294,10 @@ function gamerAttack(p, m, now) {
 }
 function gamerStrike(p, o, lag, now, ranged, dmg, kind) {
   if (ranged) {
-    spawnArrow(p, o, lag, now, { a: p.aim, dmg, spd: ARROW.speed, range: GAMER.atk.range, kind: 'atk', type: 'magic' });
+    spawnArrow(p, o, lag, now, { a: p.aim, dmg, spd: ARROW.speed, range: GAMER.atk.range, radius: ATKR, kind: 'gr', type: 'magic' });
     return;
   }
-  broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, c: 'rgba(255,255,255,.6)', dur: 220 });
+  broadcast({ t: 'fx', type: 'gslash', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, dur: 240 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
     if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'magic' });
@@ -1359,6 +1360,7 @@ function gamerSkill(p, k, m, now) {
       else { p.asUntil = now + G.E.windMs; p.asBonus = G.E.wind; msg.push('🌪 Wind Rune'); }
     }
     sendGc(p, now);
+    broadcast({ t: 'fx', type: 'gacha', x: p.x, y: p.y, dur: 1100 });
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.2 * RADPX, c: '#9dffb0', dur: 600 });
     fxTxt(p.x, p.y - 40, msg.join(' · '), '#9dffb0');
   } else {
