@@ -120,6 +120,74 @@ async function awardGold(p, n) {
   } catch (e) { console.error('gold award failed:', e.message); }
 }
 
+// ---- shop / skins ----
+const SKINS = { LightKnight: { cls: 'Knight', name: '라이트 나이트 스킨', price: 200 } };
+const SKIN_ORDER = Object.keys(SKINS);
+let shopPrices = {};
+const priceOf = id => Number.isInteger(shopPrices[id]) ? shopPrices[id] : SKINS[id].price;
+const shopList = () => SKIN_ORDER.map(id => ({ id, cls: SKINS[id].cls, name: SKINS[id].name, price: priceOf(id) }));
+const skinOf = p => { const id = p.eqs && p.eqs[p.cls]; return id && SKINS[id] && SKINS[id].cls === p.cls && p.skins && p.skins.includes(id) ? id : 0; };
+const sendSinfo = p => send(p.ws, { t: 'sinfo', own: p.skins || [], eqs: p.eqs || {} });
+const sendShop = ws => send(ws, { t: 'shop', items: shopList() });
+async function loadSkins(id) {
+  try {
+    const raw = await db.get('skins:' + id); let own = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(own)) own = [];
+    own = own.filter(s => SKINS[s]);
+    const e = await db.get('eqskin:' + id); let eqs = e ? JSON.parse(e) : {};
+    if (!eqs || typeof eqs !== 'object' || Array.isArray(eqs)) eqs = {};
+    for (const c of Object.keys(eqs)) if (!SKINS[eqs[c]] || SKINS[eqs[c]].cls !== c || !own.includes(eqs[c])) delete eqs[c];
+    return { own, eqs, err: false };
+  } catch (e) { console.error('skins load failed:', e.message); return { own: [], eqs: {}, err: true }; }
+}
+async function equipSkin(p, id) {
+  const now = Date.now();
+  if (!p.user || p.obs || p.skinsErr || now - (p.lastSkEq || 0) < 300) return sendSinfo(p);
+  if (typeof id !== 'string' || !SKINS[id] || !p.skins.includes(id)) return sendSinfo(p);
+  p.lastSkEq = now;
+  const c = SKINS[id].cls;
+  if (p.eqs[c] === id) delete p.eqs[c]; else p.eqs[c] = id;
+  await db.set('eqskin:' + p.user, JSON.stringify(p.eqs));
+  sendSinfo(p);
+}
+async function buySkin(p, id, expect) {
+  const reply = (ok, msg) => send(p.ws, { t: 'buy', ok, msg, id });
+  if (!p.user || p.obs) return;
+  if (p.buying) return reply(0, '처리 중입니다. 잠시만 기다려 주세요.');
+  if (typeof id !== 'string' || !SKINS[id]) return reply(0, '존재하지 않는 상품입니다.');
+  if (p.skinsErr) return reply(0, '일시적인 오류입니다. 다시 로그인해 주세요.');
+  if (p.skins.includes(id)) return reply(0, '이미 보유한 스킨입니다.');
+  const price = priceOf(id);
+  if (expect !== price) { sendShop(p.ws); return reply(0, '가격이 변경되었습니다. 다시 확인해 주세요.'); }
+  p.buying = true; let charged = false;
+  try {
+    const v = Number(await db.incrby('gold:' + p.user, -price));
+    if (!Number.isFinite(v)) throw new Error('bad balance');
+    if (v < 0) {
+      const back = Number(await db.incrby('gold:' + p.user, price));
+      if (Number.isFinite(back)) { p.gold = back; send(p.ws, { t: 'gold', g: back }); }
+      return reply(0, '골드가 부족합니다.');
+    }
+    charged = true;
+    const own = p.skins.concat(id);
+    await db.set('skins:' + p.user, JSON.stringify(own));
+    p.skins = own; p.gold = v;
+    send(p.ws, { t: 'gold', g: v }); sendSinfo(p);
+    reply(1, SKINS[id].name + ' 구매 완료!');
+  } catch (e) {
+    console.error('buy failed:', e.message);
+    if (charged) { try { const back = Number(await db.incrby('gold:' + p.user, price)); if (Number.isFinite(back)) { p.gold = back; send(p.ws, { t: 'gold', g: back }); } } catch (e2) { console.error('refund failed:', e2.message); } }
+    reply(0, '구매 중 오류가 발생했습니다.');
+  } finally { p.buying = false; }
+}
+function setShopPrice(p, m) {
+  const id = String(m.id), n = Number(m.price), say = (ok, msg) => send(p.ws, { t: 'shopmsg', ok, msg });
+  if (!SKINS[id] || !Number.isInteger(n) || n < 0 || n > 10000000) return say(0, '가격이 올바르지 않습니다. (0 ~ 10,000,000 정수)');
+  shopPrices[id] = n;
+  db.set('shopprice', JSON.stringify(shopPrices)).catch(e => console.error('shopprice save failed:', e.message));
+  for (const q of players.values()) if (q.joined && !q.obs) sendShop(q.ws);
+  say(1, SKINS[id].name + ' 가격을 ' + n.toLocaleString() + ' 골드로 변경했습니다.');
+}
 // ---- combat ----
 const RAD = Math.PI / 180;
 const BASE = { hp: 1000, dmg: 150, reduce: 0, atkCd: 600 };
@@ -339,7 +407,7 @@ function resetCombat(p) {
   p.smN = 0; p.smAura = false; p.smAwkUntil = 0; p.smLast = null; p.smSaved = false;
   p.ch = null; p.chi = 0; p.reloadUntil = 0; p.myTurn = false; p.gbUntil = p.gbPlusUntil = p.fastUntil = 0;
   p.dim = p.nextBonus = 0; p.celKey = ''; for (const arr of [planets, galaxies]) for (let i = arr.length - 1; i >= 0; i--) if (arr[i].owner === p.id) arr.splice(i, 1);
-  p.gCopy = []; p.gSlots = 1; p.gBig = false; p.gLast = null; p.gNext = 0; p.gCheatUntil = p.gtUntil = 0; p.gtint = ''; p.gInvis = p.gPierce = false; send(p.ws, { t: 'gc', l: [], s: 1, ch: 0 });
+  p.gCopy = []; p.gSlots = 1; p.gBig = false; p.gLast = null; p.gNext = 0; p.gCheatUntil = p.gtUntil = 0; p.gCdPend = 0; p.gtint = ''; p.gInvis = p.gPierce = false; send(p.ws, { t: 'gc', l: [], s: 1, ch: 0 });
   for (const k of ['Q', 'E', 'R']) send(p.ws, { t: 'cd', k, ms: 0 });
   if (p.cls === 'Gambler') loadRevolver(p); else send(p.ws, { t: 'rv', n: 0 });
   if (p.cls === 'Lucifer' && phase === 'round') { p.cdR = Date.now() + LUC.G.cd; send(p.ws, { t: 'cd', k: 'R', ms: LUC.G.cd }); }
@@ -1380,11 +1448,17 @@ function gamerSkill(p, k, m, now) {
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.2 * RADPX, c: '#9dffb0', dur: 600 });
     fxTxt(p.x, p.y - 40, msg.join(' · '), '#9dffb0');
   } else {
-    p.cdR = now + G.R.cd; send(p.ws, { t: 'cd', k: 'R', ms: G.R.cd });
+    p.cdR = now + G.R.dur + G.R.cd; p.gCdPend = 1; send(p.ws, { t: 'cd', k: 'R', ms: G.R.dur });
     p.gCheatUntil = now + G.R.dur; p.cdQ = 0; send(p.ws, { t: 'cd', k: 'Q', ms: 0 });
     sendGc(p, now);
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.5 * RADPX, c: '#ff6bd5', dur: 700 });
     fxTxt(p.x, p.y - 40, '💻 치트', '#ff9be8');
+  }
+}
+function stepGamer(now) {
+  for (const p of players.values()) if (p.gCdPend && now >= p.gCheatUntil) {
+    p.gCdPend = 0;
+    if (p.cls === 'Gamer') { send(p.ws, { t: 'cd', k: 'R', ms: Math.max(0, p.cdR - now) }); sendGc(p, now); }
   }
 }
 function checkTimeout(now) {
@@ -1411,7 +1485,9 @@ const db = (UP_URL && UP_TOKEN) ? {
   del: k => upstash('DEL', KEY + k),
   incr: k => upstash('INCR', KEY + k),
   incrby: (k, n) => upstash('INCRBY', KEY + k, String(n)),
-  expire: (k, sec) => upstash('EXPIRE', KEY + k, sec)
+  expire: (k, sec) => upstash('EXPIRE', KEY + k, sec),
+  mget: ks => ks.length ? upstash('MGET', ...ks.map(k => KEY + k)) : Promise.resolve([]),
+  keys: async prefix => { let cur = '0'; const out = []; do { const r = await upstash('SCAN', cur, 'MATCH', KEY + prefix + '*', 'COUNT', '200'); cur = String(r[0]); for (const k of r[1]) out.push(k.slice(KEY.length)); } while (cur !== '0' && out.length < 5000); return out; }
 } : {
   get: async k => { const e = memGet(k); return e ? e.v : null; },
   set: async (k, v) => { mem.set(k, { v }); },
@@ -1420,8 +1496,11 @@ const db = (UP_URL && UP_TOKEN) ? {
   del: async k => { mem.delete(k); },
   incrby: async (k, n) => { const e = memGet(k), v = (e ? Number(e.v) : 0) + n; mem.set(k, { v: String(v), exp: e && e.exp }); return v; },
   incr: async k => { const e = memGet(k), n = (e ? Number(e.v) : 0) + 1; mem.set(k, { v: String(n), exp: e && e.exp }); return n; },
-  expire: async (k, sec) => { const e = memGet(k); if (e) e.exp = Date.now() + sec * 1000; }
+  expire: async (k, sec) => { const e = memGet(k); if (e) e.exp = Date.now() + sec * 1000; },
+  mget: async ks => ks.map(k => { const e = memGet(k); return e ? e.v : null; }),
+  keys: async prefix => [...mem.keys()].filter(k => k.startsWith(prefix) && memGet(k))
 };
+(async () => { try { const r = await db.get('shopprice'); const o = r ? JSON.parse(r) : {}; for (const id of Object.keys(o)) if (SKINS[id] && Number.isInteger(o[id]) && o[id] >= 0) shopPrices[id] = o[id]; } catch (e) { console.error('shopprice load failed:', e.message); } })();
 console.log((UP_URL && UP_TOKEN) ? 'Accounts: Upstash Redis' : 'WARNING: UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set - accounts live in memory and are LOST on restart');
 
 const scryptHex = (pw, salt) => new Promise((res, rej) => crypto.scrypt(pw, salt, 64, (e, k) => e ? rej(e) : res(k.toString('hex'))));
@@ -1505,11 +1584,33 @@ async function adminTitleRun(p, m) {
   }
   reply(1, msg, { target, nick: rec.nick, list });
 }
+const adminGoldQ = (p, m) => { const run = admLock.then(() => adminGold(p, m)); admLock = run.catch(() => {}); return run; };
+async function adminGold(p, m) {
+  const reply = (ok, msg, extra) => send(p.ws, Object.assign({ t: 'gadmin', ok, msg }, extra));
+  if (m.t === 'glist') {
+    const ids = (await db.keys('user:')).map(k => k.slice(5)).filter(id => id && id !== OBS_ID).sort().slice(0, 300);
+    const us = await db.mget(ids.map(i => 'user:' + i)), gs = await db.mget(ids.map(i => 'gold:' + i));
+    const list = ids.map((id, i) => { let nick = id; try { nick = JSON.parse(us[i]).nick || id; } catch {} return { id, nick, gold: Math.max(0, parseInt(gs[i], 10) || 0) }; });
+    return reply(1, '', { list });
+  }
+  const target = normId(m.target);
+  if (!target) return reply(0, '대상 아이디가 올바르지 않습니다.');
+  const raw = await db.get('user:' + target);
+  if (!raw) return reply(0, '존재하지 않는 아이디입니다.');
+  const rec = JSON.parse(raw), n = Number(m.amount);
+  if (!Number.isInteger(n) || n < 0 || n > 1000000000) return reply(0, '금액은 0 ~ 1,000,000,000 사이의 정수여야 합니다.');
+  let v, msg;
+  if (m.t === 'gset') { await db.set('gold:' + target, String(n)); v = n; msg = rec.nick + '님의 골드를 ' + n.toLocaleString() + '(으)로 설정했습니다.'; }
+  else { v = Number(await db.incrby('gold:' + target, n)); msg = rec.nick + '님에게 ' + n.toLocaleString() + ' 골드를 지급했습니다.'; }
+  if (!Number.isFinite(v)) return reply(0, '서버 오류가 발생했습니다.');
+  for (const q of players.values()) if (q.user === target) { const d = v - (q.gold || 0); q.gold = v; send(q.ws, { t: 'gold', g: v, d: d > 0 ? d : 0 }); }
+  reply(1, msg, { row: { id: target, nick: rec.nick, gold: v } });
+}
 async function loginOk(p, rec, token) {
   kickOld(rec.id, p);
   p.user = rec.id; p.name = rec.nick;
   if (rec.id === OBS_ID) {
-    p.obs = true; p.titles = []; p.eq = null; p.gold = 0;
+    p.obs = true; p.titles = []; p.eq = null; p.gold = 0; p.skins = []; p.eqs = {};
     send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token, admin: 0, obs: 1 });
     const all = {};
     for (const q of players.values()) if (q.joined) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
@@ -1520,7 +1621,8 @@ async function loginOk(p, rec, token) {
   try { p.gold = Math.max(0, parseInt(await db.get('gold:' + rec.id), 10) || 0); } catch (e) { p.gold = 0; }
   if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }
   send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token, admin: rec.id === ADMIN_ID ? 1 : 0 });
-  sendTinfo(p); send(p.ws, { t: 'gold', g: p.gold });
+  const sk = await loadSkins(rec.id); p.skins = sk.own; p.eqs = sk.eqs; p.skinsErr = sk.err;
+  sendTinfo(p); send(p.ws, { t: 'gold', g: p.gold }); sendSinfo(p); sendShop(p.ws);
   const all = {};
   for (const q of players.values()) if (q.joined && q !== p) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
   send(p.ws, { t: 'ttls', m: all });
@@ -1615,6 +1717,14 @@ wss.on('connection', (ws, req) => {
       if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
     } else if (m.t === 'tequip') {
       equipTitle(p, m.id === null ? null : m.id).catch(e => console.error('equip:', e.message));
+    } else if (m.t === 'buy') {
+      buySkin(p, m.id, m.price).catch(e => { console.error('buy:', e.message); send(ws, { t: 'buy', ok: 0, msg: '구매 중 오류가 발생했습니다.' }); });
+    } else if (m.t === 'skequip') {
+      equipSkin(p, m.id).catch(e => console.error('skequip:', e.message));
+    } else if (m.t === 'shopprice') {
+      if (p.user === ADMIN_ID) setShopPrice(p, m);
+    } else if (m.t === 'glist' || m.t === 'gset' || m.t === 'gadd') {
+      if (p.user === ADMIN_ID) adminGoldQ(p, m).catch(e => { console.error('admin gold:', e.message); send(ws, { t: 'gadmin', ok: 0, msg: '서버 오류가 발생했습니다.' }); });
     } else if (m.t === 'tgrant' || m.t === 'tlist' || m.t === 'trevoke') {
       if (p.user === ADMIN_ID) adminTitle(p, m).catch(e => { console.error('admin title:', e.message); send(ws, { t: 'tadmin', ok: 0, msg: '서버 오류가 발생했습니다.' }); });
     } else if (m.t === 'charge') {
@@ -1709,7 +1819,7 @@ setInterval(() => {
   stepSanct(now);
   stepArrows(dt, now);
   stepBombs(now);
-  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now);
+  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now);
   const list = [], hidden = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
@@ -1722,7 +1832,7 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, gt: now < p.gtUntil ? p.gtint : '' };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '' };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);
   }
