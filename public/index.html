@@ -1003,7 +1003,7 @@ function drawGalaxy(f,k){
  const fk=f.fall/f.dur,r=f.r;
  ctx.save();ctx.translate(f.x,f.y);
  const sprite=(S,a)=>{ctx.imageSmoothingEnabled=true;ctx.globalAlpha=a;ctx.shadowColor='#7a5cff';ctx.shadowBlur=26;
-  if(imOk(gxImg))ctx.drawImage(gxImg,0,0,30,30,-15*S,-15*S,30*S,30*S);else{ctx.fillStyle='#4a36c8';ctx.beginPath();ctx.arc(0,0,15*S,0,6.2832);ctx.fill()}};
+  if(imOk(gxImg))ctx.drawImage(gxImg,-15*S*1.25,-15*S*1.25,30*S*1.25,30*S*1.25);else{ctx.fillStyle='#4a36c8';ctx.beginPath();ctx.arc(0,0,15*S,0,6.2832);ctx.fill()}};
  if(k<fk){
   const p=k/fk,e=p*p,S=r/15*(.25+.75*e);
   ctx.save();ctx.scale(1,.8);ctx.globalAlpha=.25+.45*p;ctx.beginPath();ctx.arc(0,0,r,0,6.2832);ctx.fillStyle='rgba(90,60,200,.2)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#7a5cff';ctx.stroke();
