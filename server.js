@@ -718,7 +718,7 @@ function knightSkill(p, k, m, now) {
   } else if (k === 'E') {
     p.guardUntil = now + S.dur;
   } else {
-    broadcast({ t: 'fx', type: 'swords', x: o.x, y: o.y, r: S.ring, ar: S.radius, cr: S.cRadius, n: S.swords, dur: 900 });
+    broadcast({ t: 'fx', type: 'swords', by: p.id, x: o.x, y: o.y, r: S.ring, ar: S.radius, cr: S.cRadius, n: S.swords, dur: 900 });
     const gy = o.y / 0.8, sw = [];
     for (let n = 0; n < S.swords; n++) { const a = n * 2 * Math.PI / S.swords; sw.push({ x: o.x + Math.cos(a) * S.ring, y: gy + Math.sin(a) * S.ring, r: S.radius, d: S.dmg }); }
     sw.push({ x: o.x, y: gy, r: S.cRadius, d: S.cdmg });
