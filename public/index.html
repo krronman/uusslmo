@@ -74,18 +74,18 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #csOk:disabled{cursor:default;color:#c9c4ff;opacity:.75}
 #csClose{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:14px;width:36px;height:36px;border-radius:50%;border:2px solid #fff;background:rgba(20,30,60,.8);color:#fff;font-size:16px;cursor:pointer;z-index:8;display:none}
 #csScreen[style*="flex"] #csClose{display:block}
-#ttScreen,#admScreen{position:fixed;inset:0;background:rgba(10,12,30,.74);display:none;align-items:center;justify-content:center;z-index:7}
-#ttBox{position:relative;width:min(92vw,calc(88vh * 1000 / 793));aspect-ratio:1000/793;--u:1px;font-family:'Galmuri11','Press Start 2P','DotGothic16',monospace;color:#e9e6ff}
-#ttBg{position:absolute;inset:0;width:100%;height:100%;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none}
+#ttScreen,#admScreen,#skScreen,#gmScreen{position:fixed;inset:0;background:rgba(10,12,30,.74);display:none;align-items:center;justify-content:center;z-index:7}
+#ttBox,#skBox{position:relative;width:min(92vw,calc(88vh * 1000 / 793));aspect-ratio:1000/793;--u:1px;font-family:'Galmuri11','Press Start 2P','DotGothic16',monospace;color:#e9e6ff}
+#ttBg,#skBg{position:absolute;inset:0;width:100%;height:100%;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none}
 .ttSlot{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;background:none;border:0;padding:calc(var(--u)*10);cursor:pointer;font-family:inherit;font-size:calc(var(--u)*19);line-height:1.25;word-break:break-all;overflow:hidden;border-radius:calc(var(--u)*8);text-shadow:calc(var(--u)*2) calc(var(--u)*2) 0 #0b0b25}
 .ttSlot:hover:not(.empty){background:rgba(255,255,255,.08)}
 .ttSlot.empty{cursor:default}
 .ttSlot.sel{outline:calc(var(--u)*4) solid #ffd66b;outline-offset:calc(var(--u)*-4);background:rgba(255,214,107,.13);box-shadow:0 0 calc(var(--u)*18) rgba(255,214,107,.5)}
 .xBtn{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:14px;width:36px;height:36px;border-radius:50%;border:2px solid #fff;background:rgba(20,30,60,.8);color:#fff;font-size:16px;cursor:pointer;z-index:8;display:none}
-#ttScreen[style*="flex"] #ttClose,#admScreen[style*="flex"] #admClose{display:block}
-#admBox{width:min(400px,92vw);max-height:90vh;overflow:auto;box-sizing:border-box;padding:18px 20px;background:#1b1d40;border:4px solid #7b72e8;box-shadow:0 0 0 3px #0e0f26,inset 0 0 0 3px #2c2e66;border-radius:6px;font:14px/1.4 'Galmuri11','Press Start 2P',monospace;color:#e9e6ff}
-#admBox h2{margin:0 0 6px;font:inherit;font-size:18px;color:#ffd66b;text-align:center}
-#admBox label{display:block;margin:10px 0 4px;color:#b9b3ff;font-size:13px}
+#ttScreen[style*="flex"] #ttClose,#admScreen[style*="flex"] #admClose,#skScreen[style*="flex"] #skClose,#gmScreen[style*="flex"] #gmClose{display:block}
+#admBox,#gmBox{width:min(400px,92vw);max-height:90vh;overflow:auto;box-sizing:border-box;padding:18px 20px;background:#1b1d40;border:4px solid #7b72e8;box-shadow:0 0 0 3px #0e0f26,inset 0 0 0 3px #2c2e66;border-radius:6px;font:14px/1.4 'Galmuri11','Press Start 2P',monospace;color:#e9e6ff}
+#admBox h2,#gmBox h2{margin:0 0 6px;font:inherit;font-size:18px;color:#ffd66b;text-align:center}
+#admBox label,#gmBox label{display:block;margin:10px 0 4px;color:#b9b3ff;font-size:13px}
 .admRow{display:flex;gap:8px;align-items:center}
 .admIn{flex:1;min-width:0;box-sizing:border-box;padding:8px;background:#0f1030;color:#fff;border:2px solid #5b55a8;border-radius:4px;font:inherit}
 #admColor{flex:none;width:56px;height:36px;padding:0;background:#0f1030;border:2px solid #5b55a8;border-radius:4px;cursor:pointer}
@@ -94,7 +94,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 .admBtn:hover{filter:brightness(1.2)}
 #admGrant{display:block;width:100%;margin-top:14px}
 #admMine{display:block;width:100%;margin-top:14px;background:#2c2e66}
-#admMsg{min-height:20px;margin-top:10px;font-size:13px;line-height:1.3}
+#admMsg,#gmMsg{min-height:20px;margin-top:10px;font-size:13px;line-height:1.3}
 #admList{margin-top:6px}
 #admList .who{color:#b9b3ff;font-size:13px;margin-bottom:4px}
 #admList .row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-top:1px solid #2c2e66;text-shadow:2px 2px 0 #0b0b25}
@@ -141,6 +141,40 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #goldTx{position:absolute;left:26%;right:11%;top:0;bottom:0;display:flex;align-items:center;justify-content:flex-end;font:700 20px 'Galmuri11','Press Start 2P',monospace;color:#ffe9a8;text-shadow:2px 2px 0 #0b0a24;white-space:nowrap;overflow:hidden}
 #goldBar.pop{animation:goldPop .5s}
 @keyframes goldPop{30%{transform:scale(1.1)}}
+#skinBtn{position:fixed;right:286px;top:50%;margin-top:-38px;width:100px;height:75px;padding:0;border:0;cursor:pointer;background:url(skinButton.png) -13.5px -2.4px/127.1px 84.7px no-repeat;z-index:4}
+#skinBtn:hover{filter:brightness(1.12)}
+#skinBtn.noimg{background:rgba(20,30,60,.85);border:2px solid #fff;border-radius:8px;color:#fff;font:700 14px 'Galmuri11',system-ui,sans-serif}
+#goldBar.adm{pointer-events:auto;cursor:pointer}
+#goldBar.adm:hover{filter:brightness(1.12)}
+#gmList{max-height:190px;overflow:auto;margin-top:6px;border:2px solid #2c2e66;border-radius:4px;background:#0f1030}
+#gmList .row{display:flex;justify-content:space-between;gap:8px;padding:5px 8px;border-top:1px solid #2c2e66;cursor:pointer;font-size:13px}
+#gmList .row:first-child{border-top:0}
+#gmList .row:hover{background:rgba(255,255,255,.08)}
+#gmList .row.sel{background:rgba(255,214,107,.18);outline:2px solid #ffd66b;outline-offset:-2px}
+#gmList .row b{color:#ffd66b;font-weight:400;white-space:nowrap}
+#gmList .none{padding:8px;color:#b9b3ff;font-size:13px}
+#gmCur{flex:none;color:#ffd66b;font-size:13px;white-space:nowrap}
+.gmBtns{display:flex;gap:8px;margin-top:12px}.gmBtns .admBtn{flex:1}
+#shopBox{--u:1px;font-family:'Galmuri11','Press Start 2P',monospace}
+.shSlot{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--u)*4);padding:calc(var(--u)*6);background:none;border:0;cursor:pointer;font-family:inherit;color:#fff;border-radius:calc(var(--u)*8)}
+.shSlot:hover:not(.empty){background:rgba(255,255,255,.1)}
+.shSlot.empty{cursor:default}
+.shSlot img{width:58%;max-height:62%;object-fit:contain;image-rendering:pixelated}
+.shSlot .pr{font-size:calc(var(--u)*18);color:#ffe9a8;text-shadow:calc(var(--u)*2) calc(var(--u)*2) 0 #0b0a24;white-space:nowrap}
+.shSlot.own{opacity:.55}
+.dbgSlots .shSlot,.dbgSlots .ttSlot{outline:1px dashed #ff0}
+#shAdm{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:none;box-sizing:border-box;padding:10px 14px;background:#1b1d40;border:3px solid #7b72e8;border-radius:6px;font:13px 'Galmuri11','Press Start 2P',monospace;color:#e9e6ff;z-index:8;max-width:94vw}
+#shAdm .t{color:#ffd66b;margin-bottom:6px}
+#shAdm .r{display:flex;align-items:center;gap:8px;margin-top:4px}
+#shAdm .r span{flex:1;min-width:0}
+#shAdm input{width:100px;box-sizing:border-box;padding:5px;background:#0f1030;color:#fff;border:2px solid #5b55a8;border-radius:4px;font:inherit}
+#buyScreen{position:fixed;inset:0;background:rgba(5,6,20,.55);display:none;align-items:center;justify-content:center;z-index:9}
+#buyBox{position:relative;width:min(92vw,calc(80vh*1.5),680px);aspect-ratio:1536/1024}
+#buyBox img{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;user-select:none;-webkit-user-drag:none;pointer-events:none}
+#buyYes,#buyNo{position:absolute;top:57.1%;height:16.6%;background:none;border:0;padding:0;cursor:pointer;border-radius:12px}
+#buyYes{left:15.6%;width:33.2%}#buyNo{left:51.4%;width:32.9%}
+#buyYes:hover,#buyNo:hover{background:rgba(255,255,255,.14)}
+#buyCap{position:absolute;left:0;right:0;top:89%;text-align:center;font:700 16px 'Galmuri11',system-ui,sans-serif;color:#fff;text-shadow:2px 2px 0 #0b0a24}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css" rel="stylesheet">
@@ -153,6 +187,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <button id="titleBtn" aria-label="title"></button>
 <button id="mapBtn"></button>
 <button id="shopBtn" aria-label="shop"></button>
+<button id="skinBtn" aria-label="skins"></button>
 <div id="goldBar"><span id="goldTx">0</span></div>
 <button id="readyBtn">0/2</button>
 <button id="patchBtn" aria-label="patch notes"></button>
@@ -170,7 +205,15 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <button id="admGrant" class="admBtn" type="button">칭호 부여</button>
 <div id="admMsg"></div><div id="admList"></div>
 <button id="admMine" class="admBtn" type="button">내 칭호 장착하기</button></div><button id="admClose" class="xBtn" aria-label="close">✕</button></div>
-<div id="shopScreen"><div id="shopBox"><img id="shopBg" src="shopUI.png" alt="" draggable="false"></div><button id="shopClose" class="xBtn" aria-label="close">✕</button></div>
+<div id="shopScreen"><div id="shopBox"><img id="shopBg" src="shopTab.png" onerror="this.onerror=null;this.src='shopUI.png'" alt="" draggable="false"></div><button id="shopClose" class="xBtn" aria-label="close">✕</button><div id="shAdm"></div>
+<div id="buyScreen"><div id="buyBox"><img src="buyConfirm.png" alt="" draggable="false"><button id="buyYes" aria-label="yes"></button><button id="buyNo" aria-label="no"></button><div id="buyCap"></div></div></div></div>
+<div id="skScreen"><div id="skBox"><img id="skBg" src="inventory.png" onerror="this.onerror=null;this.src='title-inv.png'" alt="" draggable="false"></div><button id="skClose" class="xBtn" aria-label="close">✕</button></div>
+<div id="gmScreen"><div id="gmBox"><h2>골드 관리</h2>
+<label for="gmFind">계정 검색 / 선택</label><input id="gmFind" class="admIn" style="width:100%" placeholder="아이디 또는 닉네임 검색" autocomplete="off" spellcheck="false"><div id="gmList"></div>
+<label for="gmTarget">선택한 계정</label><div class="admRow"><input id="gmTarget" class="admIn" maxlength="16" placeholder="아이디" autocomplete="off" autocapitalize="none" spellcheck="false"><span id="gmCur"></span></div>
+<label for="gmAmt">금액</label><input id="gmAmt" class="admIn" style="width:100%" type="number" min="0" max="1000000000" step="1" placeholder="골드 금액" autocomplete="off">
+<div class="gmBtns"><button id="gmSet" class="admBtn" type="button">설정 (=)</button><button id="gmAdd" class="admBtn" type="button">지급 (+)</button></div>
+<div id="gmMsg"></div></div><button id="gmClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="pnScreen"><div id="pnBox"><h2>밸런스 패치 노트</h2><div id="pnBody"></div></div><button id="pnClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="killLog"></div>
 <div id="banner"></div><div id="fade"></div><div id="toast"></div>
@@ -274,7 +317,7 @@ function connect(){
     if(snapNext){o.x=p.x;o.y=p.y}
     const f0=o.face;
     if(p.su>0&&(p.su>(o.su||0)+60||!(o.su>0)))o.sMax=p.su;
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,id:p.id});
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,sn:p.sn,id:p.id});
     if(p.id===myId)o.face=f0;
    }
    snapNext=false;
@@ -289,12 +332,12 @@ function connect(){
    readyBtn.classList.toggle('on',!!(me&&me.r));
    if(myCls!==(me?me.c:'')){myCls=me?me.c:'';csRender();skIcons()}
     const fm=(me&&me.lf)||'';if(fm!==myForm){myForm=fm;skIcons()}
-   titleBtn.style.display=shopBtn.style.display=phase==='lobby'?'':'none';
+   titleBtn.style.display=shopBtn.style.display=skinBtn.style.display=phase==='lobby'?'':'none';
    mapBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'':'none';mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
-   if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose();shopClose()}
+   if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose();shopClose();skClose();gmClose()}
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
-   goldBar.style.display=(joined&&!obs)?'block':'none';
-   if(obs){readyBtn.style.display=titleBtn.style.display=shopBtn.style.display=skillbar.style.display='none';shopClose();classBtn.style.display='';logoutBtn.style.display='block'}
+   goldBar.style.display=(joined&&!obs)?'block':'none';goldBar.classList.toggle('adm',isAdmin);
+   if(obs){readyBtn.style.display=titleBtn.style.display=shopBtn.style.display=skinBtn.style.display=skillbar.style.display='none';shopClose();skClose();gmClose();classBtn.style.display='';logoutBtn.style.display='block'}
   }
   else if(m.t==='chat'){addLog(m.name,m.text,m.sys,0);if(m.id)bubbles.set(m.id,{text:m.text,until:performance.now()+4000})}
   else if(m.t==='countdown'){cdEnd=m.ms?performance.now()+m.ms:0}
@@ -310,6 +353,11 @@ function connect(){
   else if(m.t==='ack'){const e=pend.get(m.q);pend.delete(m.q);if(e&&!m.ok)unpredict(m.q,e)}
   else if(m.t==='cel'){celS={d:m.d,b:m.b}}
   else if(m.t==='gold'){goldSet(m.g,m.d)}
+  else if(m.t==='shop'){SHOP=m.items||[];shopRender();skRender();shAdmRender()}
+  else if(m.t==='sinfo'){mySk={own:m.own||[],eqs:m.eqs||{}};skRender();shopRender()}
+  else if(m.t==='buy'){toast(m.msg||'')}
+  else if(m.t==='shopmsg'){toast(m.msg||'')}
+  else if(m.t==='gadmin'){gmReply(m)}
   else if(m.t==='gc'){gcS={l:m.l,s:m.s,ch:performance.now()+m.ch}}
   else if(m.t==='fx'){if(eatEcho(m))return;m.t0=performance.now();if(m.g){const go=others.get(m.g);if(go)go.shot=m.t0}if(!(m.by===myId&&(m.type==='cone'||m.type==='gslash')&&!m.tint&&!m.sq))fxs.push(m);
    if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
@@ -600,7 +648,7 @@ csImg.onclick=()=>{const c=CHARS[csSel];if(c&&c.forms){csForm++;csRender()}};
 csOk.onclick=()=>{const c=CHARS[csSel];if(c&&!obs&&phase==='lobby'){tx({t:'class',cls:c.id});csClose()}};
 csScreen.onclick=e=>{if(e.target===csScreen)csClose()};
 document.getElementById('csClose').onclick=()=>csClose();
-function csOpen(){ttClose();admClose();shopClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();csScreen.style.display='flex';csFit();
+function csOpen(){ttClose();admClose();shopClose();skClose();gmClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();csScreen.style.display='flex';csFit();
  const i=CHARS.findIndex(c=>c&&c.id===myCls);csSel=i>=0?i:0;csForm=0;csRender()}
 function csClose(){csScreen.style.display='none'}
 function csIsOpen(){return csScreen.style.display==='flex'}
@@ -623,7 +671,7 @@ function ttRender(){
 function colorize(el,text,color,cols){el.textContent='';Array.from(text||'').forEach((c,i)=>{const s=document.createElement('span');s.textContent=c;s.style.color=(cols&&cols[i])||color;el.appendChild(s)})}
 function ttFit(){ttBox.style.setProperty('--u',ttBox.clientWidth/TT_W+'px')}
 addEventListener('resize',ttFit);
-function ttOpen(){csClose();admClose();shopClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();ttScreen.style.display='flex';ttFit();ttRender()}
+function ttOpen(){csClose();admClose();shopClose();skClose();gmClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();ttScreen.style.display='flex';ttFit();ttRender()}
 function ttClose(){ttScreen.style.display='none'}
 function ttIsOpen(){return ttScreen.style.display==='flex'}
 document.getElementById('ttClose').onclick=()=>ttClose();
@@ -637,7 +685,7 @@ function admColsRender(){const ch=admChars();while(admCols.length<ch.length)admC
  ch.forEach((c,i)=>{const w=document.createElement('label');w.className='admCh';const n=document.createElement('span');n.textContent=c===' '?'␣':c;const inp=document.createElement('input');inp.type='color';inp.value=admCols[i];
   inp.oninput=()=>{admCols[i]=inp.value;admPrevUpd()};w.append(n,inp);admColsEl.appendChild(w)});admPrevUpd()}
 admText.oninput=admColsRender;admColor.oninput=()=>{admCols=admCols.map(()=>admColor.value);admColsRender()};admTarget.oninput=()=>{admList.textContent='';admMsg.textContent=''};
-function admOpen(){csClose();ttClose();shopClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();admScreen.style.display='flex';admColsRender()}
+function admOpen(){csClose();ttClose();shopClose();skClose();gmClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();admScreen.style.display='flex';admColsRender()}
 function admClose(){admScreen.style.display='none'}
 function admIsOpen(){return admScreen.style.display==='flex'}
 function admSay(msg,ok){admMsg.textContent=msg;admMsg.style.color=ok?'#9dffb0':'#ff8a8a'}
@@ -661,7 +709,7 @@ admScreen.onclick=e=>{if(e.target===admScreen)admClose()};
 titleBtn.onclick=()=>{if(isAdmin)admOpen();else ttOpen();titleBtn.blur()};
 const pnScreen=document.getElementById('pnScreen'),pnBody=document.getElementById('pnBody');
 const pnIsOpen=()=>pnScreen.style.display==='flex',pnClose=()=>{pnScreen.style.display='none'};
-async function pnOpen(){csClose();ttClose();admClose();shopClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();
+async function pnOpen(){csClose();ttClose();admClose();shopClose();skClose();gmClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();
  pnScreen.style.display='flex';pnBody.textContent='불러오는 중…';
  try{const r=await fetch('patch-notes.txt?_='+Date.now(),{cache:'no-store'});const t=r.ok?(await r.text()).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n'):'';pnBody.textContent=t.trim()?t:'아직 패치 노트가 없습니다.'}
  catch(e){pnBody.textContent='아직 패치 노트가 없습니다.'}}
@@ -670,17 +718,95 @@ document.getElementById('patchBtn').onclick=e=>{pnOpen();e.currentTarget.blur()}
 const shopBtn=document.getElementById('shopBtn'),shopScreen=document.getElementById('shopScreen'),goldBar=document.getElementById('goldBar'),goldTx=document.getElementById('goldTx');
 let goldVal=0;
 function shopIsOpen(){return shopScreen.style.display==='flex'}
-function shopClose(){shopScreen.style.display='none'}
-function shopOpen(){csClose();ttClose();admClose();pnClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();shopScreen.style.display='flex'}
+function shopClose(){shopScreen.style.display='none';buyClose();shAdm.style.display='none'}
+function shopOpen(){csClose();ttClose();admClose();pnClose();skClose();gmClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();shopScreen.style.display='flex';shopFit();shopRender();shAdmRender()}
 shopBtn.onclick=()=>{shopOpen();shopBtn.blur()};
 document.getElementById('shopClose').onclick=()=>shopClose();
 shopScreen.onclick=e=>{if(e.target===shopScreen)shopClose()};
 function goldSet(g,d){goldVal=Math.max(0,g|0);goldTx.textContent=goldVal.toLocaleString();if(d>0){toast('+'+d+' 골드');goldBar.classList.remove('pop');void goldBar.offsetWidth;goldBar.classList.add('pop')}}
-function anyWinOpen(){return csIsOpen()||ttIsOpen()||admIsOpen()||pnIsOpen()||shopIsOpen()}
-function closeAllWins(){csClose();ttClose();admClose();pnClose();shopClose()}
+function anyWinOpen(){return csIsOpen()||ttIsOpen()||admIsOpen()||pnIsOpen()||shopIsOpen()||skIsOpen()||gmIsOpen()}
+function closeAllWins(){csClose();ttClose();admClose();pnClose();shopClose();skClose();gmClose()}
 document.getElementById('pnClose').onclick=pnClose;pnScreen.onclick=e=>{if(e.target===pnScreen)pnClose()};
-function resetTitles(){isAdmin=false;myTitles=[];myEq=null;titleMap.clear();ttRender();admClose();ttClose()}
+function resetTitles(){isAdmin=false;myTitles=[];myEq=null;mySk={own:[],eqs:{}};titleMap.clear();ttRender();admClose();ttClose();skClose();gmClose();shopClose()}
 try{document.fonts.load("13px 'Galmuri11'","칭호가나다")}catch(e){}
+
+// ---- skins / shop items / admin gold ----
+const lkLoad=f=>{const i=new Image();i.src=f;return i};
+const SKN={LightKnight:{cls:'Knight',icon:'LightKnight.png',spr:lkLoad('LightKnight.png'),sw:lkLoad('LightKnightSword.png'),sl:lkLoad('LightKnightSlash.png'),sh:lkLoad('LightKnightShield.png')}};
+const skOf=o=>{const k=o&&o.sn&&SKN[o.sn];return k&&k.cls===o.cls?k:null};
+let SHOP=[],mySk={own:[],eqs:{}};
+const skinBtn=document.getElementById('skinBtn');
+{const t=new Image();t.onerror=()=>{skinBtn.classList.add('noimg');skinBtn.textContent='스킨'};t.src='skinButton.png'}
+if(/[?&]slots\b/.test(location.search))document.body.classList.add('dbgSlots');
+// shop grid: 5 columns x 4 rows, filled row by row (same ordering as the class panel). Units: shop window 1000 wide x 667 tall.
+const SH_W=1000,SH_H=667,SH_GRID={x:100,y:150,w:150,h:110,gx:12.5,gy:12,cols:5,rows:4};
+const shopBox=document.getElementById('shopBox'),shAdm=document.getElementById('shAdm');
+const shSlots=Array.from({length:SH_GRID.cols*SH_GRID.rows},(_,i)=>{const g=SH_GRID,c=i%g.cols,r=Math.floor(i/g.cols),b=document.createElement('button');b.className='shSlot empty';
+ b.style.left=(g.x+c*(g.w+g.gx))/SH_W*100+'%';b.style.top=(g.y+r*(g.h+g.gy))/SH_H*100+'%';b.style.width=g.w/SH_W*100+'%';b.style.height=g.h/SH_H*100+'%';
+ b.onclick=()=>shopPick(i);shopBox.appendChild(b);return b});
+function shopFit(){shopBox.style.setProperty('--u',shopBox.clientWidth/SH_W+'px')}
+function shopRender(){
+ shSlots.forEach((b,i)=>{const it=SHOP[i],own=!!it&&mySk.own.includes(it.id);b.classList.toggle('empty',!it);b.classList.toggle('own',own);b.textContent='';
+  if(!it)return;const im=document.createElement('img');im.src=(SKN[it.id]||{}).icon||'';im.alt='';im.draggable=false;const pr=document.createElement('span');pr.className='pr';pr.textContent=own?'보유중':it.price.toLocaleString()+' G';b.append(im,pr);b.title=it.name})}
+function shAdmRender(){
+ if(!isAdmin||!shopIsOpen()){shAdm.style.display='none';return}
+ shAdm.style.display='block';if(shAdm.contains(document.activeElement))return;shAdm.textContent='';
+ const t=document.createElement('div');t.className='t';t.textContent='가격 관리 (관리자)';shAdm.appendChild(t);
+ for(const it of SHOP){const r=document.createElement('div');r.className='r';const n=document.createElement('span');n.textContent=it.name;
+  const inp=document.createElement('input');inp.type='number';inp.min=0;inp.max=10000000;inp.step=1;inp.value=it.price;
+  const bt=document.createElement('button');bt.className='admBtn';bt.type='button';bt.textContent='저장';bt.onclick=()=>{const v=Number(inp.value);if(!Number.isInteger(v)||v<0||v>10000000)return toast('가격은 0 ~ 10,000,000 정수여야 합니다.');tx({t:'shopprice',id:it.id,price:v})};
+  r.append(n,inp,bt);shAdm.appendChild(r)}}
+let pendBuy=null;
+const buyScreen=document.getElementById('buyScreen'),buyCap=document.getElementById('buyCap');
+function buyClose(){pendBuy=null;buyScreen.style.display='none'}
+function shopPick(i){const it=SHOP[i];if(!it)return;if(mySk.own.includes(it.id))return toast('이미 보유한 스킨입니다.');
+ pendBuy=it;buyCap.textContent=it.name+' · '+it.price.toLocaleString()+' 골드';buyScreen.style.display='flex'}
+document.getElementById('buyYes').onclick=()=>{const it=pendBuy;buyClose();if(!it)return;if(goldVal<it.price)return toast('골드가 부족합니다.');tx({t:'buy',id:it.id,price:it.price})};
+document.getElementById('buyNo').onclick=buyClose;
+buyScreen.onclick=e=>{if(e.target===buyScreen)buyClose()};
+// skin window (reuses the inventory window layout)
+const skScreen=document.getElementById('skScreen'),skBox=document.getElementById('skBox');
+const skSlots=TT_SLOTS.map((r,i)=>{const b=document.createElement('button');b.className='ttSlot';
+ b.style.left=r[0]/TT_W*100+'%';b.style.top=r[1]/TT_H*100+'%';b.style.width=r[2]/TT_W*100+'%';b.style.height=r[3]/TT_H*100+'%';
+ b.onclick=()=>skPick(i);skBox.appendChild(b);return b});
+const skList=()=>SHOP.filter(it=>mySk.own.includes(it.id));
+function skRender(){const L=skList();
+ skSlots.forEach((b,i)=>{const it=L[i];b.classList.toggle('empty',!it);b.classList.toggle('sel',!!it&&mySk.eqs[it.cls]===it.id);b.textContent='';b.title=it?it.name:'';
+  if(!it)return;b.style.flexDirection='column';b.style.gap='calc(var(--u)*4)';
+  const im=document.createElement('img');im.src=(SKN[it.id]||{}).icon||'';im.alt='';im.draggable=false;im.style.cssText='height:58%;image-rendering:pixelated';
+  const sp=document.createElement('span');sp.style.cssText='font-size:calc(var(--u)*15);line-height:1.15';sp.textContent=it.name.replace(' 스킨','')+(mySk.eqs[it.cls]===it.id?' ✔':'');b.append(im,sp)})}
+function skPick(i){const it=skList()[i];if(!it)return;
+ if(mySk.eqs[it.cls]===it.id)delete mySk.eqs[it.cls];else mySk.eqs[it.cls]=it.id;skRender();tx({t:'skequip',id:it.id})}
+function skFit(){skBox.style.setProperty('--u',skBox.clientWidth/TT_W+'px')}
+function skIsOpen(){return skScreen.style.display==='flex'}
+function skClose(){skScreen.style.display='none'}
+function skOpen(){csClose();ttClose();admClose();pnClose();shopClose();gmClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();skScreen.style.display='flex';skFit();skRender()}
+skinBtn.onclick=()=>{skOpen();skinBtn.blur()};
+document.getElementById('skClose').onclick=skClose;skScreen.onclick=e=>{if(e.target===skScreen)skClose()};
+addEventListener('resize',()=>{skFit();shopFit()});
+// admin gold window
+const gmScreen=document.getElementById('gmScreen'),gmFind=document.getElementById('gmFind'),gmList=document.getElementById('gmList'),gmTarget=document.getElementById('gmTarget'),gmAmt=document.getElementById('gmAmt'),gmMsg=document.getElementById('gmMsg'),gmCur=document.getElementById('gmCur');
+let gmRows=[];
+function gmSay(msg,ok){gmMsg.textContent=msg||'';gmMsg.style.color=ok?'#9dffb0':'#ff8a8a'}
+function gmRender(){const q=gmFind.value.trim().toLowerCase(),t=gmTarget.value.trim().toLowerCase();gmList.textContent='';
+ const rows=gmRows.filter(r=>!q||r.id.includes(q)||String(r.nick).toLowerCase().includes(q));
+ if(!rows.length){const d=document.createElement('div');d.className='none';d.textContent=gmRows.length?'검색 결과가 없습니다.':'계정이 없습니다.';gmList.appendChild(d)}
+ for(const r of rows){const d=document.createElement('div');d.className='row'+(r.id===t?' sel':'');const a=document.createElement('span');a.textContent=r.nick+' ('+r.id+')';const g=document.createElement('b');g.textContent=r.gold.toLocaleString()+' G';d.append(a,g);d.onclick=()=>{gmTarget.value=r.id;gmCurUpd();gmRender()};gmList.appendChild(d)}
+ gmCurUpd()}
+function gmCurUpd(){const r=gmRows.find(r=>r.id===gmTarget.value.trim().toLowerCase());gmCur.textContent=r?'현재 '+r.gold.toLocaleString()+' G':''}
+function gmReply(m){gmSay(m.msg,m.ok);
+ if(m.ok&&m.list){gmRows=m.list;gmRender()}
+ else if(m.ok&&m.row){const i=gmRows.findIndex(r=>r.id===m.row.id);if(i>=0)gmRows[i]=m.row;else gmRows.push(m.row);gmRender()}}
+function gmSend(t){const target=gmTarget.value.trim().toLowerCase();if(!target)return gmSay('계정을 선택하거나 아이디를 입력해 주세요.',0);
+ const v=Number(gmAmt.value);if(gmAmt.value===''||!Number.isInteger(v)||v<0||v>1000000000)return gmSay('금액은 0 ~ 1,000,000,000 사이의 정수여야 합니다.',0);
+ tx({t,target,amount:v})}
+document.getElementById('gmSet').onclick=()=>gmSend('gset');document.getElementById('gmAdd').onclick=()=>gmSend('gadd');
+gmFind.oninput=gmRender;gmTarget.oninput=()=>{gmCurUpd();gmRender()};
+function gmIsOpen(){return gmScreen.style.display==='flex'}
+function gmClose(){gmScreen.style.display='none'}
+function gmOpen(){if(!isAdmin)return;csClose();ttClose();admClose();pnClose();shopClose();skClose();for(const k in keys)keys[k]=false;sendInput();cancelCharge();gmScreen.style.display='flex';gmMsg.textContent='';gmRows=[];gmRender();tx({t:'glist'})}
+document.getElementById('gmClose').onclick=gmClose;gmScreen.onclick=e=>{if(e.target===gmScreen)gmClose()};
+goldBar.onclick=()=>{if(isAdmin)gmOpen()};
 
 const CLS={Knight:['⚔️','#ffb3a7'],Archer:['🏹','#b6f0a8'],Shielder:['🛡️','#a9d4ff'],Assassin:['🗡️','#d9b3ff'],Gumiho:['🦊','#9ff0ff'],Lucifer:['😈','#ffd1ff'],Gambler:['🎲','#ffb3b3'],SwordMaster:['💠','#a8ecff'],Tower:['🏰','#e3d3a8'],Financier:['💼','#b9d4ff']};
 
@@ -688,17 +814,17 @@ const CLS={Knight:['⚔️','#ffb3a7'],Archer:['🏹','#b6f0a8'],Shielder:['🛡
 function startSwing(o,a,span,dur){o.sw={t0:performance.now(),dur,a,span}}
 function localSwing(span,dur){const o=others.get(myId);if(o&&myCls==='Knight'&&myRole!==2)startSwing(o,myAim,span,dur)}
 function drawSword(o,h,lift){
- if(!(swordImg.complete&&swordImg.naturalWidth))return;
+ const skn=skOf(o),si=skn&&imOk(skn.sw)?skn.sw:swordImg,nw=si===swordImg?7:15;if(!(si.complete&&si.naturalWidth))return;
  const now=performance.now(),sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,cx=o.x,cy=o.y-h*.5-lift;
  ctx.save();
  if(sw&&k<1){
   const base=Math.atan2(.8*Math.sin(sw.a),Math.cos(sw.a)),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2,th=base+(e-.5)*sw.span*1.15;
   ctx.translate(cx+Math.cos(th)*14,cy+Math.sin(th)*11);ctx.rotate(th+Math.PI/2);
-  ctx.drawImage(swordImg,0,0,7,15,-3.5*PX,-15*PX,7*PX,15*PX);
+  ctx.drawImage(si,0,0,nw,15,-nw/2*PX,-15*PX,nw*PX,15*PX);
  }else{
   const side=o.face,bob=Math.sin(now/260+o.x*.05)*3+(o.moving?Math.sin(o.phase*2)*2:0);
   ctx.translate(cx+side*32,cy+8+bob);ctx.rotate(side*.25);
-  ctx.drawImage(swordImg,0,0,7,15,-3.5*PX,-11*PX,7*PX,15*PX);
+  ctx.drawImage(si,0,0,nw,15,-nw/2*PX,-11*PX,nw*PX,15*PX);
  }
  ctx.restore();
 }
@@ -730,6 +856,7 @@ function drawGacha(f,k){
  ctx.save();ctx.globalAlpha=al;ctx.translate(f.x,f.y-95-18*k);ctx.shadowColor='#c06bff';ctx.shadowBlur=18;
  ctx.drawImage(gachaImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();
 }
+const GBOW_ROT=0;
 function drawGamerWeapon(o,h,lift){
  const now=performance.now(),sw=o.sw,swinging=sw&&now-sw.t0<sw.dur,mel=swinging||!o.gm,im=mel?gMelWImg:gRngWImg;if(!imOk(im))return;
  const S=3.6,cx=o.x,cy=o.y-h*.5-lift;
@@ -739,10 +866,10 @@ function drawGamerWeapon(o,h,lift){
   ctx.translate(cx+Math.cos(th)*14,cy+Math.sin(th)*11);ctx.rotate(th+Math.PI/4);
   ctx.drawImage(im,0,0,15,15,-2*S,-12.5*S,15*S,15*S);
  }else{
-  const side=o.face,bob=Math.sin(now/260+o.x*.05)*3+(o.moving?Math.sin(o.phase*2)*2:0);
-  ctx.translate(cx+side*30,cy+8+bob);if(side<0)ctx.scale(-1,1);
-  if(mel){ctx.rotate(.1);ctx.drawImage(im,0,0,15,15,-2*S,-12.5*S,15*S,15*S)}
-  else ctx.drawImage(im,0,0,15,15,-7.5*S,-9*S,15*S,15*S);
+  const a=o.da||0,th=Math.atan2(.8*Math.sin(a),Math.cos(a)),bob=Math.sin(now/260+o.x*.05)*2.5+(o.moving?Math.sin(o.phase*2)*2:0),dist=mel?30:34;
+  ctx.translate(cx+Math.cos(th)*dist,cy+8+Math.sin(th)*dist*.8+bob);
+  if(mel){ctx.rotate(th+Math.PI/4);ctx.drawImage(im,0,0,15,15,-2*S,-12.5*S,15*S,15*S)}
+  else{ctx.rotate(th+GBOW_ROT);if(Math.cos(th)<0)ctx.scale(1,-1);ctx.drawImage(im,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S)}
  }
  ctx.restore();
 }
@@ -774,11 +901,11 @@ function drawGun(o,h,lift){
  ctx.drawImage(revImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();
 }
 function drawKnightShield(o,h,lift){
- if(!imOk(kshImg))return;
+ const ksI=skOf(o)&&imOk(skOf(o).sh)?skOf(o).sh:kshImg;if(!imOk(ksI))return;
  const now=performance.now(),a=o.da||0,th=Math.atan2(.8*Math.sin(a),Math.cos(a)),bob=Math.sin(now/260+o.x*.05)*2+(o.moving?Math.sin(o.phase*2)*2:0),S=4;
  ctx.save();ctx.translate(o.x+Math.cos(th)*34,o.y-h*.5-lift+8+Math.sin(th)*34*.8+bob);
- ctx.shadowColor='#7fd3ff';ctx.shadowBlur=12;
- ctx.drawImage(kshImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();
+ ctx.shadowColor=ksI===kshImg?'#7fd3ff':'#ffb347';ctx.shadowBlur=12;
+ ctx.drawImage(ksI,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();
 }
 function drawShield(o,h,lift){
  if(!(shieldImg.complete&&shieldImg.naturalWidth))return;
@@ -842,7 +969,7 @@ function drawWings(x0,yb){
 function drawPlayer(o,isMe){
  const lift=o.su>0?Math.sin((1-Math.min(1,o.su/(o.sMax||1000)))*Math.PI)*55:0;
  const s=Math.sin(o.phase),step=o.moving?s:0,bob=o.moving&&Math.abs(s)>.6?1:0;
- const lL=step>.3?1:0,lR=step<-.3?1:0,tw=o.cls==='Tower',w=(tw?30:15)*PX,h=(tw?40:15)*PX,x0=o.x-w/2,yb=o.y-h-lift,sp=o.ut?(o.ut==='i'?tInfImg:tArcImg):tw?towerImg:spriteFor(o.hue,o.cls,o.lf);
+ const lL=step>.3?1:0,lR=step<-.3?1:0,tw=o.cls==='Tower',w=(tw?30:15)*PX,h=(tw?40:15)*PX,x0=o.x-w/2,yb=o.y-h-lift,sp=o.ut?(o.ut==='i'?tInfImg:tArcImg):tw?towerImg:(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:spriteFor(o.hue,o.cls,o.lf));
  if((o.ut||tw)&&!imOk(sp))return;
  ctx.fillStyle='rgba(30,40,80,.3)';ctx.beginPath();ctx.ellipse(o.x,o.y-2,(tw?46:22)-(bob?2:0),PX*(tw?2.2:1.3),0,0,7);ctx.fill();
  if(o.ut){ctx.save();ctx.strokeStyle=o.ow===myId?'#4cd964':'#ff5a4a';ctx.lineWidth=2.5;ctx.beginPath();ctx.ellipse(o.x,o.y-2,26,9,0,0,7);ctx.stroke();ctx.restore()}
@@ -918,10 +1045,10 @@ function drawDash(f,k){
  ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=10;ctx.stroke();ctx.restore()}
 function drawGhosts(t){for(let i=ghosts.length-1;i>=0;i--){const g=ghosts[i],a=(t-g.t0)/300;if(a>=1){ghosts.splice(i,1);continue}
  const sp=spriteFor(g.hue,g.cls);ctx.save();ctx.globalAlpha=(1-a)*.4;ctx.translate(g.x,0);ctx.scale(g.face,1);ctx.drawImage(sp,0,0,15,15,-37.5,g.y-75,75,75);ctx.restore()}}
-function drawSlash(f,k){
+function drawSlash(f,k,im){
  const S=f.r/.9,al=k<.12?k/.12:1-(k-.12)/.88;
  ctx.globalAlpha=Math.max(0,al)*.95;ctx.rotate(f.a+3*Math.PI/4+(k-.5)*.9);
- ctx.drawImage(slashImg,0,0,15,15,-.967*S,-.967*S,S,S)}
+ ctx.drawImage(im||slashImg,0,0,15,15,-.967*S,-.967*S,S,S)}
 function drawPull(f,k){
  const e=k*k,tx=f.x,ty=f.y-30,S=3.4;
  for(const q of f.pts){const sx=q[0],sy=q[1]-FOX_LIFT,x=sx+(tx-sx)*e,y=sy+(ty-sy)*e;
@@ -1044,7 +1171,7 @@ function fxOne(f,k){
   ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(L,0);ctx.lineWidth=2;ctx.strokeStyle='rgba(255,255,255,.9)';ctx.stroke();ctx.restore();
  }else if(f.type==='cone'){
   const fo=f.by?others.get(f.by):null;
-  if(fo&&(fo.cls==='Knight'||fo.cls==='Assassin')&&slashImg.complete&&slashImg.naturalWidth){drawSlash(f,k);ctx.restore();return}
+  const ks=skOf(fo),sI=ks&&imOk(ks.sl)?ks.sl:slashImg;if(fo&&(fo.cls==='Knight'||fo.cls==='Assassin')&&imOk(sI)){drawSlash(f,k,sI);ctx.restore();return}
   ctx.globalAlpha=(1-k)*.9;ctx.beginPath();ctx.moveTo(0,0);
   ctx.arc(0,0,f.r*(.6+.4*Math.min(1,k*4)),f.a-f.span/2,f.a+f.span/2);ctx.closePath();
   ctx.fillStyle=f.c;ctx.fill();ctx.fillStyle='rgba(15,15,45,.45)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='rgba(255,255,255,.85)';ctx.stroke();
@@ -1109,7 +1236,7 @@ function updateSkillbar(t){
  updateRv(t);updateStk();updateGc(t);updateCel();
  if(skillbar.style.display!=='flex')return;
  const me=others.get(myId),hs=!!(me&&myCls==='Archer'&&hasteOn(me)),hn=!!(me&&myCls==='Shielder'&&me.hn);
- for(const el of skillbar.children){el.classList.toggle('on',(hs&&el.dataset.k==='E')||(hn&&el.dataset.k==='R'));const rem=Math.max(0,skCd[el.dataset.k]-t);el.classList.toggle('cd',rem>0);el.lastChild.textContent=rem>0?Math.ceil(rem/1000):''}
+ for(const el of skillbar.children){el.classList.toggle('on',(hs&&el.dataset.k==='E')||(hn&&el.dataset.k==='R')||(myCls==='Gamer'&&el.dataset.k==='R'&&gcS.ch>t));const rem=Math.max(0,skCd[el.dataset.k]-t);el.classList.toggle('cd',rem>0);el.lastChild.textContent=rem>0?Math.ceil(rem/1000):''}
 }
 function drawBubble(o,b){
  ctx.font='14px system-ui,sans-serif';const tw=ctx.measureText(b.text).width+16,bx=o.x-tw/2,by=o.y-15*PX-68-(o.tt?18:0);
