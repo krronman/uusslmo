@@ -937,7 +937,7 @@ function luciferSkill(p, k, m, now) {
 const FIN = {
   passive: { ms: 5000, mul: 1.03 },
   Q: { cd: 500, cost: 100, pick: 48 },
-  E: { cd: 15000, min: 200, cost: 200, ms: 2000 },
+  E: { cd: 15000, min: 150, cost: 150, ms: 2000 },
   R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1000, atkMul: 1.1 }
 };
 const stockPL = (f, t) => (f.buyDealt + (t.hp - f.buyHp0)) / 100;
@@ -952,7 +952,7 @@ function stepFinancier(p, now) {
   for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.mul; p.hp *= FIN.passive.mul; p.fDmg *= FIN.passive.mul; }
   stepIns(p, now);
   if (p.depUntil) {
-    while (p.depNext <= p.depUntil && now >= p.depNext) { p.hp = Math.max(1, p.hp - FIN.R.drain); p.depNext += 1000; }
+    while (p.depNext <= p.depUntil && now >= p.depNext) { const h0 = p.hp; p.hp = Math.max(1, p.hp - FIN.R.drain); if (p.insUntil) p.insAcc += h0 - p.hp; p.depNext += 1000; }
     if (now >= p.depUntil) {
       p.depUntil = 0; p.mh *= FIN.R.hpMul; heal(p, FIN.R.heal); p.fDmg *= FIN.R.atkMul;
       fxTxt(p.x, p.y - 30, '🏦 만기!', '#ffe08a');
@@ -984,12 +984,12 @@ function financierSkill(p, k, m, now) {
         if (d <= FIN.Q.pick + (t.hr || 0) * 1.4 && d < bd) { bd = d; best = t; }
       }
       if (!best) return;
-      cd(FIN.Q.cd); p.hp -= FIN.Q.cost; p.buy = best.id; p.buyDealt = 0; p.buyHp0 = best.hp; p.stkNext = 0;
+      cd(FIN.Q.cd); p.hp -= FIN.Q.cost; if (p.insUntil) p.insAcc += FIN.Q.cost; p.buy = best.id; p.buyDealt = 0; p.buyHp0 = best.hp; p.stkNext = 0;
       fxTxt(p.x, p.y - 30, '-' + FIN.Q.cost, '#ff8a8a');
     }
   } else if (k === 'E') {
     if (p.hp <= FIN.E.min) return;
-    cd(FIN.E.cd); p.hp -= FIN.E.cost; p.insUntil = now + FIN.E.ms; p.insAcc = 0;
+    cd(FIN.E.cd); p.hp -= FIN.E.cost; p.insUntil = now + FIN.E.ms; p.insAcc = FIN.E.cost;
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.1 * RADPX, c: '#7fe0ff', dur: 600 });
   } else {
     cd(FIN.R.cd); p.depUntil = now + FIN.R.ms; p.depNext = now + 1000;
@@ -1252,7 +1252,7 @@ const CEL = {
   cap: 300, store: 0.4, heal: 0.1,
   Q: { cd: 5000, r: 2 * RADPX, delay: 1000, dmg: 400, back: 0.2 },
   E: { cd: 1000 },
-  R: { cd: 25000, delay: 600, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.5, burstR: RADPX, burst: 300 }
+  R: { cd: 25000, delay: 0, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.7, burstR: RADPX, burst: 300 }
 };
 function celestialAttack(p, m, now) {
   if (now < p.atkReady) return;
