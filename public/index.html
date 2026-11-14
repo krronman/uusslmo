@@ -185,6 +185,8 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #kbList button{min-width:120px;padding:6px 8px;background:#0f1030;color:#fff;border:2px solid #5b55a8;border-radius:4px;font:inherit;cursor:pointer}
 #kbList button:hover{border-color:#ffd66b}
 #kbList button.cap{border-color:#ffd66b;color:#ffd66b}
+#kbList button.dup{border-color:#ff6b6b}
+#kbMsg.warn{color:#ff6b6b}
 #kbMsg{min-height:20px;margin-top:10px;font-size:13px;line-height:1.3;color:#b9b3ff}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -418,8 +420,8 @@ let kbCap=null;
 const KB_DEF={up:'KeyW',left:'KeyA',down:'KeyS',right:'KeyD',atk:'KeyF',Q:'KeyQ',E:'KeyE',R:'KeyR',chat:'Enter'};
 const KB_NAME={up:'위로 이동',left:'왼쪽 이동',down:'아래로 이동',right:'오른쪽 이동',atk:'공격',Q:'Q 스킬',E:'E 스킬',R:'R 스킬',chat:'채팅'};
 const kb=Object.assign({},KB_DEF),KB_ARROW={ArrowUp:'w',ArrowLeft:'a',ArrowDown:'s',ArrowRight:'d'};
-try{const o=JSON.parse(localStorage.getItem('kb')||'{}');for(const a in KB_DEF)if(typeof o[a]==='string'&&o[a])kb[a]=o[a];if(new Set(Object.values(kb)).size<Object.keys(kb).length)Object.assign(kb,KB_DEF)}catch(e){}
-const mvOf=c=>c===kb.up?'w':c===kb.left?'a':c===kb.down?'s':c===kb.right?'d':KB_ARROW[c]&&!Object.values(kb).includes(c)?KB_ARROW[c]:null;
+try{const o=JSON.parse(localStorage.getItem('kb')||'{}');for(const a in KB_DEF)if(typeof o[a]==='string'&&o[a])kb[a]=o[a]}catch(e){}
+const mvAll=c=>{const r=[];if(c===kb.up)r.push('w');if(c===kb.left)r.push('a');if(c===kb.down)r.push('s');if(c===kb.right)r.push('d');if(!r.length&&KB_ARROW[c]&&!Object.values(kb).includes(c))r.push(KB_ARROW[c]);return r};
 const skOfKey=c=>c===kb.Q?'Q':c===kb.E?'E':c===kb.R?'R':null;
 const isChatKey=c=>c===kb.chat||(kb.chat==='Enter'&&c==='NumpadEnter');
 function kbLabel(c){if(c.startsWith('Key'))return c.slice(3);if(c.startsWith('Digit'))return c.slice(5);if(c.startsWith('Numpad'))return'Num'+c.slice(6);return({ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',ShiftLeft:'LShift',ShiftRight:'RShift',ControlLeft:'LCtrl',ControlRight:'RCtrl',AltLeft:'LAlt',AltRight:'RAlt',Backquote:'`',Minus:'-',Equal:'=',BracketLeft:'[',BracketRight:']',Backslash:'\\',Semicolon:';',Quote:"'",Comma:',',Period:'.',Slash:'/'})[c]||c}
@@ -450,16 +452,15 @@ addEventListener('keydown',e=>{
  if(!joined||obs)return;
  if(isChatKey(e.code)){chatEl.style.display='block';chatEl.focus();for(const k in keys)keys[k]=false;sendInput();cancelCharge();e.preventDefault();return}
  if(!e.repeat){
-  if(e.code===kb.atk){if(myCls==='Archer'){archerPress();return}
-   tx(Object.assign({t:'atk',a:+myAim.toFixed(3)},atkInfo()));const n=performance.now();if(n>=atkLocal){atkLocal=n+(ATK_CD[myCls]||600)/(1+((others.get(myId)||{}).as||0));localAttack()}return}
-  const sk=skOfKey(e.code);if(sk){if(myCls==='Gumiho'&&sk==='Q'&&foxes.some(f=>f.o===myId)&&!hoverFox()){toast('Q: 커서를 여우불 위에 올려 주세요');return}
-   if(myCls==='Gumiho'&&sk==='E'&&!foxes.some(f=>f.o===myId)){toast('끌어당길 여우불이 없습니다');return}
-   const sq=predictSkill(sk);
+  if(e.code===kb.atk){if(myCls==='Archer')archerPress();else{
+   tx(Object.assign({t:'atk',a:+myAim.toFixed(3)},atkInfo()));const n=performance.now();if(n>=atkLocal){atkLocal=n+(ATK_CD[myCls]||600)/(1+((others.get(myId)||{}).as||0));localAttack()}}}
+  const sk=skOfKey(e.code);if(sk){if(myCls==='Gumiho'&&sk==='Q'&&foxes.some(f=>f.o===myId)&&!hoverFox())toast('Q: 커서를 여우불 위에 올려 주세요');
+   else if(myCls==='Gumiho'&&sk==='E'&&!foxes.some(f=>f.o===myId))toast('끌어당길 여우불이 없습니다');
+   else{const sq=predictSkill(sk);
    tx(Object.assign({t:'skill',k:sk,a:+myAim.toFixed(3)},atkInfo(),sq?{q:sq}:{},((sk==='R'&&myCls==='Assassin')||(sk==='Q'&&(myCls==='Gumiho'||myCls==='Tower'||myCls==='Financier'||myCls==='Gamer')))&&mouseOn?{cx:Math.round(mWx),cy:Math.round(mWy)}:{}));
-   if(sk==='E'&&myCls==='Archer'&&performance.now()>=skCd.E){const o=others.get(myId);if(o&&myRole!==2&&!(o.su>0)){hasteLocal=performance.now()+4000}}
-   return}}
- const mv=mvOf(e.code);if(mv){keys[mv]=true;sendInput();e.preventDefault()}});
-addEventListener('keyup',e=>{if(e.code===kb.atk&&chargeT0)archerRelease();const mv=mvOf(e.code);if(mv){keys[mv]=false;sendInput()}});
+   if(sk==='E'&&myCls==='Archer'&&performance.now()>=skCd.E){const o=others.get(myId);if(o&&myRole!==2&&!(o.su>0)){hasteLocal=performance.now()+4000}}}}}
+ const mv=mvAll(e.code);if(mv.length){for(const m of mv)keys[m]=true;sendInput();e.preventDefault()}});
+addEventListener('keyup',e=>{if(e.code===kb.atk&&chargeT0)archerRelease();const mv=mvAll(e.code);if(mv.length){for(const m of mv)keys[m]=false;sendInput()}});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;sendInput();cancelCharge()});
 const readyBtn=document.getElementById('readyBtn'),classBtn=document.getElementById('classBtn'),skillbar=document.getElementById('skillbar');
 const mapBtn=document.getElementById('mapBtn');mapBtn.onclick=()=>{tx({t:'map',id:(mapId+1)%MAPS.length});mapBtn.blur()};
@@ -489,7 +490,7 @@ function predictSkill(k){
  const fx=f=>{f.t0=n;f.pq=q;fxs.push(f);e.kinds[f.type]=(e.kinds[f.type]||0)+1},x=o.x,y=o.y,ex=Math.min(250,Math.round(rtt));
  if(myCls==='Celestial'){
   if(k==='Q'){const fall=c.fall+ex;fx({type:'planet',x,y,r:c.r,fall,dur:fall+260})}
-  else if(k==='R'){const fall=c.fall+ex;fx({type:'galaxy',x,y,r:c.r,fall,dur:fall+c.ms})}
+  else if(k==='R'){const fall=c.fall;fx({type:'galaxy',x,y,r:c.r,fall,dur:fall+c.ms})}
   else fx({type:'ring',x,y,r:c.r,c:'#ffffff',dur:450})}
  else if(myCls==='Knight'){fx({type:'cone',by:myId,x,y,a:myAim,span:c.span,r:c.r,c:'rgba(255,214,107,.65)',dur:380});startSwing(o,myAim,c.span,380)}
  else if(myCls==='Shielder')fx({type:'ring',x,y,r:c.r,dur:700});
@@ -607,7 +608,7 @@ const CHARS=[
   skills:[
    {icon:'💰',name:'적금',key:'패시브',types:['buff'],desc:'5초마다 최대 체력·현재 체력·공격력이 3%씩 복리로 증가합니다.'},
    {icon:'📈',name:'주식',key:'Q · 0.5초',types:['buff'],desc:'커서 아래 적에게 \'구매\'(체력 100 소모). 다시 사용하면 매각: 손익률만큼 체력(100×(100+손익)%)과 공격력 증가. 손익 = (대상이 준 피해 + 체력 변화)/100.'},
-   {icon:'🛡️',name:'보험',key:'E · 15초',types:['heal'],desc:'체력 200 초과 시 사용. 체력 200 소모 후 2초간 받은 피해를 모아 종료 시 모두 회복.'},
+   {icon:'🛡️',name:'보험',key:'E · 15초',types:['heal'],desc:'체력 150 초과 시 사용. 체력 150 소모 후 2초간 잃은 체력(소모한 체력 포함)을 모아 종료 시 모두 회복.'},
    {icon:'🏦',name:'정기적금',key:'R · 25초',types:['heal','buff'],desc:'10초간 매초 체력 70 차감. 만기 시 최대 체력 +20%, 체력 1000 회복, 공격력 +10%.'}]},
  {id:'Gamer',ko:'게이머',img:'gamer.png',stats:{hp:1000,atk:150},rng:'1 radpx (근접) / 4 radpx (원거리) 교대',
   style:'근접과 원거리를 번갈아 공격하는 복사형 캐릭터. 다른 플레이어의 스킬을 복사해 쓰고, 뽑기로 보너스를 얻습니다.',
@@ -622,7 +623,7 @@ const CHARS=[
    {icon:'🕳️',name:'블랙홀',key:'패시브',types:['buff'],desc:'받은 피해의 40%를 <4차원>에 저장(최대 300), 받은 피해의 10%만큼 체력 회복.'},
    {icon:'🪐',name:'행성 폭발',key:'Q · 5초',types:['phys'],desc:'자신의 위치에 반경 2 radpx 행성을 소환, 1초 뒤 폭발하여 범위 내 모든 적에게 400 물리 피해. 입힌 피해량의 20%를 <4차원>에 저장.'},
    {icon:'⚪',name:'화이트홀',key:'E · 1초',types:['buff'],desc:'저장된 <4차원> 피해를 모두 제거하고, 제거한 양만큼 다음 일반 공격 피해 증가.'},
-   {icon:'🌌',name:'은하 충돌',key:'R · 25초',types:['pierce','cc'],desc:'자신의 위치에 반경 3 radpx 은하를 4초간 생성: 범위 내 적에게 초당 40 관통 피해, 이동속도 50%의 힘으로 중심으로 끌어당김. 소멸 직후 중심 반경 1 radpx 내 적에게 300 관통 피해.'}]},
+   {icon:'🌌',name:'은하 충돌',key:'R · 25초',types:['pierce','cc'],desc:'자신의 발밑에 반경 3 radpx 은하를 즉시 펼쳐 4초간 유지: 범위 내 적에게 초당 40 관통 피해, 이동속도 70%의 힘으로 중심으로 끌어당김. 소멸 직후 중심 반경 1 radpx 내 적에게 300 관통 피해.'}]},
  ...new Array(8).fill(null)
 ];
 const csScreen=document.getElementById('csScreen'),csBox=document.getElementById('csBox');
@@ -758,14 +759,14 @@ function kbApply(){skillbar.querySelectorAll('.sk').forEach(el=>{const b=el.quer
  const K=a=>'<kbd>'+kbLabel(kb[a])+'</kbd>';
  hintEl.innerHTML='Aim 🖱 · Move '+K('up')+K('left')+K('down')+K('right')+' · Chat '+K('chat')+' · Attack '+K('atk')+' · Skills '+K('Q')+K('E')+K('R')}
 function kbSave(){try{localStorage.setItem('kb',JSON.stringify(kb))}catch(e){}kbApply()}
-function kbRender(){kbList.textContent='';for(const a in KB_DEF){const r=document.createElement('div'),n=document.createElement('span'),b=document.createElement('button');r.className='r';n.textContent=KB_NAME[a];b.textContent=kbCap===a?'키를 누르세요…':kbLabel(kb[a]);if(kbCap===a)b.className='cap';b.onclick=()=>{kbCap=kbCap===a?null:a;kbMsg.textContent=kbCap?'Esc: 취소':'';kbRender()};r.append(n,b);kbList.appendChild(r)}}
-function kbOpen(){closeAllWins();for(const k in keys)keys[k]=false;sendInput();cancelCharge();kbMsg.textContent='';kbScreen.style.display='flex';kbRender()}
+function kbRender(){kbList.textContent='';const cnt={};for(const a in KB_DEF)cnt[kb[a]]=(cnt[kb[a]]||0)+1;let dup=false;
+ for(const a in KB_DEF){const r=document.createElement('div'),n=document.createElement('span'),b=document.createElement('button'),d=cnt[kb[a]]>1;if(d)dup=true;r.className='r';n.textContent=KB_NAME[a];b.textContent=kbCap===a?'키를 누르세요…':kbLabel(kb[a]);b.className=kbCap===a?'cap':d?'dup':'';b.onclick=()=>{kbCap=kbCap===a?null:a;kbRender()};r.append(n,b);kbList.appendChild(r)}
+ kbMsg.textContent=kbCap?'Esc: 취소':dup?'Duplicate Key Detected':'';kbMsg.className=!kbCap&&dup?'warn':''}
+function kbOpen(){closeAllWins();for(const k in keys)keys[k]=false;sendInput();cancelCharge();kbScreen.style.display='flex';kbRender()}
 addEventListener('keydown',e=>{if(!kbCap)return;e.preventDefault();e.stopImmediatePropagation();
- if(e.code==='Escape'){kbCap=null;kbMsg.textContent='';kbRender();return}
- const a=kbCap,c=e.code,o=Object.keys(KB_DEF).find(x=>x!==a&&kb[x]===c);
- kbMsg.textContent=o?KB_NAME[o]+' 키가 '+kbLabel(kb[a])+'(으)로 교체됨':'';
- if(o)kb[o]=kb[a];kb[a]=c;kbCap=null;kbSave();kbRender()},true);
-document.getElementById('kbReset').onclick=()=>{Object.assign(kb,KB_DEF);kbCap=null;kbMsg.textContent='';kbSave();kbRender()};
+ if(e.code==='Escape'){kbCap=null;kbRender();return}
+ kb[kbCap]=e.code;kbCap=null;kbSave();kbRender()},true);
+document.getElementById('kbReset').onclick=()=>{Object.assign(kb,KB_DEF);kbCap=null;kbSave();kbRender()};
 document.getElementById('kbClose').onclick=kbClose;kbScreen.onclick=e=>{if(e.target===kbScreen)kbClose()};
 setBtn.onclick=()=>{kbOpen();setBtn.blur()};kbApply();
 document.getElementById('pnClose').onclick=pnClose;pnScreen.onclick=e=>{if(e.target===pnScreen)pnClose()};
@@ -1179,9 +1180,9 @@ function drawGalaxy(f,k){
   ctx.beginPath();ctx.arc(0,0,r*(1-p),0,6.2832);ctx.lineWidth=2;ctx.strokeStyle='rgba(255,255,255,.7)';ctx.stroke();ctx.restore();
   ctx.save();ctx.translate(0,-(1-e)*SKY_H);ctx.scale(1,.8);ctx.rotate(p*5);sprite(S,.35+.55*e);ctx.restore();
  }else{
-  const t=(k-fk)*f.dur,q=Math.min(1,t/260),end=Math.min(1,(1-k)*f.dur/350);
-  ctx.save();ctx.scale(1,.8);ctx.globalAlpha=end*.9;ctx.beginPath();ctx.arc(0,0,r,0,6.2832);ctx.fillStyle='rgba(90,60,200,.16)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#7a5cff';ctx.stroke();
-  ctx.save();ctx.rotate(t*.0016);sprite(r/15,end*(.6+.1*Math.sin(t/180)));ctx.restore();
+  const t=(k-fk)*f.dur,q=Math.min(1,t/260),end=Math.min(1,(1-k)*f.dur/350),op=Math.min(1,t/400);
+  ctx.save();ctx.scale(1,.8);ctx.globalAlpha=end*.9;ctx.beginPath();ctx.arc(0,0,r*op,0,6.2832);ctx.fillStyle='rgba(90,60,200,.16)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#7a5cff';ctx.stroke();
+  ctx.save();ctx.rotate(t*.0016);sprite(r/15*(.3+.7*op),end*op*(.6+.1*Math.sin(t/180)));ctx.restore();
   if(q<1){ctx.globalAlpha=(1-q)*.8;ctx.beginPath();ctx.arc(0,0,r*(.5+.6*q),0,6.2832);ctx.lineWidth=5;ctx.strokeStyle='#fff';ctx.stroke()}
   ctx.restore();
  }
