@@ -9,7 +9,7 @@ const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8' };
 
 const ARENAS = [{ CX: 630, CY: 640, RX: 410, RY: 335 }, { CX: 630, CY: 600, RX: 460, RY: 370 }];
-let mapId = 0, { CX, CY, RX, RY } = ARENAS[0];
+let mapId = 1, { CX, CY, RX, RY } = ARENAS[1];
 const SPEED = 300, TICK = 30, MAX_PLAYERS = 50;
 
 const server = http.createServer((req, res) => {
@@ -42,6 +42,11 @@ const chatLog = [];
 let phase = 'lobby', roundStart = 0, deathCounter = 0;
 
 const joinedList = () => [...players.values()].filter(p => p.joined);
+// ---- team mode ----
+let gameMode = 'ffa';
+const TEAM_NAME = { 1: 'Red', 2: 'Blue' };
+const tmOf = t => t ? (t.unit ? ((players.get(t.owner) || {}).team || 0) : (t.team || 0)) : 0;
+const sameTeam = (a, b) => gameMode === 'team' && !!tmOf(a) && tmOf(a) === tmOf(b);
 function setMap(id) {
   mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]);
   for (const p of players.values()) { const c = clampArena({ x: p.x, y: p.y }); p.x = c.x; p.y = c.y; p.hist = []; }
@@ -76,9 +81,21 @@ function startRound() {
     broadcast({ t: 'countdown', ms: 0 });
     return sysChat('Round cancelled: not enough players.');
   }
+  if (gameMode === 'team') {
+    const cnt = { 1: 0, 2: 0 };
+    parts.forEach(p => { if (p.team) cnt[p.team]++; });
+    parts.filter(p => !p.team).sort(() => Math.random() - 0.5).forEach(p => { p.team = cnt[1] <= cnt[2] ? 1 : 2; cnt[p.team]++; });
+    if (!cnt[1] || !cnt[2]) {
+      phase = 'lobby';
+      joinedList().forEach(p => p.ready = false);
+      broadcast({ t: 'countdown', ms: 0 });
+      return sysChat('Round cancelled: both teams need at least one player.');
+    }
+  }
   phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); balls.length = 0;
   parts.forEach((p, i) => {
-    const a = -Math.PI / 2 + i * 2 * Math.PI / parts.length;
+    let a = -Math.PI / 2 + i * 2 * Math.PI / parts.length;
+    if (gameMode === 'team') { const side = parts.filter(q => q.team === p.team); a = (p.team === 1 ? Math.PI : 0) + (side.indexOf(p) - (side.length - 1) / 2) * 0.45; }
     p.lx = p.x; p.ly = p.y;
     p.x = CX + Math.cos(a) * RX * 0.92; p.y = CY + Math.sin(a) * RY * 0.92;
     p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0; p.hist = [];
@@ -91,12 +108,19 @@ function startRound() {
 function checkRoundEnd() {
   if (phase !== 'round') return;
   const alive = [...players.values()].filter(p => p.role === 1);
+  if (gameMode === 'team') {
+    if (new Set(alive.map(p => p.team)).size > 1) return;
+    let team = alive[0] && alive[0].team;
+    if (!team) { const last = [...players.values()].filter(p => p.inRound).sort((a, b) => b.deathOrder - a.deathOrder)[0]; team = last && last.team; }
+    return endRound(null, null, team);
+  }
   if (alive.length > 1) return;
   let winner = alive[0];
   if (!winner) winner = [...players.values()].filter(p => p.inRound).sort((a, b) => b.deathOrder - a.deathOrder)[0];
   endRound(winner);
 }
-function endRound(winner, tied) {
+function endRound(winner, tied, teamWin, draw) {
+  const tw = teamWin ? [...players.values()].filter(p => p.inRound && p.team === teamWin && p.user && !p.obs) : [];
   const gw = !tied && winner && winner.user && !winner.obs && winner.inRound ? winner : null;
   phase = 'lobby'; arrows.clear(); bombs.clear(); units.clear(); balls.length = 0;
   for (const p of players.values()) {
@@ -105,7 +129,9 @@ function endRound(winner, tied) {
     resetCombat(p);
   }
   broadcast({ t: 'tp' });
-  if (tied && tied.length) { const names = tied.join(', '); sysChat('⏱ Time is up! 2nd place: ' + names); broadcast({ t: 'winner', name: names, second: true }); }
+  if (draw) { sysChat('⏱ Time is up! Draw.'); broadcast({ t: 'winner', name: 'Draw', draw: 1 }); }
+  else if (teamWin) { sysChat('🏆 ' + TEAM_NAME[teamWin] + ' Team wins!'); broadcast({ t: 'winner', name: TEAM_NAME[teamWin] + ' Team' }); tw.forEach(q => awardGold(q, WIN_GOLD)); }
+  else if (tied && tied.length) { const names = tied.join(', '); sysChat('⏱ Time is up! 2nd place: ' + names); broadcast({ t: 'winner', name: names, second: true }); }
   else if (winner) { sysChat('🏆 1st place: ' + winner.name); broadcast({ t: 'winner', name: winner.name }); }
   else sysChat('Round ended with no winner.');
   if (gw) awardGold(gw, WIN_GOLD);
@@ -322,8 +348,9 @@ function endArrow(ar) { arrows.delete(ar.id); broadcast({ t: 'arrowEnd', id: ar.
 function moveArrow(ar, step, time) {
   const nx = ar.x + Math.cos(ar.a) * step, ngy = ar.gy + Math.sin(ar.a) * step;
   const found = [];
+  const arOw = players.get(ar.owner);
   if (phase === 'round') for (const t of [...players.values(), ...units.values()]) {
-    if (t.id === ar.owner || t.owner === ar.owner || !(t.unit || t.joined) || t.role !== 1 || ar.hitIds.has(t.id)) continue;
+    if (t.id === ar.owner || t.owner === ar.owner || !(t.unit || t.joined) || t.role !== 1 || ar.hitIds.has(t.id) || sameTeam(arOw, t)) continue;
     const tp = posAt(t, time);
     if (segDist(tp.x, tp.y / 0.8, ar.x, ar.gy, nx, ngy) > ar.radius + (t.hr || 0)) continue;
     found.push({ t, d: Math.hypot(tp.x - ar.x, tp.y / 0.8 - ar.gy) });
@@ -460,7 +487,7 @@ function dmgTo(t, amount, now, src) {
   if (t.hp <= 0) { if (t.unit) units.delete(t.id); else killPlayer(t); }
 }
 const units = new Map(); let unitSeq = 0; const balls = [], planets = [], galaxies = [];
-const targetsOf = p => phase !== 'round' ? [] : [...players.values(), ...units.values()].filter(t => t !== p && (t.unit ? t.owner !== p.id : (t.joined && t.role === 1)));
+const targetsOf = p => phase !== 'round' ? [] : [...players.values(), ...units.values()].filter(t => t !== p && (t.unit ? t.owner !== p.id : (t.joined && t.role === 1)) && !sameTeam(p, t));
 function inConeAt(ox, oy, aim, tx, ty, range, span, ext = 0) {
   const dx = tx - ox, dy = (ty - oy) / 0.8, d = Math.hypot(dx, dy);
   if (d > range + 10 + ext) return false;
@@ -940,7 +967,7 @@ const FIN = {
   E: { cd: 15000, min: 150, cost: 150, ms: 2000 },
   R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1000, atkMul: 1.1 }
 };
-const stockPL = (f, t) => (f.buyDealt + (t.hp - f.buyHp0)) / 100;
+const stockPL = (f, t) => (f.buyDealt + (t.hp - f.buyHp0)) / 50;
 function stockClear(p) { if (p.buy) send(p.ws, { t: 'stk', id: 0 }); p.buy = 0; }
 function stepIns(p, now) {
   if (p.insUntil && now >= p.insUntil) {
@@ -979,7 +1006,7 @@ function financierSkill(p, k, m, now) {
       if (!Number.isFinite(cx) || !Number.isFinite(cy) || p.hp <= FIN.Q.cost) return;
       let best = null, bd = 1e9;
       for (const t of players.values()) {
-        if (t === p || !t.joined || t.role !== 1) continue;
+        if (t === p || !t.joined || t.role !== 1 || sameTeam(p, t)) continue;
         const d = Math.hypot(t.x - cx, t.y - 24 - cy);
         if (d <= FIN.Q.pick + (t.hr || 0) * 1.4 && d < bd) { bd = d; best = t; }
       }
@@ -1249,8 +1276,8 @@ function gamblerSkill(p, k, m, now) {
 }
 // ---- Celestial ----
 const CEL = {
-  cap: 300, store: 0.4, heal: 0.1,
-  Q: { cd: 5000, r: 2 * RADPX, delay: 1000, dmg: 400, back: 0.2 },
+  cap: 300, store: 0.7, heal: 0.1,
+  Q: { cd: 5000, r: 2 * RADPX, delay: 700, dmg: 400, back: 0.2 },
   E: { cd: 1000 },
   R: { cd: 25000, delay: 0, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.7, burstR: RADPX, burst: 300 }
 };
@@ -1279,10 +1306,10 @@ function celestialSkill(p, k, m, now) {
   }
   p['cd' + k] = now + S.cd; send(p.ws, { t: 'cd', k, ms: S.cd });
   if (k === 'Q') {
-    planets.push({ owner: p.id, x: o.x, y: o.y, at: now + S.delay, tint: curTint });
+    planets.push({ owner: p.id, x: o.x, y: o.y, at: now + S.delay, tint: curTint, bonus: p.nextBonus || 0 }); p.nextBonus = 0;
     broadcast({ t: 'fx', type: 'planet', x: o.x, y: o.y, r: S.r, fall: S.delay, dur: S.delay + 260 });
   } else {
-    galaxies.push({ owner: p.id, x: o.x, y: o.y, start: now + S.delay, until: now + S.delay + S.ms, next: now + S.delay + S.tickMs, tint: curTint });
+    galaxies.push({ owner: p.id, x: o.x, y: o.y, start: now + S.delay, until: now + S.delay + S.ms, next: now + S.delay + S.tickMs, tint: curTint, bonus: p.nextBonus || 0 }); p.nextBonus = 0;
     broadcast({ t: 'fx', type: 'galaxy', x: o.x, y: o.y, r: S.r, fall: S.delay, dur: S.delay + S.ms });
   }
 }
@@ -1301,7 +1328,7 @@ function stepCelestial(dt, now) {
     for (const t of targetsOf(own)) {
       if (Math.hypot(t.x - b.x, (t.y - b.y) / 0.8) > CEL.Q.r + (t.hr || 0)) continue;
       const before = t.hp;
-      dmgTo(t, CEL.Q.dmg, now, { x: b.x, y: b.y, by: own, type: 'phys' });
+      dmgTo(t, CEL.Q.dmg + (b.bonus || 0), now, { x: b.x, y: b.y, by: own, type: 'phys' });
       total += Math.max(0, Math.min(before, before - t.hp));
     }
     own.dim = Math.min(CEL.cap, (own.dim || 0) + total * CEL.Q.back);
@@ -1327,7 +1354,7 @@ function stepCelestial(dt, now) {
       curTint = g.tint || null;
       broadcast({ t: 'fx', type: 'ring', x: g.x, y: g.y, r: R.burstR, c: '#ffffff', dur: 450 });
       curTint = null;
-      for (const t of targetsOf(own)) if (Math.hypot(t.x - g.x, (t.y - g.y) / 0.8) <= R.burstR + (t.hr || 0)) { dmgTo(t, R.burst, now, { x: g.x, y: g.y, kill: own, type: 'pierce' }); any = true; }
+      for (const t of targetsOf(own)) if (Math.hypot(t.x - g.x, (t.y - g.y) / 0.8) <= R.burstR + (t.hr || 0)) { dmgTo(t, R.burst + (g.bonus || 0), now, { x: g.x, y: g.y, kill: own, type: 'pierce' }); any = true; }
     }
   }
   for (const p of players.values()) {
@@ -1462,6 +1489,11 @@ function stepGamer(now) {
 }
 function checkTimeout(now) {
   if (phase !== 'round' || now - roundStart < ROUND_MS) return;
+  if (gameMode === 'team') {
+    const sum = { 1: 0, 2: 0 };
+    for (const p of players.values()) if (p.role === 1 && p.team) sum[p.team] += p.hp;
+    return endRound(null, null, sum[1] > sum[2] ? 1 : sum[2] > sum[1] ? 2 : 0, sum[1] === sum[2]);
+  }
   endRound(null, [...players.values()].filter(p => p.role === 1).map(p => p.name));
 }
 
@@ -1684,7 +1716,7 @@ wss.on('connection', (ws, req) => {
     hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, fires: [], qNext: false, pull: null, charmUntil: 0, charmBy: 0, burnUntil: 0, burnNext: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
   players.set(id, p);
   pruneChat();
-  send(ws, { t: 'hello', id, map: mapId, arena: { CX, CY, RX, RY }, pred: predCfg() });
+  send(ws, { t: 'hello', id, map: mapId, mode: gameMode, arena: { CX, CY, RX, RY }, pred: predCfg() });
   send(ws, { t: 'history', log: chatLog.map(c => ({ name: c.name, text: c.text, sys: c.sys ? 1 : 0, age: Date.now() - c.ts })) });
 
   ws.on('pong', () => { p.alive = true; });
@@ -1712,6 +1744,14 @@ wss.on('connection', (ws, req) => {
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
       if (phase === 'lobby' && ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial'].includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+    } else if (m.t === 'mode') {
+      if (p.user === ADMIN_ID && phase === 'lobby' && (m.m === 'ffa' || m.m === 'team') && m.m !== gameMode) { gameMode = m.m; broadcast({ t: 'mode', m: gameMode }); sysChat(p.name + ' changed the game mode to ' + (gameMode === 'team' ? 'Team' : 'Free-for-All') + '.'); }
+    } else if (m.t === 'team') {
+      const q = players.get(Number(m.id));
+      if (p.user === ADMIN_ID && gameMode === 'team' && phase === 'lobby' && q && q.joined && !q.obs && [0, 1, 2].includes(m.team)) { q.team = m.team; sysChat(q.name + (q.team ? ' joined the ' + TEAM_NAME[q.team] + ' team.' : ' left their team.')); }
+    } else if (m.t === 'kick') {
+      const q = players.get(Number(m.id));
+      if (p.user === ADMIN_ID && q && q !== p && q.joined) { sysChat(q.name + ' was kicked.'); send(q.ws, { t: 'kicked' }); try { q.ws.close(); } catch (e) {} }
     } else if (m.t === 'map') {
       if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
     } else if (m.t === 'tequip') {
@@ -1826,7 +1866,7 @@ setInterval(() => {
     if (iv && !p.wasIv) { p.hideX = p.x; p.hideY = p.y; }
     p.wasIv = iv;
     const e = { id: p.id, name: p.name, hue: p.hue, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
-      f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role,
+      f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role, tm: p.team || 0,
       hp: Math.max(0, Math.round(p.hp)), mh: Math.round(p.mh), su: Math.max(0, p.stunUntil - now), gd: now < p.guardUntil ? 1 : 0, sl: now < p.slowUntil ? 1 : 0,
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
