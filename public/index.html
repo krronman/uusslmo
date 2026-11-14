@@ -130,6 +130,17 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #rvTx{line-height:1.5;white-space:nowrap}
 #rvTx b{color:#ffe066}
 #mapBtn{position:fixed;right:12px;top:50%;margin-top:118px;width:150px;padding:8px 0;border:2px solid #fff;border-radius:8px;background:rgba(20,30,60,.8);color:#fff;font:700 14px 'Galmuri11',system-ui,sans-serif;cursor:pointer;z-index:4}
+#modeBtn{position:fixed;right:12px;top:50%;margin-top:162px;width:150px;padding:8px 0;border:2px solid #fff;border-radius:8px;background:rgba(20,30,60,.8);color:#fff;font:700 14px 'Galmuri11',system-ui,sans-serif;cursor:pointer;z-index:4;display:none}
+#modeBtn:hover{background:rgba(20,30,60,.95)}
+#pMenu{position:fixed;display:none;z-index:6;min-width:130px;padding:8px;background:#1b1d40;border:3px solid #7b72e8;border-radius:6px;font:13px 'Galmuri11',system-ui,sans-serif;color:#fff}
+#pmName{margin-bottom:6px;font-weight:700;color:#ffd66b;text-align:center}
+#pMenu button{display:block;width:100%;margin-top:4px;padding:5px 8px;background:#0f1030;color:#fff;border:2px solid #5b55a8;border-radius:4px;font:inherit;cursor:pointer}
+#pMenu button:hover{border-color:#ffd66b}
+#pmKick{background:#5a1420;border-color:#ff6b6b}
+#pmTeams{display:none;gap:4px}
+#pmTeams button{margin-top:4px}
+#pmTeams button[data-t="1"]{border-color:#ff4d4d}
+#pmTeams button[data-t="2"]{border-color:#4d8bff}
 #mapBtn:hover{background:rgba(20,30,60,.95)}
 #shopBtn{position:fixed;right:174px;top:50%;margin-top:-38px;width:100px;height:75px;padding:0;border:0;cursor:pointer;background:url(shopButton.png) -13.5px -2.4px/127.1px 84.7px no-repeat;z-index:4}
 #shopBtn:hover{filter:brightness(1.12)}
@@ -175,7 +186,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #buyYes{left:15.6%;width:33.2%}#buyNo{left:51.4%;width:32.9%}
 #buyYes:hover,#buyNo:hover{background:rgba(255,255,255,.14)}
 #buyCap{position:absolute;left:0;right:0;top:89%;text-align:center;font:700 16px 'Galmuri11',system-ui,sans-serif;color:#fff;text-shadow:2px 2px 0 #0b0a24}
-#setBtn{position:fixed;right:12px;bottom:calc(176px + env(safe-area-inset-bottom,0px));width:72px;height:72px;padding:0;border:0;cursor:pointer;background:url(settings_gear_button_transparent.png) center/contain no-repeat;z-index:4;display:none}
+#setBtn{position:fixed;right:110px;bottom:calc(78px + env(safe-area-inset-bottom,0px));width:72px;height:72px;padding:0;border:0;cursor:pointer;background:url(settings_gear_button_transparent.png) center/contain no-repeat;z-index:4;display:none}
 #setBtn:hover{filter:brightness(1.15)}
 #kbScreen{position:fixed;inset:0;background:rgba(10,12,30,.74);display:none;align-items:center;justify-content:center;z-index:7}
 #kbScreen[style*="flex"] #kbClose{display:block}
@@ -198,7 +209,8 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <input id="chat" maxlength="60" placeholder="Type a message and press Enter" autocomplete="off">
 <button id="classBtn" aria-label="class"></button>
 <button id="titleBtn" aria-label="title"></button>
-<button id="mapBtn"></button>
+<button id="mapBtn"></button><button id="modeBtn"></button>
+<div id="pMenu"><div id="pmName"></div><button id="pmKick">[Kick]</button><div id="pmTeams"><button data-t="1">Red</button><button data-t="2">Blue</button><button data-t="0">None</button></div></div>
 <button id="shopBtn" aria-label="shop"></button>
 <button id="skinBtn" aria-label="skins"></button>
 <div id="goldBar"><span id="goldTx">0</span></div>
@@ -245,7 +257,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 const W=1254, PX=5;
 const cv=document.getElementById('c'), hud=document.getElementById('hud');let ctx=cv.getContext('2d');
 const chatEl=document.getElementById('chat'), login=document.getElementById('login');
-const MAPS=['bg.jpg','map2.png'],bgs=MAPS.map(f=>{const i=new Image();i.src=f;return i});let bg=bgs[0],mapId=0;
+const MAPS=['bg.jpg','map2.png'],bgs=MAPS.map(f=>{const i=new Image();i.src=f;return i});let bg=bgs[1],mapId=1;
 const spImg=new Image(); spImg.src='player.png';
 const swordImg=new Image();swordImg.src='sword.png';
 const towerImg=new Image(),tInfImg=new Image(),tArcImg=new Image(),cbImg=new Image();towerImg.src='tower.png';tInfImg.src='towerinfantry.png';const stkImg=new Image();stkImg.src='stock.png';tArcImg.src='towerarcher.png';cbImg.src='cannonball.png';
@@ -312,14 +324,16 @@ function addKill(m){const el=document.createElement('div'),ic=c=>CLS[c]?CLS[c][0
 let ws,myId=null,joined=false,snapUntil=0,arena=null;
 let phase='lobby',roundLeft=0,myRole=0,snapNext=false,cdEnd=0,winnerText='',winnerUntil=0,myCls='',myForm='';
 let gcS={l:[],s:1,ch:0},celS={d:0,b:0};const skCd={Q:0,E:0,R:0},fxs=[],hits=[];let PRED={},pseq=0;const pend=new Map();let rv={n:0,i:0,live:0,blank:0,rlEnd:0};let stk={id:0,name:'',pl:0,hist:[]};
-let isAdmin=false,myTitles=[],myEq=null;const titleMap=new Map();
+let isAdmin=false,myTitles=[],myEq=null,gameMode='ffa',kickedFlag=false;const titleMap=new Map();
 const others=new Map(),bubbles=new Map();
 function connect(){
  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
  ws.onopen=()=>{hud.textContent='Connected';const tk=lsGet();if(tk&&!kicked){authBusy=true;authErr.textContent='자동 로그인 중…';ws.send(JSON.stringify({t:'resume',token:tk}))}};
- ws.onclose=()=>{pend.clear();hud.textContent='Disconnected – reconnecting…';others.clear();titleMap.clear();authBusy=false;authGo.disabled=false;setTimeout(connect,1500)};
+ ws.onclose=()=>{pend.clear();hud.textContent='Disconnected – reconnecting…';others.clear();titleMap.clear();authBusy=false;authGo.disabled=false;if(!kickedFlag)setTimeout(connect,1500)};
  ws.onmessage=e=>{const m=JSON.parse(e.data);
-  if(m.t==='hello'){myId=m.id;arena=m.arena;mapId=m.map||0;bg=bgs[mapId];PRED=m.pred||{};pend.clear()}
+  if(m.t==='hello'){myId=m.id;arena=m.arena;mapId=m.map||0;gameMode=m.mode||'ffa';bg=bgs[mapId];PRED=m.pred||{};pend.clear()}
+  else if(m.t==='mode'){gameMode=m.m}
+  else if(m.t==='kicked'){kickedFlag=true;alert('관리자에 의해 퇴장되었습니다.')}
   else if(m.t==='map'){arena=m.arena;mapId=m.id;bg=bgs[mapId];snapNext=true}
   else if(m.t==='history'){clBody.innerHTML='';logs.length=0;for(const c of m.log)addLog(c.name,c.text,c.sys,c.age)}
   else if(m.t==='state'){
@@ -332,7 +346,7 @@ function connect(){
     if(snapNext){o.x=p.x;o.y=p.y}
     const f0=o.face;
     if(p.su>0&&(p.su>(o.su||0)+60||!(o.su>0)))o.sMax=p.su;
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,sn:p.sn,id:p.id});
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,tm:p.tm,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,sn:p.sn,id:p.id});
     if(p.id===myId)o.face=f0;
    }
    snapNext=false;
@@ -340,7 +354,7 @@ function connect(){
    for(const id of titleMap.keys())if(!seen.has(id))titleMap.delete(id);
    const me=m.p.find(p=>p.id===myId),total=m.p.filter(p=>!p.ut).length,rc=m.p.filter(p=>p.r).length;
    myRole=me?me.o:0;
-   hud.textContent=phase==='round'?'Round in progress · alive: '+m.p.filter(p=>p.o===1&&!p.ut).length:'Players online: '+total;
+   hud.textContent=(phase==='round'?'Round in progress · alive: '+m.p.filter(p=>p.o===1&&!p.ut).length:'Players online: '+total)+(gameMode==='team'?' · 팀전':'');
    readyBtn.style.display=phase==='lobby'?'':'none';
    readyBtn.textContent=rc+'/'+Math.max(total,2);
    readyBtn.classList.toggle('off',total<2);
@@ -348,7 +362,7 @@ function connect(){
    if(myCls!==(me?me.c:'')){myCls=me?me.c:'';csRender();skIcons()}
     const fm=(me&&me.lf)||'';if(fm!==myForm){myForm=fm;skIcons()}
    titleBtn.style.display=shopBtn.style.display=skinBtn.style.display=phase==='lobby'?'':'none';
-   mapBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'':'none';mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
+   modeBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'block':'none';modeBtn.textContent='🎮 '+(gameMode==='team'?'팀전':'개인전');mapBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'':'none';mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
    if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose();shopClose();skClose();gmClose()}
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
    setBtn.style.display=joined?'block':'none';goldBar.style.display=(joined&&!obs)?'block':'none';goldBar.classList.toggle('adm',isAdmin);
@@ -363,7 +377,7 @@ function connect(){
    if(m.by===myId&&(m.kd==='atk'||m.kd==='orb')){const i=arrowsC.findIndex(a=>a.local);if(i>=0)arrowsC.splice(i,1)}
    arrowsC.push(m);const o=others.get(m.by);if(o&&(m.by!==myId||m.kd!=='atk'))o.shot=m.t0}
   else if(m.t==='arrowEnd'){const i=arrowsC.findIndex(a=>a.id===m.id);if(i>=0)arrowsC.splice(i,1)}
-  else if(m.t==='winner'){winnerText=m.second?'⏱ 시간 제한! 2nd place: '+m.name:'🏆 '+m.name+' 승리!';winnerUntil=performance.now()+5000}
+  else if(m.t==='winner'){winnerText=m.draw?'⏱ 시간 제한! 무승부':m.second?'⏱ 시간 제한! 2nd place: '+m.name:'🏆 '+m.name+' 승리!';winnerUntil=performance.now()+5000}
   else if(m.t==='cd'){skCd[m.k]=performance.now()+m.ms}
   else if(m.t==='ack'){const e=pend.get(m.q);pend.delete(m.q);if(e&&!m.ok)unpredict(m.q,e)}
   else if(m.t==='cel'){celS={d:m.d,b:m.b}}
@@ -463,6 +477,19 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{if(e.code===kb.atk&&chargeT0)archerRelease();const mv=mvAll(e.code);if(mv.length){for(const m of mv)keys[m]=false;sendInput()}});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;sendInput();cancelCharge()});
 const readyBtn=document.getElementById('readyBtn'),classBtn=document.getElementById('classBtn'),skillbar=document.getElementById('skillbar');
+const modeBtn=document.getElementById('modeBtn');modeBtn.onclick=()=>{tx({t:'mode',m:gameMode==='team'?'ffa':'team'});modeBtn.blur()};
+// ---- admin player menu ----
+const pMenu=document.getElementById('pMenu'),pmName=document.getElementById('pmName'),pmKick=document.getElementById('pmKick'),pmTeams=document.getElementById('pmTeams');let pmId=0;
+function pmHide(){pMenu.style.display='none';pmId=0}
+function pmShow(id,x,y){const o=others.get(id);if(!o)return;pmId=id;pmName.textContent=o.name||('Player'+id);pmKick.style.display=id===myId?'none':'block';pmTeams.style.display=(gameMode==='team'&&phase==='lobby')?'flex':'none';pMenu.style.display='block';
+ pMenu.style.left=Math.max(4,Math.min(innerWidth-pMenu.offsetWidth-4,x))+'px';pMenu.style.top=Math.max(4,Math.min(innerHeight-pMenu.offsetHeight-4,y))+'px'}
+cv.addEventListener('click',e=>{if(!isAdmin||!joined||anyWinOpen()){pmHide();return}
+ const wx=(e.clientX*dpr-ox)/scale,wy=(e.clientY*dpr-oy)/scale;let best=0,bd=48;
+ for(const [id,o] of others){if(o.ut||o.x===undefined)continue;const d=Math.hypot(wx-o.x,wy-(o.y-30));if(d<bd){bd=d;best=id}}
+ if(best)pmShow(best,e.clientX,e.clientY);else pmHide()});
+pmKick.onclick=()=>{if(pmId)tx({t:'kick',id:pmId});pmHide()};
+pmTeams.onclick=e=>{const t=e.target.dataset&&e.target.dataset.t;if(t!==undefined&&pmId)tx({t:'team',id:pmId,team:+t});pmHide()};
+addEventListener('keydown',e=>{if(e.key==='Escape')pmHide()});
 const mapBtn=document.getElementById('mapBtn');mapBtn.onclick=()=>{tx({t:'map',id:(mapId+1)%MAPS.length});mapBtn.blur()};
 const SKB={Knight:['⚔️','💨','🗡️'],Archer:['🌧️','⚡','🐉'],Shielder:['📣','💥','📯'],Assassin:['🔪','👻','🌀'],Gumiho:['✨','💫','💗'],Lucifer:['☀️','🔥','⚖️'],'Lucifer:a':['🌟','⛪','🕊️'],'Lucifer:d':['💣','🩸','😈'],Gambler:['🔄','🎲','🔫'],SwordMaster:['🌙','💾','✨'],Tower:['💣','🔧','🛡️'],Financier:['📈','🛡️','🏦'],Gamer:['📋','🎁','💻'],Celestial:['🪐','⚪','🌌']};
 function skIcons(){const ic=SKB[myForm?myCls+':'+myForm:myCls]||SKB[myCls];if(!ic)return;skillbar.querySelectorAll('.sk').forEach((el,i)=>{el.querySelector('span').textContent=ic[i]})}
@@ -607,7 +634,7 @@ const CHARS=[
   style:'시간이 지날수록 불어나는 복리형 근접 딜러. 상대에게 투자해 수익을 거두고, 보험과 예금으로 체력을 굴립니다.',
   skills:[
    {icon:'💰',name:'적금',key:'패시브',types:['buff'],desc:'5초마다 최대 체력·현재 체력·공격력이 3%씩 복리로 증가합니다.'},
-   {icon:'📈',name:'주식',key:'Q · 0.5초',types:['buff'],desc:'커서 아래 적에게 \'구매\'(체력 100 소모). 다시 사용하면 매각: 손익률만큼 체력(100×(100+손익)%)과 공격력 증가. 손익 = (대상이 준 피해 + 체력 변화)/100.'},
+   {icon:'📈',name:'주식',key:'Q · 0.5초',types:['buff'],desc:'커서 아래 적에게 \'구매\'(체력 100 소모). 다시 사용하면 매각: 손익률만큼 체력(100×(100+손익)%)과 공격력 증가. 손익 = (대상이 준 피해 + 체력 변화)/50.'},
    {icon:'🛡️',name:'보험',key:'E · 15초',types:['heal'],desc:'체력 150 초과 시 사용. 체력 150 소모 후 2초간 잃은 체력(소모한 체력 포함)을 모아 종료 시 모두 회복.'},
    {icon:'🏦',name:'정기적금',key:'R · 25초',types:['heal','buff'],desc:'10초간 매초 체력 70 차감. 만기 시 최대 체력 +20%, 체력 1000 회복, 공격력 +10%.'}]},
  {id:'Gamer',ko:'게이머',img:'gamer.png',stats:{hp:1000,atk:150},rng:'1 radpx (근접) / 4 radpx (원거리) 교대',
@@ -620,9 +647,9 @@ const CHARS=[
  {id:'Celestial',ko:'천체',img:'astro.png',stats:{hp:1500,atk:100},rng:'1 radpx (근접, 마법)',
   style:'받은 피해를 4차원에 저장하고 한 번에 터뜨리는 우주 계열 캐릭터. 행성 폭발과 은하 충돌로 광역 피해를 줍니다.',
   skills:[
-   {icon:'🕳️',name:'블랙홀',key:'패시브',types:['buff'],desc:'받은 피해의 40%를 <4차원>에 저장(최대 300), 받은 피해의 10%만큼 체력 회복.'},
-   {icon:'🪐',name:'행성 폭발',key:'Q · 5초',types:['phys'],desc:'자신의 위치에 반경 2 radpx 행성을 소환, 1초 뒤 폭발하여 범위 내 모든 적에게 400 물리 피해. 입힌 피해량의 20%를 <4차원>에 저장.'},
-   {icon:'⚪',name:'화이트홀',key:'E · 1초',types:['buff'],desc:'저장된 <4차원> 피해를 모두 제거하고, 제거한 양만큼 다음 일반 공격 피해 증가.'},
+   {icon:'🕳️',name:'블랙홀',key:'패시브',types:['buff'],desc:'받은 피해의 70%를 <4차원>에 저장(최대 300), 받은 피해의 10%만큼 체력 회복.'},
+   {icon:'🪐',name:'행성 폭발',key:'Q · 5초',types:['phys'],desc:'자신의 위치에 반경 2 radpx 행성을 소환, 0.7초 뒤 폭발하여 범위 내 모든 적에게 400 물리 피해. 입힌 피해량의 20%를 <4차원>에 저장.'},
+   {icon:'⚪',name:'화이트홀',key:'E · 1초',types:['buff'],desc:'저장된 <4차원> 피해를 모두 제거하고, 제거한 양만큼 다음 일반 공격 또는 스킬(행성 폭발·은하 충돌 마지막 폭발) 피해 증가.'},
    {icon:'🌌',name:'은하 충돌',key:'R · 25초',types:['pierce','cc'],desc:'자신의 발밑에 반경 3 radpx 은하를 즉시 펼쳐 4초간 유지: 범위 내 적에게 초당 40 관통 피해, 이동속도 70%의 힘으로 중심으로 끌어당김. 소멸 직후 중심 반경 1 radpx 내 적에게 300 관통 피해.'}]},
  ...new Array(8).fill(null)
 ];
@@ -1065,8 +1092,9 @@ function drawPlayer(o,isMe){
  if(o.cm&&charmImg.complete&&charmImg.naturalWidth){const bob=Math.sin(performance.now()/180)*3,top=o.tt?yb-57:yb-39;ctx.drawImage(charmImg,0,0,15,15,o.x-22,top-49+bob,45,45)}
  if(o.ta){ctx.font='bold 22px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(60,0,0,.9)';ctx.fillStyle='#ff5a4a';ctx.strokeText('!',o.x+36,yb+10);ctx.fillText('!',o.x+36,yb+10)}
 
+ if(gameMode==='team'&&o.tm){ctx.save();ctx.globalAlpha=.85;ctx.strokeStyle=o.tm===1?'#ff4d4d':'#4d8bff';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(o.x,o.y+2,26,10,0,0,6.2832);ctx.stroke();ctx.restore()}
  ctx.font='bold 15px system-ui,sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(10,20,50,.85)';
- ctx.fillStyle=isMe?'#ffe066':'#fff';ctx.strokeText(o.name||'',o.x,yb-8);ctx.fillText(o.name||'',o.x,yb-8);
+ ctx.fillStyle=isMe?'#ffe066':(gameMode==='team'&&o.tm?(o.tm===1?'#ff9a9a':'#9ac0ff'):'#fff');ctx.strokeText(o.name||'',o.x,yb-8);ctx.fillText(o.name||'',o.x,yb-8);
  if(o.cls&&CLS[o.cls]){const t=CLS[o.cls][0]+' '+o.cls;ctx.font='bold 13px system-ui,sans-serif';ctx.lineWidth=3;
   ctx.fillStyle=CLS[o.cls][1];ctx.strokeText(t,o.x,yb-26);ctx.fillText(t,o.x,yb-26)}
  if(o.tt){const ty=(o.cls&&CLS[o.cls])?yb-44:yb-26;
