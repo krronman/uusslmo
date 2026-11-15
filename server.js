@@ -13,7 +13,8 @@ let mapId = 1, { CX, CY, RX, RY } = ARENAS[1];
 const SPEED = 300, TICK = 30, MAX_PLAYERS = 50;
 
 const server = http.createServer((req, res) => {
-  const url = req.url.split('?')[0];
+  let url;
+  try { url = decodeURIComponent(req.url.split('?')[0]); } catch (e) { res.writeHead(400); return res.end(); }
   if (url === '/healthz') { res.writeHead(200); return res.end('ok'); }
   const file = path.normalize(path.join(PUBLIC, url === '/' ? 'index.html' : url));
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
@@ -224,7 +225,7 @@ const CLASS_STATS = {
   Assassin: { hp: 1000, dmg: 135, reduce: 0, atkCd: 600 },
   Gumiho: { hp: 1100, dmg: 130, reduce: 0, atkCd: 700 },
   Gambler: { hp: 1000, dmg: 180, reduce: 0, atkCd: 600 },
-  SwordMaster: { hp: 1200, dmg: 160, reduce: 0, atkCd: 600 },
+  SwordMaster: { hp: 1200, dmg: 140, reduce: 0, atkCd: 400 },
   Tower: { hp: 2200, dmg: 100, reduce: 0, atkCd: 2000 },
   Gamer: { hp: 1000, dmg: 150, reduce: 0, atkCd: 700 },
   Celestial: { hp: 1500, dmg: 100, reduce: 0, atkCd: 800 }
@@ -244,7 +245,7 @@ const ATK = { range: 1 * RADPX, span: 100 * RAD };
 const SM = {
   atk: { need: 4, needAwk: 2, auraDmg: 180, kb: 1 * RADPX, kbMs: 250 },
   Q: { cd: 12000, dmg: 100, pct: 0.15, spd: 1500, range: 6 * RADPX, radius: 1.5 * RADPX },
-  E: { cd: 0, cdAwk: 0, mult: 0.5, multAwk: 0.8, dash: 2 * RADPX, dashMs: 200, dashDir: 1 },
+  E: { cd: 0, cdAwk: 0, mult: 0.5, multAwk: 1.0, dash: 2 * RADPX, dashMs: 200, dashDir: 1 },
   R: { cd: 25000, dur: 10000 }
 };
 const KNIGHT = {
