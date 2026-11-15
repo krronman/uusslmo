@@ -296,6 +296,7 @@ const swordImg=new Image();swordImg.src='sword.png';
 const towerImg=new Image(),tInfImg=new Image(),tArcImg=new Image(),cbImg=new Image();towerImg.src='tower.png';tInfImg.src='towerinfantry.png';const stkImg=new Image();stkImg.src='stock.png';tArcImg.src='towerarcher.png';cbImg.src='cannonball.png';
 const smSlashImg=new Image(),smQImg=new Image(),smSwordImg=new Image();smSlashImg.src='swordmaster_normalattack.png';smQImg.src='swordmaster_Qskill.png';smSwordImg.src='swordMasterSword.png';const smAuraSwordImg=new Image();smAuraSwordImg.src='swordmasterAuraSword.png';
 const kshImg=new Image();kshImg.src='knightshield.png';
+const skelImg=new Image(),scytheImg=new Image(),soulImg=new Image();skelImg.src='skeleton.png';scytheImg.src='scythe.png';soulImg.src='soul.png';
 const arrowImg=new Image();arrowImg.src='arrow.png';
 const bowImg=new Image();bowImg.src='bow.png';
 const shieldImg=new Image();shieldImg.src='shield.png';
@@ -303,7 +304,7 @@ const daggerImg=new Image();daggerImg.src='assassin-sword.png',slashImg=new Imag
 slashImg.src='slash.png';orbImg.src='orb.png';fireImg.src='foxfire.png';charmImg.src='charm.png';
 const RADPX=112.5,SHIELD_SPAN=90*Math.PI/180;
 const clsImg={};for(const c of ['Knight','Archer','Shielder','Assassin','Gumiho','Gambler','SwordMaster','Tower','Financier']){const i=new Image();i.src=c.toLowerCase()+'.png';clsImg[c]=i}
-for(const [k,f] of [['Lucifer','luciferCharacter.png'],['Lucifer:a','angelForm.png'],['Lucifer:d','devilForm.png'],['Gamer','gamer.png'],['Celestial','astro.png']]){const i=new Image();i.src=f;clsImg[k]=i}
+for(const [k,f] of [['Lucifer','luciferCharacter.png'],['Lucifer:a','angelForm.png'],['Lucifer:d','devilForm.png'],['Gamer','gamer.png'],['Celestial','astro.png'],['Reaper','reaper.png']]){const i=new Image();i.src=f;clsImg[k]=i}
 const gMelWImg=new Image(),gRngWImg=new Image(),gSlashImg=new Image(),grImg=new Image(),gachaImg=new Image();gMelWImg.src='gamerMeleeAttackWeapon.png';gRngWImg.src='gamerRangedAttackWeapon.png';gSlashImg.src='gamerMeleeAttack.png';grImg.src='gamerRangedAttack.png';gachaImg.src='gacha.png';
 const lsImg=new Image(),fsImg=new Image(),crImg=new Image(),fbImg=new Image(),hfImg=new Image(),lgImg=new Image(),wlImg=new Image(),wrImg=new Image();
 lsImg.src='lightshot.png';fsImg.src='fireshot.png';crImg.src='crystal.png';fbImg.src='flamebomb.png';hfImg.src='holyfield.png';lgImg.src='light.png';wlImg.src='angelForm_s_left_wing.png';wrImg.src='angelForm_s_right_wing.png';
@@ -366,12 +367,12 @@ function connect(){
  ws.onmessage=e=>{const m=JSON.parse(e.data);
   if(m.t==='hello'){myId=m.id;arena=m.arena;mapId=m.map||0;gameMode=m.mode||'ffa';bg=bgs[mapId];PRED=m.pred||{};pend.clear()}
   else if(m.t==='mode'){gameMode=m.m}
-  else if(m.t==='reap'){mySouls=m.s||[];skIcons()}
+  else if(m.t==='reap'){mySouls=m.s||[];mySoulQ=m.q||[];skIcons()}
   else if(m.t==='kicked'){kickedFlag=true;alert('관리자에 의해 퇴장되었습니다.')}
   else if(m.t==='map'){arena=m.arena;mapId=m.id;bg=bgs[mapId];snapNext=true}
   else if(m.t==='history'){clBody.innerHTML='';logs.length=0;for(const c of m.log)addLog(c.name,c.text,c.sys,c.age)}
   else if(m.t==='state'){
-   phase=m.ph;roundLeft=m.left;foxes=m.ff||[];
+   phase=m.ph;roundLeft=m.left;foxes=m.ff||[];soulOrbs=m.sb||[];
    const seen=new Set();
    for(const p of m.p){
     seen.add(p.id);
@@ -423,7 +424,7 @@ function connect(){
   else if(m.t==='gadmin'){gmReply(m)}
   else if(m.t==='gc'){gcS={l:m.l,s:m.s,ch:performance.now()+m.ch}}
   else if(m.t==='fx'){if(eatEcho(m))return;m.t0=performance.now();if(m.g){const go=others.get(m.g);if(go)go.shot=m.t0}if(!(m.by===myId&&(m.type==='cone'||m.type==='gslash')&&!m.tint&&!m.sq))fxs.push(m);
-   if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
+   if(m.by&&m.type==='disc'){const o=others.get(m.by);if(o)o.spin=m.t0}else if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
   else if(m.t==='rv'){rv={n:m.n,i:m.i,live:m.live,blank:m.blank,rlEnd:m.rl?performance.now()+m.rl:0}}
   else if(m.t==='stk'){if(!m.id)stk={id:0,name:'',pl:0,hist:[]};else{if(stk.id!==m.id)stk={id:m.id,name:m.n||'',pl:m.pl,hist:[]};stk.pl=m.pl;stk.hist.push(m.pl);if(stk.hist.length>90)stk.hist.shift()}}
   else if(m.t==='kill')addKill(m);
@@ -474,7 +475,7 @@ const skOfKey=c=>c===kb.Q?'Q':c===kb.E?'E':c===kb.R?'R':null;
 const isChatKey=c=>c===kb.chat||(kb.chat==='Enter'&&c==='NumpadEnter');
 function kbLabel(c){if(c.startsWith('Key'))return c.slice(3);if(c.startsWith('Digit'))return c.slice(5);if(c.startsWith('Numpad'))return'Num'+c.slice(6);return({ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',ShiftLeft:'LShift',ShiftRight:'RShift',ControlLeft:'LCtrl',ControlRight:'RCtrl',AltLeft:'LAlt',AltRight:'RAlt',Backquote:'`',Minus:'-',Equal:'=',BracketLeft:'[',BracketRight:']',Backslash:'\\',Semicolon:';',Quote:"'",Comma:',',Period:'.',Slash:'/'})[c]||c}
 let chargeT0=0,hasteLocal=0,mySouls=[];const CHARGE_MS=2000,RCH_MS=1500;
-let foxes=[],ghosts=[],toastT=0;
+let foxes=[],ghosts=[],toastT=0,soulOrbs=[],mySoulQ=[];
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>{el.style.display='none'},1500)}
 let rtt=60,lastSent='',atkLocal=0,myAim=0,mWx=0,mWy=0,mouseOn=false,aimSent=0,aimSentT=0;
 const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700,Lucifer:900,Gambler:600,SwordMaster:400,Tower:2000,Financier:900,Gamer:700,Celestial:800,Reaper:700},arrowsC=[];
@@ -527,7 +528,7 @@ pmTeams.onclick=e=>{const t=e.target.dataset&&e.target.dataset.t;if(t!==undefine
 addEventListener('keydown',e=>{if(e.key==='Escape')pmHide()});
 const mapBtn=document.getElementById('mapBtn');mapBtn.onclick=()=>{tx({t:'map',id:(mapId+1)%MAPS.length});mapBtn.blur()};
 const SKB={Knight:['⚔️','💨','🗡️'],Archer:['🌧️','⚡','🐉'],Shielder:['📣','💥','📯'],Assassin:['🔪','👻','🌀'],Gumiho:['✨','💫','💗'],Lucifer:['☀️','🔥','⚖️'],'Lucifer:a':['🌟','⛪','🕊️'],'Lucifer:d':['💣','🩸','😈'],Gambler:['🔄','🎲','🔫'],SwordMaster:['🌙','💾','✨'],Tower:['💣','🔧','🛡️'],Financier:['📈','🛡️','🏦'],Gamer:['📋','🎁','💻'],Celestial:['🪐','⚪','🌌'],Reaper:['👻','☠️','⚰️']};
-function skIcons(){const ic=SKB[myForm?myCls+':'+myForm:myCls]||SKB[myCls];if(!ic)return;skillbar.querySelectorAll('.sk').forEach((el,i)=>{el.querySelector('span').textContent=ic[i];if(i===0){const rp=myCls==='Reaper';el.classList.toggle('passive',rp);if(rp){el.querySelector('span').textContent='👻 '+mySouls.length+'/5';el.title='영혼: '+(mySouls.map(c=>{const x=CHARS.find(q=>q&&q.id===c);return x?x.ko:c}).join(', ')||'없음')}else el.title=''}})}
+function skIcons(){const ic=SKB[myForm?myCls+':'+myForm:myCls]||SKB[myCls];if(!ic)return;skillbar.querySelectorAll('.sk').forEach((el,i)=>{el.querySelector('span').textContent=ic[i];if(i===0){const rp=myCls==='Reaper';el.classList.toggle('passive',rp);if(rp){el.querySelector('span').textContent='👻 '+mySouls.length+'/5';el.title='영혼: '+(mySouls.map((c,i)=>{const x=CHARS.find(q=>q&&q.id===c);return (x?x.ko:c)+(mySoulQ[i]?'(100%)':'(70%)')}).join(', ')||'없음')}else el.title=''}})}
 const tx=o=>ws.readyState===1&&ws.send(JSON.stringify(o));
 setTimeout(()=>tx({t:'ping',c:performance.now()}),600);setInterval(()=>tx({t:'ping',c:performance.now()}),2000);
 function atkInfo(){const o=others.get(myId);return o?{x:+o.x.toFixed(1),y:+o.y.toFixed(1),rt:Math.round(rtt)}:{rt:Math.round(rtt)}}
@@ -686,13 +687,13 @@ const CHARS=[
    {icon:'🪐',name:'행성 폭발',key:'Q · 5초',types:['phys'],desc:'자신의 위치에 반경 2 radpx 행성을 소환, 0.7초 뒤 폭발하여 범위 내 모든 적에게 400 물리 피해. 입힌 피해량의 20%를 <4차원>에 저장.'},
    {icon:'⚪',name:'화이트홀',key:'E · 1초',types:['buff'],desc:'저장된 <4차원> 피해를 모두 제거하고, 제거한 양만큼 다음 일반 공격 또는 스킬(행성 폭발·은하 충돌 마지막 폭발) 피해 증가.'},
    {icon:'🌌',name:'은하 충돌',key:'R · 25초',types:['pierce','cc'],desc:'자신의 발밑에 반경 3 radpx 은하를 즉시 펼쳐 4초간 유지: 범위 내 적에게 초당 40 관통 피해, 이동속도 70%의 힘으로 중심으로 끌어당김. 소멸 직후 중심 반경 1 radpx 내 적에게 300 관통 피해.'}]},
- {id:'Reaper',ko:'리퍼',img:'reaper.png',stats:{hp:1200,atk:'50~270'},rng:'0.4~2 radpx (원형 범위)',
+ {id:'Reaper',ko:'리퍼',img:'reaper.png',stats:{hp:1200,atk:'50~270'},rng:'0.3~1.5 radpx (원형 범위)',
    style:'낫을 휘둘러 영혼을 수확하고, 영혼으로 해골 군단을 일으키는 소환 계열 캐릭터.',
    skills:[
-    {icon:'🌀',name:'수확의 낫',key:'패시브',types:['phys'],desc:'공격키를 누르고 있으면 반경 2 radpx 원형 범위가 중심에서 바깥으로 커집니다(1.5초에 최대). 차징 시간에 따라 피해 50~270 물리, 영혼 획득 확률 5~25%. 범위 내 모든 적에게 피해를 주며, 공격 후 0.7초 공격 간격.'},
-    {icon:'👻',name:'영혼',key:'패시브 (Q 슬롯)',types:['summon'],desc:'일반 공격이 적중하면 확률로 해당 적 직업의 [영혼] 획득(최대 5개). 획득한 영혼은 직업 정보와 함께 저장되며, 보유 수가 스킬창에 표시됩니다.'},
-    {icon:'☠️',name:'데드 어라이즈',key:'E · 쿨타임 없음',types:['summon'],desc:'영혼 1개(가장 최근)를 소모해 그 직업의 해골을 소환. 해골은 원 직업 체력·피해·공격속도의 80%이며 해당 직업 무기를 들고 적 탐색, 일반 공격, 패시브, Q, E를 자동으로 사용(R 불가).'},
-    {icon:'⚰️',name:'불멸의 창조',key:'R · 25초',types:['summon'],desc:'모든 영혼을 소모해 마지막으로 얻은 영혼 직업의 거대 해골 소환: 크기·피격 판정 1.5배, 체력은 소모한 영혼 직업 최대 체력의 합, 능력치·스킬은 원본과 동일(80% 감소 없음).'}]},
+    {icon:'🌀',name:'수확의 낫',key:'패시브',types:['phys'],desc:'공격키를 누르고 있으면 회색 반투명 원이 중심에서 바깥으로 커집니다(1.5초에 최대, 최대 범위 반경 1.5 radpx 외곽선 표시). 차징 시간에 따라 피해 50~270 물리, 영혼 생성 확률 5~20%. 범위 내 모든 적에게 피해, 공격 후 0.7초 간격.'},
+    {icon:'👻',name:'영혼',key:'패시브 (Q 슬롯)',types:['summon'],desc:'공격이 적중한 플레이어 위치에 확률로 [영혼]이 생성되고, 가까이 가면 자동 수집(최대 5개). 플레이어가 죽으면 누가 죽였든 사망 위치에 [영혼]이 생성되며 리퍼 누구나 수집 가능. 보유 수는 스킬창에 표시됩니다.'},
+    {icon:'☠️',name:'데드 어라이즈',key:'E · 쿨타임 없음',types:['summon'],desc:'영혼 1개(가장 최근)를 소모해 그 직업의 해골을 소환. 공격으로 얻은 영혼은 원 직업 능력치·피해·공격속도의 70%, 사망으로 얻은 영혼은 100%. 해당 직업 무기를 들고 적 탐색, 일반 공격, 패시브, Q, E를 자동으로 사용(R 불가).'},
+    {icon:'⚰️',name:'불멸의 창조',key:'R · 25초',types:['summon'],desc:'모든 영혼을 소모해 마지막으로 얻은 영혼 직업의 거대 해골 소환: 크기·피격 판정 1.5배, 체력은 소모한 영혼 직업 최대 체력의 합, 능력치는 영혼 종류(70%/100%)의 평균 비율 적용, R 사용 가능.'}]},
   ...new Array(7).fill(null)
 ];
 const csScreen=document.getElementById('csScreen'),csBox=document.getElementById('csBox');
@@ -1112,18 +1113,19 @@ function drawWings(x0,yb){
  if(imOk(wrImg)){ctx.save();ctx.translate(x0+9*PX,yb+9*PX);ctx.rotate(-fl);ctx.drawImage(wrImg,0,0,15,15,-2.5*PX,-12.5*PX,15*PX,15*PX);ctx.restore()}
  if(imOk(wlImg)){ctx.save();ctx.translate(x0+6*PX,yb+9*PX);ctx.rotate(fl);ctx.drawImage(wlImg,0,0,15,15,-12.5*PX,-12.5*PX,15*PX,15*PX);ctx.restore()}}
 function drawPlayer(o,isMe){
- if(o.cls==='Reaper'&&o.chg>=0&&phase==='round'){const R=2*112.5,rr=R*(.2+.8*Math.min(1,o.chg)),pu=o.chg>=1?.5+.5*Math.sin(performance.now()/60):1;
-  ctx.save();ctx.translate(o.x,o.y-2);ctx.scale(1,.8);ctx.beginPath();ctx.arc(0,0,rr,0,6.2832);ctx.fillStyle='rgba(150,90,230,'+(.22*pu)+')';ctx.fill();
-  ctx.beginPath();ctx.arc(0,0,R,0,6.2832);ctx.setLineDash([10,8]);ctx.lineWidth=3;ctx.strokeStyle='rgba(200,160,255,.9)';ctx.stroke();ctx.restore()}
- if(o.skl||o.sz>1){ctx.save();if(o.skl)ctx.filter='grayscale(1) brightness(1.15)';if(o.sz>1){ctx.translate(o.x,o.y);ctx.scale(o.sz,o.sz);ctx.translate(-o.x,-o.y)}
+ if(o.cls==='Reaper'&&o.chg>=0&&phase==='round'){const R=1.5*112.5,rr=R*(.2+.8*Math.min(1,o.chg)),pu=o.chg>=1?.6+.4*Math.sin(performance.now()/60):1;
+  ctx.save();ctx.translate(o.x,o.y-2);ctx.scale(1,.8);ctx.beginPath();ctx.arc(0,0,rr,0,6.2832);ctx.fillStyle='rgba(135,135,135,'+(.38*pu)+')';ctx.fill();
+  ctx.beginPath();ctx.arc(0,0,R,0,6.2832);ctx.setLineDash([10,8]);ctx.lineWidth=3;ctx.strokeStyle='rgba(235,235,235,.95)';ctx.stroke();ctx.restore()}
+ if(o.sz>1){ctx.save();{ctx.translate(o.x,o.y);ctx.scale(o.sz,o.sz);ctx.translate(-o.x,-o.y)}
   try{drawPlayerBody(o,isMe)}finally{ctx.restore()}return}
  drawPlayerBody(o,isMe)}
 function drawPlayerBody(o,isMe){
  const lift=o.su>0?Math.sin((1-Math.min(1,o.su/(o.sMax||1000)))*Math.PI)*55:0;
  const s=Math.sin(o.phase),step=o.moving?s:0,bob=o.moving&&Math.abs(s)>.6?1:0;
- const lL=step>.3?1:0,lR=step<-.3?1:0,tw=o.cls==='Tower',w=(tw?30:15)*PX,h=(tw?40:15)*PX,x0=o.x-w/2,yb=o.y-h-lift,sp=o.ut?(o.ut==='i'?tInfImg:tArcImg):tw?towerImg:(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:spriteFor(o.hue,o.cls,o.lf));
+ const lL=step>.3?1:0,lR=step<-.3?1:0,tw=o.cls==='Tower'&&!o.skl,w=(tw?30:15)*PX,h=(tw?40:15)*PX,x0=o.x-w/2,yb=o.y-h-lift,sp=o.ut?(o.ut==='i'?tInfImg:tArcImg):tw?towerImg:o.skl&&imOk(skelImg)?skelImg:(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:spriteFor(o.hue,o.cls,o.lf)),whole=(o.skl&&sp===skelImg)||(o.cls==='Reaper'&&!o.skl&&sp===clsImg.Reaper);
  if((o.ut||tw)&&!imOk(sp))return;
  ctx.fillStyle='rgba(30,40,80,.3)';ctx.beginPath();ctx.ellipse(o.x,o.y-2,(tw?46:22)-(bob?2:0),PX*(tw?2.2:1.3),0,0,7);ctx.fill();
+ if(o.skl){ctx.save();ctx.strokeStyle=o.so===myId?'#4cd964':'#ff5a4a';ctx.lineWidth=2.5;ctx.beginPath();ctx.ellipse(o.x,o.y-2,26,9,0,0,7);ctx.stroke();ctx.restore()}
  if(o.ut){ctx.save();ctx.strokeStyle=o.ow===myId?'#4cd964':'#ff5a4a';ctx.lineWidth=2.5;ctx.beginPath();ctx.ellipse(o.x,o.y-2,26,9,0,0,7);ctx.stroke();ctx.restore()}
  const _gt=o.gt;if(_gt)tintBegin();
  if(o.gd){const lk=skOf(o);ctx.save();ctx.strokeStyle=lk?'#ff9a2e':'#7fd3ff';ctx.fillStyle=lk?'rgba(255,154,46,.2)':'rgba(127,211,255,.18)';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.5,h*.62,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
@@ -1154,7 +1156,9 @@ function drawPlayerBody(o,isMe){
   ctx.drawImage(sp,0,0,30,32,x0,yb-(o.moving?Math.abs(s)*2.5:0),w,32*PX);
   ctx.drawImage(sp,0,32,15,8,x0,yb+32*PX-lL*PX*1.6,15*PX,8*PX);
   ctx.drawImage(sp,15,32,15,8,x0+15*PX,yb+32*PX-lR*PX*1.6,15*PX,8*PX);
-  ctx.restore()}else{
+  ctx.restore()}else if(whole){
+ ctx.save();ctx.translate(o.x,yb+h);ctx.rotate((o.moving?step*PX*.4:0)*.012);ctx.translate(-o.x,-(yb+h));
+ ctx.drawImage(sp,0,0,sp.naturalWidth||sp.width,sp.naturalHeight||sp.height,x0,yb-bob*PX,w,h);ctx.restore()}else{
  ctx.save();ctx.translate(o.x,yb+h);ctx.rotate((o.moving?step*PX*.4:0)*.012);ctx.translate(-o.x,-(yb+h));
  ctx.drawImage(sp,0,0,15,11,x0,yb-bob*PX,w,11*PX);
  ctx.drawImage(sp,0,11,15,1,x0,yb+11*PX-bob*PX*.5,w,PX);
@@ -1164,6 +1168,7 @@ function drawPlayerBody(o,isMe){
  ctx.restore();
  if(o.cls==='Knight'||o.cls==='UnitInf')drawSword(o,h,lift);
  if(o.cls==='SwordMaster')drawSMSword(o,h,lift);
+ if(o.cls==='Reaper')drawScythe(o,h,lift);
  if(o.cls==='Gamer')drawGamerWeapon(o,h,lift);
  if(o.cls==='Knight'&&o.gd)drawKnightShield(o,h,lift);
  if(o.cls==='Assassin')drawBlade(o,h,lift);
@@ -1256,7 +1261,22 @@ function drawCannon(f,k){
  ctx.strokeStyle='rgba(255,140,60,.55)';ctx.lineWidth=2;ctx.setLineDash([6,5]);ctx.beginPath();ctx.ellipse(f.x1,f.y1,RADPX*1.5,RADPX*1.5*.8,0,0,7);ctx.stroke();ctx.setLineDash([]);
  ctx.drawImage(cbImg,0,0,15,15,gx-7.5*S,gy-34-Math.sin(k*Math.PI)*arc-7.5*S,15*S,15*S);ctx.restore();
 }
-function drawDisc(f,k){const a=Math.min(1,k*8,(1-k)*4)*.9;ctx.save();ctx.translate(f.x,f.y);ctx.scale(1,.8);ctx.globalAlpha=a;ctx.beginPath();ctx.arc(0,0,f.r,0,6.2832);ctx.fillStyle=f.c||'rgba(150,120,255,.3)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=f.s||'#b69cff';ctx.stroke();ctx.restore()}
+function drawDisc(f,k){const a=Math.min(1,k*8,(1-k)*4)*.9;ctx.save();ctx.translate(f.x,f.y);ctx.scale(1,.8);ctx.globalAlpha=a;ctx.beginPath();ctx.arc(0,0,f.r,0,6.2832);ctx.fillStyle=f.c||'rgba(140,140,140,.38)';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=f.s||'#d8d8d8';ctx.stroke();
+ if(f.rm){ctx.beginPath();ctx.arc(0,0,f.rm,0,6.2832);ctx.setLineDash([10,8]);ctx.lineWidth=3;ctx.strokeStyle='rgba(235,235,235,.95)';ctx.stroke()}ctx.restore()}
+function drawScythe(o,h,lift){
+ if(!imOk(scytheImg))return;
+ const now=performance.now(),k=o.spin?(now-o.spin)/350:2,cx=o.x,cy=o.y-h*.5-lift,S=3.6,n=scytheImg.naturalWidth,nh=scytheImg.naturalHeight;
+ ctx.save();
+ if(k<1){const th=k*Math.PI*2;ctx.translate(cx+Math.cos(th)*38,cy+8+Math.sin(th)*38*.8);ctx.rotate(th+Math.PI*.75)}
+ else{const side=o.face,bob=Math.sin(now/260+o.x*.05)*3+(o.moving?Math.sin(o.phase*2)*2:0);ctx.translate(cx+side*30,cy+8+bob);if(side<0)ctx.scale(-1,1);ctx.rotate(.1)}
+ ctx.drawImage(scytheImg,0,0,n,nh,-2*S,-12.5*S,15*S,15*S);ctx.restore()}
+function drawSouls(t){
+ if(phase!=='round')return;
+ for(const s of soulOrbs){const bob=Math.sin(t/260+s.id)*4,n=imOk(soulImg)?soulImg.naturalWidth:15,S=3;
+  ctx.save();ctx.globalAlpha=.3;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(s.x,s.y-2,14,5,0,0,7);ctx.fill();ctx.restore();
+  ctx.save();ctx.translate(s.x,s.y-28+bob);ctx.shadowColor=s.o?'#c9a8ff':'#7dffb2';ctx.shadowBlur=16;
+  if(imOk(soulImg))ctx.drawImage(soulImg,0,0,n,soulImg.naturalHeight,-7.5*S,-7.5*S,15*S,15*S);else{ctx.fillStyle='#7dffb2';ctx.beginPath();ctx.arc(0,0,10,0,6.2832);ctx.fill()}
+  ctx.restore()}}
 const SKY_H=480;
 function drawPlanet(f,k){
  const fk=f.fall/f.dur,r=f.r,p=Math.min(1,k/fk),e=p*p;
@@ -1458,7 +1478,7 @@ function draw(t){
  list.sort((a,b)=>a[1].y-b[1].y);
  const vis=(phase==='round'?list.filter(([id,o])=>o.role===1):list).filter(([id,o])=>!o.iv||id===myId);
  drawFx(t);
- drawFoxfires(t);
+ drawFoxfires(t);drawSouls(t);
  for(const [id,o] of vis)if(o.ds&&t-(o.ghT||0)>45){o.ghT=t;ghosts.push({x:o.x,y:o.y,face:o.face,hue:o.hue,cls:o.cls,t0:t})}
  drawGhosts(t);
  for(const [id,o] of vis){if(id===myId&&o.iv)ctx.globalAlpha=.4;drawPlayer(o,id===myId);ctx.globalAlpha=1}
