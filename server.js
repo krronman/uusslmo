@@ -44,10 +44,10 @@ let phase = 'lobby', roundStart = 0, deathCounter = 0;
 
 const joinedList = () => [...players.values()].filter(p => p.joined);
 // ---- team mode ----
-let gameMode = 'ffa';
+let gameMode = 'ffa', bossId = 0;
 const TEAM_NAME = { 1: 'Red', 2: 'Blue' };
 const tmOf = t => t ? (t.unit ? ((players.get(t.owner) || {}).team || 0) : (t.team || 0)) : 0;
-const sameTeam = (a, b) => gameMode === 'team' && !!tmOf(a) && tmOf(a) === tmOf(b);
+const sameTeam = (a, b) => gameMode !== 'ffa' && !!tmOf(a) && tmOf(a) === tmOf(b);
 function setMap(id) {
   mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]);
   for (const p of players.values()) { const c = clampArena({ x: p.x, y: p.y }); p.x = c.x; p.y = c.y; p.hist = []; }
@@ -78,9 +78,20 @@ function startRound() {
   const parts = joinedList().filter(p => p.ready);
   if (parts.length < 2) {
     phase = 'lobby';
-    joinedList().forEach(p => p.ready = false);
+    joinedList().forEach(p => p.ready = !!p.ai);
     broadcast({ t: 'countdown', ms: 0 });
     return sysChat('Round cancelled: not enough players.');
+  }
+  let bossMult = 0;
+  if (gameMode === 'boss') {
+    const boss = parts.find(q => q.id === bossId);
+    if (!boss) {
+      phase = 'lobby';
+      joinedList().forEach(p => p.ready = !!p.ai);
+      broadcast({ t: 'countdown', ms: 0 });
+      return sysChat('Round cancelled: no Boss designated.');
+    }
+    parts.forEach(q => q.team = q === boss ? 1 : 2); bossMult = (parts.length - 1) / 2;
   }
   if (gameMode === 'team') {
     const cnt = { 1: 0, 2: 0 };
@@ -88,7 +99,7 @@ function startRound() {
     parts.filter(p => !p.team).sort(() => Math.random() - 0.5).forEach(p => { p.team = cnt[1] <= cnt[2] ? 1 : 2; cnt[p.team]++; });
     if (!cnt[1] || !cnt[2]) {
       phase = 'lobby';
-      joinedList().forEach(p => p.ready = false);
+      joinedList().forEach(p => p.ready = !!p.ai);
       broadcast({ t: 'countdown', ms: 0 });
       return sysChat('Round cancelled: both teams need at least one player.');
     }
@@ -96,11 +107,12 @@ function startRound() {
   phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); soulOrbs.clear(); balls.length = 0;
   parts.forEach((p, i) => {
     let a = -Math.PI / 2 + i * 2 * Math.PI / parts.length;
-    if (gameMode === 'team') { const side = parts.filter(q => q.team === p.team); a = (p.team === 1 ? Math.PI : 0) + (side.indexOf(p) - (side.length - 1) / 2) * 0.45; }
+    if (gameMode !== 'ffa') { const side = parts.filter(q => q.team === p.team); a = (p.team === 1 ? Math.PI : 0) + (side.indexOf(p) - (side.length - 1) / 2) * 0.45; }
     p.lx = p.x; p.ly = p.y;
     p.x = CX + Math.cos(a) * RX * 0.92; p.y = CY + Math.sin(a) * RY * 0.92;
     p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0; p.hist = [];
     resetCombat(p);
+    if (bossMult && p.id === bossId) { p.pw = p.bm = bossMult; p.mh = p.hp = Math.round(p.mh * bossMult); }
   });
   joinedList().forEach(p => { if (!p.inRound) p.role = 2; });
   broadcast({ t: 'tp' });
@@ -109,7 +121,7 @@ function startRound() {
 function checkRoundEnd() {
   if (phase !== 'round') return;
   const alive = [...players.values()].filter(p => p.role === 1 && !p.skel);
-  if (gameMode === 'team') {
+  if (gameMode !== 'ffa') {
     if (new Set(alive.map(p => p.team)).size > 1) return;
     let team = alive[0] && alive[0].team;
     if (!team) { const last = [...players.values()].filter(p => p.inRound).sort((a, b) => b.deathOrder - a.deathOrder)[0]; team = last && last.team; }
@@ -133,7 +145,7 @@ function endRound(winner, tied, teamWin, draw) {
   }
   broadcast({ t: 'tp' });
   if (draw) { sysChat('⏱ Time is up! Draw.'); broadcast({ t: 'winner', name: 'Draw', draw: 1 }); }
-  else if (teamWin) { sysChat('🏆 ' + TEAM_NAME[teamWin] + ' Team wins!'); broadcast({ t: 'winner', name: TEAM_NAME[teamWin] + ' Team' }); tw.forEach(q => awardGold(q, WIN_GOLD)); }
+  else if (teamWin) { const bm = gameMode === 'boss'; sysChat('🏆 ' + (bm ? (teamWin === 1 ? 'The Boss wins!' : 'The Players win!') : TEAM_NAME[teamWin] + ' Team wins!')); broadcast({ t: 'winner', name: bm ? (teamWin === 1 ? '보스' : '플레이어 팀') : TEAM_NAME[teamWin] + ' Team' }); tw.forEach(q => awardGold(q, WIN_GOLD)); }
   else if (tied && tied.length) { const names = tied.join(', '); sysChat('⏱ Time is up! 2nd place: ' + names); broadcast({ t: 'winner', name: names, second: true }); }
   else if (winner) { sysChat('🏆 1st place: ' + winner.name); broadcast({ t: 'winner', name: winner.name }); }
   else sysChat('Round ended with no winner.');
@@ -234,7 +246,7 @@ const CLASS_STATS = {
   Reaper: { hp: 1200, dmg: 50, reduce: 0, atkCd: 700 }
 };
 const statsBase = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : CLASS_STATS[p.cls] || BASE;
-const statsOf = p => { const s = statsBase(p); return p.pw && p.pw < 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
+const statsOf = p => { const s = statsBase(p); return p.pw && p.pw !== 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
 const RADPX = 112.5;
 const MAP = 1254;
 const ARROW = { speed: 800, range: 5 * RADPX, radius: 28 };
@@ -276,7 +288,7 @@ const GUMIHO = {
   eff: { dmg: 120, ms: 2000, radius: 2 * RADPX },
   Q: { cd: 8000 },
   E: { cd: 12000, pullMs: 500, dmg: 120, rad: 0.6 * RADPX },
-  R: { cd: 25000, radius: 2.5 * RADPX, ms: 2500, speed: 0.8, stop: 45 }
+  R: { cd: 25000, radius: 2.5 * RADPX, ms: 2500, speed: 0.7, stop: 45 }
 };
 const BURN = { tick: 35, tickMs: 1000 };
 const LUC = {
@@ -424,6 +436,7 @@ function stepArrows(dt, now) {
 }
 
 function resetCombat(p) {
+  p.pw = 1; p.bm = 0;
   p.lf = ''; p.lPend = p.lUsed = false; p.beam = p.pure = p.sanct = null; p.libUntil = p.dmUntil = 0; p.dmList = [];
   p.mh = p.hp = statsOf(p).hp;
   p.atkReady = p.cdQ = p.cdE = p.cdR = 0;
@@ -984,7 +997,7 @@ const FIN = {
   passive: { ms: 5000, mul: 1.03 },
   Q: { cd: 500, cost: 100, pick: 48 },
   E: { cd: 15000, min: 150, cost: 150, ms: 2000 },
-  R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1000, atkMul: 1.1 }
+  R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1200, atkMul: 1.15 }
 };
 const stockPL = (f, t) => (f.buyDealt + (t.hp - f.buyHp0)) / 50;
 function stockClear(p) { if (p.buy) send(p.ws, { t: 'stk', id: 0 }); p.buy = 0; }
@@ -1509,6 +1522,7 @@ function stepGamer(now) {
 }
 function checkTimeout(now) {
   if (phase !== 'round' || now - roundStart < ROUND_MS) return;
+  if (gameMode === 'boss') return endRound(null, null, 1);
   if (gameMode === 'team') {
     const sum = { 1: 0, 2: 0 };
     for (const p of players.values()) if (p.role === 1 && p.team) sum[p.team] += p.hp;
@@ -1799,16 +1813,23 @@ const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucif
 const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 130 };
 let botSeq = 0;
 const randClass = cur => { const l = CLASS_LIST.filter(c => c !== cur); return l[Math.floor(Math.random() * l.length)]; };
-function addBot(cls) {
+function addBot(cls, iq) {
   if (players.size >= MAX_PLAYERS) return null;
   const id = nextId++, p = mkPlayer(id, null);
-  p.ai = true; p.aiRand = cls === 'random'; p.name = 'AI ' + (++botSeq); p.user = null; p.joined = true; p.ready = true; p.gold = 0; p.skins = []; p.eqs = {};
+  p.ai = true; p.iq = Number.isInteger(iq) && iq >= 0 && iq <= 10 ? iq : 5; p.aiRand = cls === 'random'; p.name = 'AI ' + (++botSeq); p.user = null; p.joined = true; p.ready = true; p.gold = 0; p.skins = []; p.eqs = {};
   p.cls = p.aiRand ? randClass('') : cls; resetCombat(p);
   players.set(id, p); return p;
 }
 function removeBot(q) {
+  if (bossId === q.id) bossId = 0;
   players.delete(q.id); broadcast({ t: 'leave', id: q.id });
   if (phase === 'lobby') checkReady(); else if (phase === 'round') checkRoundEnd();
+}
+const iqOf = p => p.skel ? 5 : Number.isInteger(p.iq) ? p.iq : 5;
+function velOf(t, now) {
+  const h = t.hist; if (!h || h.length < 2) return { x: 0, y: 0 };
+  let a = h[0]; for (const e of h) if (e.t >= now - 250) { a = e; break; }
+  const dt = (now - a.t) / 1000; return dt < 0.05 ? { x: 0, y: 0 } : { x: (t.x - a.x) / dt, y: (t.y - a.y) / dt };
 }
 function botTick(now) {
   if (phase !== 'round') return;
@@ -1816,27 +1837,44 @@ function botTick(now) {
     if (!p.ai && !p.skel) continue;
     if (p.role !== 1) { p.dx = p.dy = 0; continue; }
     if (now < (p.botT || 0)) continue;
-    p.botT = now + 90;
-    let foe = null, fd = Infinity;
-    for (const t of targetsOf(p)) { if (now < (t.invisUntil || 0)) continue; const d = Math.hypot(t.x - p.x, (t.y - p.y) / 0.8); if (d < fd) { fd = d; foe = t; } }
+    const iq = iqOf(p);
+    p.botT = now + Math.round(380 - iq * 32);
+    let foe = null, fs = Infinity, fd = Infinity;
+    for (const t of targetsOf(p)) {
+      if (now < (t.invisUntil || 0)) continue;
+      const d = Math.hypot(t.x - p.x, (t.y - p.y) / 0.8), sc = d - (iq >= 7 && t.mh ? (1 - t.hp / t.mh) * 150 : 0);
+      if (sc < fs) { fs = sc; fd = d; foe = t; }
+    }
     if (!foe) { p.dx = p.dy = 0; continue; }
     const vx = foe.x - p.x, vy = (foe.y - p.y) / 0.8, d = fd || 1, R = BOT_RANGE[p.cls] || 95;
     let mx = 0, my = 0;
-    if (d > R * 0.85) { mx = vx / d; my = vy / d; }
-    else if (R > 200 && d < R * 0.45) { mx = -vx / d; my = -vy / d; }
-    else { if (now > (p.botSg || 0)) { p.botSg = now + 900 + Math.random() * 900; p.botDir = Math.random() < 0.5 ? -1 : 1; } mx = -vy / d * (p.botDir || 1); my = vx / d * (p.botDir || 1); }
+    if (iq > 0) {
+      if (d > R * 0.85) { mx = vx / d; my = vy / d; }
+      else if (R > 200 && iq >= 3 && d < R * 0.45) { mx = -vx / d; my = -vy / d; }
+      else if (iq >= 4) { if (now > (p.botSg || 0)) { p.botSg = now + 900 + Math.random() * 900; p.botDir = Math.random() < 0.5 ? -1 : 1; } mx = -vy / d * (p.botDir || 1); my = vx / d * (p.botDir || 1); }
+      if (iq >= 7) for (const ar of arrows.values()) {
+        const ow = players.get(ar.owner);
+        if (!ow || rootOf(ow) === rootOf(p) || sameTeam(p, ow)) continue;
+        const ex = p.x - ar.x, ey = p.y / 0.8 - ar.gy, c = Math.cos(ar.a), sn = Math.sin(ar.a), al = ex * c + ey * sn, pp = -ex * sn + ey * c;
+        if (al > 0 && al < 380 && Math.abs(pp) < 70) { const sg = pp >= 0 ? 1 : -1; mx = -sn * sg; my = c * sg; break; }
+      }
+    }
     p.dx = Math.abs(mx) > 0.38 ? Math.sign(mx) : 0; p.dy = Math.abs(my) > 0.38 ? Math.sign(my) : 0;
-    setAim(p, Math.atan2(vy, vx));
+    let ax = vx, ay = vy;
+    if (iq >= 6) { const v = velOf(foe, now), lt = Math.min(0.35, d / 800) * (iq - 5) / 5; ax += v.x * lt; ay += v.y / 0.8 * lt; }
+    setAim(p, Math.atan2(ay, ax) + (Math.random() - 0.5) * (10 - iq) * 0.05);
     if (d <= R) {
       if (p.cls === 'Archer' || p.cls === 'Reaper') {
-        if (!p.chargeStart) { if (now >= p.atkReady - 60 && canAct(p, now)) { p.chargeStart = now; p.botCh = 500 + Math.random() * 1200; } }
+        if (!p.chargeStart) { if (now >= p.atkReady - 60 && canAct(p, now)) { p.chargeStart = now; p.botCh = 300 + iq * 150 + Math.random() * 300; } }
         else if (now - p.chargeStart >= p.botCh) doAttack(p, {});
       } else doAttack(p, {});
     }
-    if (now >= (p.botSk || 0)) {
-      p.botSk = now + 1300 + Math.random() * 2000;
-      const ks = ['Q', 'E', 'R'].filter(k => now >= p['cd' + k] && !(k === 'R' && p.noR) && !(k === 'Q' && p.cls === 'Reaper'));
-      if (ks.length && d <= Math.max(R * 1.6, 260)) doSkill(p, ks[Math.floor(Math.random() * ks.length)], { cx: foe.x, cy: foe.y - 24 });
+    if (iq > 0 && now >= (p.botSk || 0)) {
+      p.botSk = now + 3600 - iq * 300 + Math.random() * (2400 - iq * 180);
+      if (Math.random() < 0.35 + iq * 0.065) {
+        const ks = ['Q', 'E', 'R'].filter(k => now >= p['cd' + k] && !(k === 'R' && p.noR) && !(k === 'Q' && p.cls === 'Reaper'));
+        if (ks.length && d <= Math.max(R * 1.6, 260)) doSkill(p, ks[Math.floor(Math.random() * ks.length)], { cx: foe.x, cy: foe.y - 24 });
+      }
     }
   }
 }
@@ -1876,15 +1914,27 @@ wss.on('connection', (ws, req) => {
     } else if (m.t === 'class') {
       if (phase === 'lobby' && CLASS_LIST.includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'mode') {
-      if (p.user === ADMIN_ID && phase === 'lobby' && (m.m === 'ffa' || m.m === 'team') && m.m !== gameMode) { gameMode = m.m; broadcast({ t: 'mode', m: gameMode }); sysChat(p.name + ' changed the game mode to ' + (gameMode === 'team' ? 'Team' : 'Free-for-All') + '.'); }
+      if (p.user === ADMIN_ID && phase === 'lobby' && (m.m === 'ffa' || m.m === 'team' || m.m === 'boss') && m.m !== gameMode) {
+        if (gameMode === 'boss' || m.m === 'boss') for (const q of players.values()) q.team = 0;
+        bossId = 0; gameMode = m.m; broadcast({ t: 'mode', m: gameMode }); sysChat(p.name + ' changed the game mode to ' + (gameMode === 'team' ? 'Team' : gameMode === 'boss' ? 'Boss Battle' : 'Free-for-All') + '.');
+      }
     } else if (m.t === 'team') {
       const q = players.get(Number(m.id));
       if (p.user === ADMIN_ID && gameMode === 'team' && phase === 'lobby' && q && q.joined && !q.obs && [0, 1, 2].includes(m.team)) { q.team = m.team; sysChat(q.name + (q.team ? ' joined the ' + TEAM_NAME[q.team] + ' team.' : ' left their team.')); }
+    } else if (m.t === 'boss') {
+      const q = players.get(Number(m.id));
+      if (p.user === ADMIN_ID && gameMode === 'boss' && phase === 'lobby' && q && q.joined && !q.obs && !q.skel) { bossId = bossId === q.id ? 0 : q.id; sysChat(bossId ? q.name + ' is the Boss.' : 'Boss designation cleared.'); }
     } else if (m.t === 'aiadd') {
-      if (p.user === ADMIN_ID && phase === 'lobby' && (m.cls === 'random' || CLASS_LIST.includes(m.cls))) { const b = addBot(m.cls); if (b) { sysChat(p.name + ' added ' + b.name + '.'); checkReady(); } }
+      if (p.user === ADMIN_ID && phase === 'lobby' && (m.cls === 'random' || CLASS_LIST.includes(m.cls))) { const b = addBot(m.cls, m.iq); if (b) { sysChat(p.name + ' added ' + b.name + '.'); checkReady(); } }
     } else if (m.t === 'aiset') {
       const q = players.get(Number(m.id));
-      if (p.user === ADMIN_ID && phase === 'lobby' && q && q.ai && (m.cls === 'random' || CLASS_LIST.includes(m.cls))) { q.aiRand = m.cls === 'random'; q.cls = q.aiRand ? randClass(q.cls) : m.cls; resetCombat(q); }
+      if (p.user === ADMIN_ID && phase === 'lobby' && q && q.ai) {
+        if (Number.isInteger(m.iq) && m.iq >= 0 && m.iq <= 10) q.iq = m.iq;
+        if (m.cls === 'random' || CLASS_LIST.includes(m.cls)) {
+          const same = m.cls === 'random' ? q.aiRand : (!q.aiRand && q.cls === m.cls);
+          if (!same) { q.aiRand = m.cls === 'random'; q.cls = q.aiRand ? randClass(q.cls) : m.cls; resetCombat(q); }
+        }
+      }
     } else if (m.t === 'aidel') {
       const q = players.get(Number(m.id));
       if (p.user === ADMIN_ID && q && q.ai) { sysChat(q.name + ' was removed.'); removeBot(q); }
@@ -1923,6 +1973,7 @@ wss.on('connection', (ws, req) => {
     }
   });
   ws.on('close', () => {
+    if (bossId === id) bossId = 0;
     players.delete(id); broadcast({ t: 'leave', id });
     if (phase === 'lobby') checkReady(); else if (phase === 'round') checkRoundEnd();
   });
@@ -1985,7 +2036,7 @@ setInterval(() => {
     }
     if (dx || dy) {
       const l = Math.hypot(dx, dy); dx /= l; dy /= l;
-      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1);
+      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1) * (p.bm || 1);
       p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
@@ -2012,7 +2063,7 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '' };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0 };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);
   }
