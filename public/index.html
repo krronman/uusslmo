@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Geolgani PvP</title>
 <style>
 html,body{margin:0;height:100%;background:#8fc4f5;overflow:hidden;font-family:system-ui,sans-serif}
@@ -152,7 +152,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #goldTx{position:absolute;left:26%;right:11%;top:0;bottom:0;display:flex;align-items:center;justify-content:flex-end;font:700 20px 'Galmuri11','Press Start 2P',monospace;color:#ffe9a8;text-shadow:2px 2px 0 #0b0a24;white-space:nowrap;overflow:hidden}
 #goldBar.pop{animation:goldPop .5s}
 @keyframes goldPop{30%{transform:scale(1.1)}}
-#skinBtn{position:fixed;right:286px;top:50%;margin-top:-38px;width:100px;height:75px;padding:0;border:0;cursor:pointer;background:url(skinButton.png) -13.5px -2.4px/127.1px 84.7px no-repeat;z-index:4}
+#skinBtn{position:fixed;right:286px;top:50%;margin-top:-40px;width:120px;height:80px;padding:0;border:0;cursor:pointer;background:url(%EB%B3%B4%EB%9E%8F%EB%B9%9B_%EA%B0%91%EC%98%B7_%EC%97%A0%EB%B8%94%EB%9F%BC_%EC%8A%A4%ED%82%A8_%EB%B0%B0%EC%A7%80.png) center/contain no-repeat;z-index:4}
 #skinBtn:hover{filter:brightness(1.12)}
 #skinBtn.noimg{background:rgba(20,30,60,.85);border:2px solid #fff;border-radius:8px;color:#fff;font:700 14px 'Galmuri11',system-ui,sans-serif}
 #goldBar.adm{pointer-events:auto;cursor:pointer}
@@ -199,6 +199,20 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #kbList button.dup{border-color:#ff6b6b}
 #kbMsg.warn{color:#ff6b6b}
 #kbMsg{min-height:20px;margin-top:10px;font-size:13px;line-height:1.3;color:#b9b3ff}
+#mobUI{display:none;position:fixed;inset:0;pointer-events:none;z-index:4}
+#mobUI>*{pointer-events:auto}
+body.mob{touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+body.mob #hint{display:none!important}
+#joy{position:absolute;left:calc(22px + env(safe-area-inset-left,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));width:140px;height:140px;border-radius:50%;background:rgba(20,30,60,.35);border:3px solid rgba(255,255,255,.6);touch-action:none}
+#joyKnob{position:absolute;left:50%;top:50%;width:58px;height:58px;margin:-29px 0 0 -29px;border-radius:50%;background:rgba(255,255,255,.75);border:3px solid #7b72e8;pointer-events:none}
+#mobAtk{position:absolute;right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(98px + env(safe-area-inset-bottom,0px));width:84px;height:84px;border-radius:50%;background:rgba(255,110,80,.55);border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff;touch-action:none}
+#mobAtk.on{background:rgba(255,110,80,.9)}
+body.mob #skillbar{right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:5;gap:10px}
+body.mob .sk{width:66px;height:66px;font-size:30px;touch-action:none}
+body.mob #patchBtn{transform:scale(.55);transform-origin:top right;bottom:auto;top:calc(50px + env(safe-area-inset-top,0px))}
+body.mob #setBtn{left:calc(12px + env(safe-area-inset-left,0px));right:auto;bottom:auto;top:calc(84px + env(safe-area-inset-top,0px));width:46px;height:46px}
+body.mob #chatLog{bottom:calc(176px + env(safe-area-inset-bottom,0px));width:min(240px,46vw)}
+body.mob #clBody{height:110px}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css" rel="stylesheet">
@@ -218,6 +232,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 <button id="patchBtn" aria-label="patch notes"></button>
 <button id="setBtn" aria-label="settings"></button>
 <div id="chatLog"><div id="clHead"><span>💬 Chat</span><span id="clArrow">▾</span></div><div id="clBody"></div></div>
+<div id="mobUI"><div id="joy"><div id="joyKnob"></div></div><div id="mobAtk">⚔️</div></div>
 <div id="skillbar"><div class="sk" data-k="Q"><b>Q</b><span>⚔️</span><i></i></div><div class="sk" data-k="E"><b>E</b><span>💨</span><i></i></div><div class="sk" data-k="R"><b>R</b><span>🗡️</span><i></i></div></div>
 <div id="stkHud"><div id="stkT"></div><canvas id="stkCv" width="220" height="96"></canvas></div>
 <div id="gcHud"></div><div id="celHud"></div><div id="rvHud"><canvas id="rvCv" width="60" height="60"></canvas><div id="rvTx"></div></div>
@@ -443,11 +458,12 @@ let chargeT0=0,hasteLocal=0;const CHARGE_MS=2000;
 let foxes=[],ghosts=[],toastT=0;
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>{el.style.display='none'},1500)}
 let rtt=60,lastSent='',atkLocal=0,myAim=0,mWx=0,mWy=0,mouseOn=false,aimSent=0,aimSentT=0;
-const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700,Lucifer:900,Gambler:600,SwordMaster:600,Tower:2000,Financier:900,Gamer:700,Celestial:800},arrowsC=[];
+const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700,Lucifer:900,Gambler:600,SwordMaster:400,Tower:2000,Financier:900,Gamer:700,Celestial:800},arrowsC=[];
 const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b)),lerpAng=(a,b,t)=>a+angDiff(b,a)*t;
 let mcx=0,mcy=0,camX=W/2,camY=W/2;
 addEventListener('mousemove',e=>{mcx=e.clientX;mcy=e.clientY;mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale;mouseOn=true});
 function updateAim(o){
+ if(MOB)mobTarget(o);
  if(!mouseOn)return;
  const dx=mWx-o.x,dy=(mWy-(o.y-30))/0.8;
  if(dx*dx+dy*dy>64)myAim=Math.atan2(dy,dx);
@@ -456,6 +472,13 @@ function updateAim(o){
 }
 function sendInput(){const dx=(keys.d?1:0)-(keys.a?1:0),dy=(keys.s?1:0)-(keys.w?1:0),k=dx+','+dy;
  if(k!==lastSent&&ws.readyState===1){lastSent=k;ws.send(JSON.stringify({t:'input',dx,dy,a:+myAim.toFixed(3)}))}}
+function pressAtk(){if(myCls==='Archer')archerPress();else{
+  tx(Object.assign({t:'atk',a:+myAim.toFixed(3)},atkInfo()));const n=performance.now();if(n>=atkLocal){atkLocal=n+(ATK_CD[myCls]||600)/(1+((others.get(myId)||{}).as||0));localAttack()}}}
+function pressSkill(sk){if(myCls==='Gumiho'&&sk==='Q'&&foxes.some(f=>f.o===myId)&&!hoverFox())toast('Q: 커서를 여우불 위에 올려 주세요');
+  else if(myCls==='Gumiho'&&sk==='E'&&!foxes.some(f=>f.o===myId))toast('끌어당길 여우불이 없습니다');
+  else{const sq=predictSkill(sk);
+  tx(Object.assign({t:'skill',k:sk,a:+myAim.toFixed(3)},atkInfo(),sq?{q:sq}:{},((sk==='R'&&myCls==='Assassin')||(sk==='Q'&&(myCls==='Gumiho'||myCls==='Tower'||myCls==='Financier'||myCls==='Gamer')))&&mouseOn?{cx:Math.round(mWx),cy:Math.round(mWy)}:{}));
+  if(sk==='E'&&myCls==='Archer'&&performance.now()>=skCd.E){const o=others.get(myId);if(o&&myRole!==2&&!(o.su>0)){hasteLocal=performance.now()+4000}}}}
 addEventListener('keydown',e=>{
  if(kbCap)return;
  if(document.activeElement===chatEl){
@@ -465,14 +488,7 @@ addEventListener('keydown',e=>{
  if(anyWinOpen()){if(e.key==='Escape')closeAllWins();return}
  if(!joined||obs)return;
  if(isChatKey(e.code)){chatEl.style.display='block';chatEl.focus();for(const k in keys)keys[k]=false;sendInput();cancelCharge();e.preventDefault();return}
- if(!e.repeat){
-  if(e.code===kb.atk){if(myCls==='Archer')archerPress();else{
-   tx(Object.assign({t:'atk',a:+myAim.toFixed(3)},atkInfo()));const n=performance.now();if(n>=atkLocal){atkLocal=n+(ATK_CD[myCls]||600)/(1+((others.get(myId)||{}).as||0));localAttack()}}}
-  const sk=skOfKey(e.code);if(sk){if(myCls==='Gumiho'&&sk==='Q'&&foxes.some(f=>f.o===myId)&&!hoverFox())toast('Q: 커서를 여우불 위에 올려 주세요');
-   else if(myCls==='Gumiho'&&sk==='E'&&!foxes.some(f=>f.o===myId))toast('끌어당길 여우불이 없습니다');
-   else{const sq=predictSkill(sk);
-   tx(Object.assign({t:'skill',k:sk,a:+myAim.toFixed(3)},atkInfo(),sq?{q:sq}:{},((sk==='R'&&myCls==='Assassin')||(sk==='Q'&&(myCls==='Gumiho'||myCls==='Tower'||myCls==='Financier'||myCls==='Gamer')))&&mouseOn?{cx:Math.round(mWx),cy:Math.round(mWy)}:{}));
-   if(sk==='E'&&myCls==='Archer'&&performance.now()>=skCd.E){const o=others.get(myId);if(o&&myRole!==2&&!(o.su>0)){hasteLocal=performance.now()+4000}}}}}
+ if(!e.repeat){if(e.code===kb.atk)pressAtk();const sk=skOfKey(e.code);if(sk)pressSkill(sk)}
  const mv=mvAll(e.code);if(mv.length){for(const m of mv)keys[m]=true;sendInput();e.preventDefault()}});
 addEventListener('keyup',e=>{if(e.code===kb.atk&&chargeT0)archerRelease();const mv=mvAll(e.code);if(mv.length){for(const m of mv)keys[m]=false;sendInput()}});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;sendInput();cancelCharge()});
@@ -616,13 +632,13 @@ const CHARS=[
    {icon:'🔄',name:'밀수',key:'Q · 10초',types:['util'],desc:'장전된 모든 탄을 반전: 실탄은 공포탄으로, 공포탄은 실탄으로.'},
    {icon:'🎲',name:'도박',key:'E · 3초',types:['buff'],desc:'자신에게 발사: 실탄이면 200 피해, 공포탄이면 5초간 실탄 피해가 300으로 증가.'},
    {icon:'🎰',name:'러시안 룰렛',key:'R · 25초',types:['pierce','heal','buff'],desc:'E 초기화, \'내 차례\': F 전체 발사(실탄 400 관통 / 공포탄 적 이속+20%·150 회복), E 자신(실탄 200 관통 / 공포탄 피해+100·이속+20%·300 회복).'}]},
-{id:'SwordMaster',ko:'소드마스터',img:'swordmaster.png',stats:{hp:1200,atk:160},rng:'1 radpx (근접)',
+{id:'SwordMaster',ko:'소드마스터',img:'swordmaster.png',stats:{hp:1200,atk:140},rng:'1 radpx (근접)',
   style:'검기와 오라를 두르는 근접 검사. 방금 쓴 공격을 다시 베어내는 세이브로 연계를 이어갑니다.',
   skills:[
    {icon:'🌀',name:'오라',key:'패시브',types:['magic','cc'],desc:'일반 공격 4번마다 다음 일반 공격이 180 마법 피해로 강화되고 적을 1 radpx 밀어냅니다.'},
    {icon:'🌙',name:'검기',key:'Q · 12초',types:['magic'],desc:'반경 1.5 radpx 관통 검기를 6 radpx까지 발사: 100 + 대상 현재 체력 15% 마법 피해.'},
    {icon:'💾',name:'세이브',key:'E · 쿨타임 없음',types:['util'],desc:'직전의 일반 공격/검기를 지연 없이 즉시 현재 위치·방향으로 50% 피해로 재시전. 오라 공격 재시전은 1 radpx 넉백과 함께 바라보는 방향으로 2 radpx 돌진. 재시전 후 다시 공격하기 전까지 사용 불가.'},
-   {icon:'✨',name:'각성',key:'R · 25초',types:['buff'],desc:'10초간 오라 필요 공격 횟수 4→2, 세이브 재시전 피해 80%.'}]},
+   {icon:'✨',name:'각성',key:'R · 25초',types:['buff'],desc:'10초간 오라 필요 공격 횟수 4→2, 세이브 재시전 피해 100%.'}]},
 {id:'Tower',ko:'타워',img:'tower.png',stats:{hp:2200,atk:100},rng:'근접',
   style:'덩치 큰 요새. 용병을 끊임없이 소환해 전선을 만들고, 포격으로 한 번에 쓸어버립니다.',
   skills:[
@@ -778,6 +794,26 @@ shopScreen.onclick=e=>{if(e.target===shopScreen)shopClose()};
 function goldSet(g,d){goldVal=Math.max(0,g|0);goldTx.textContent=goldVal.toLocaleString();if(d>0){toast('+'+d+' 골드');goldBar.classList.remove('pop');void goldBar.offsetWidth;goldBar.classList.add('pop')}}
 function anyWinOpen(){return csIsOpen()||ttIsOpen()||admIsOpen()||pnIsOpen()||shopIsOpen()||skIsOpen()||gmIsOpen()||kbIsOpen()}
 function closeAllWins(){csClose();ttClose();admClose();pnClose();shopClose();skClose();gmClose();kbClose()}
+// ---- mobile ----
+const MOB=/Android|iPhone|iPad|iPod|Mobile|Silk/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent))||matchMedia('(pointer:coarse)').matches||/[?&]mobile\b/.test(location.search);
+if(MOB)document.body.classList.add('mob');
+const mobUI=document.getElementById('mobUI'),joy=document.getElementById('joy'),joyKnob=document.getElementById('joyKnob'),mobAtk=document.getElementById('mobAtk');let joyId=null,mobDir=null,atkId=null,atkTimer=0;
+function mobNearest(o){let best=null,bd=1e9;for(const [id,e] of others){if(id===myId||e.ut||e.role!==1||e.iv>0||e.x===undefined)continue;if(gameMode==='team'&&e.tm&&e.tm===o.tm)continue;const d=Math.hypot(e.x-o.x,(e.y-o.y)/.8);if(d<bd){bd=d;best=e}}return best}
+function mobTarget(o){const e=mobNearest(o);mouseOn=true;if(e){mWx=e.x;mWy=e.y-26;return}const d=mobDir||[o.face||1,0];mWx=o.x+d[0]*200;mWy=o.y-30+d[1]*160}
+function mobPrep(sk){const o=others.get(myId);if(!o||myCls!=='Gumiho'||sk!=='Q')return;const mine=foxes.filter(f=>f.o===myId);if(!mine.length)return;const e=mobNearest(o);let best=mine[0],bd=1e9;for(const f of mine){const d=e?Math.hypot(f.x-e.x,f.y-e.y):0;if(d<bd){bd=d;best=f}}mWx=best.x;mWy=best.y-FOX_LIFT}
+function joySet(dx,dy){const R=joy.offsetWidth/2*.6;joyKnob.style.transform='translate('+dx*R+'px,'+dy*R+'px)';const th=.35,n={w:dy<-th,s:dy>th,a:dx<-th,d:dx>th};let ch=false;for(const k in n)if(!!keys[k]!==n[k]){keys[k]=n[k];ch=true}if(dx||dy)mobDir=[dx,dy];if(ch)sendInput()}
+function joyMove(e){const r=joy.getBoundingClientRect();let dx=(e.clientX-r.left-r.width/2)/(r.width/2),dy=(e.clientY-r.top-r.height/2)/(r.height/2);const m=Math.hypot(dx,dy);if(m>1){dx/=m;dy/=m}joySet(dx,dy)}
+joy.addEventListener('pointerdown',e=>{if(joyId!==null)return;joyId=e.pointerId;joy.setPointerCapture(e.pointerId);joyMove(e);e.preventDefault()});
+joy.addEventListener('pointermove',e=>{if(e.pointerId===joyId)joyMove(e)});
+const joyEnd=e=>{if(e.pointerId!==joyId)return;joyId=null;joySet(0,0)};
+joy.addEventListener('pointerup',joyEnd);joy.addEventListener('pointercancel',joyEnd);
+function atkEnd(e){if(e&&e.pointerId!==atkId)return;atkId=null;clearInterval(atkTimer);mobAtk.classList.remove('on');if(chargeT0)archerRelease()}
+mobAtk.addEventListener('pointerdown',e=>{if(atkId!==null)return;atkId=e.pointerId;mobAtk.setPointerCapture(e.pointerId);mobAtk.classList.add('on');e.preventDefault();pressAtk();
+ clearInterval(atkTimer);atkTimer=setInterval(()=>{if(myCls!=='Archer'&&performance.now()>=atkLocal)pressAtk()},100)});
+mobAtk.addEventListener('pointerup',atkEnd);mobAtk.addEventListener('pointercancel',atkEnd);
+skillbar.addEventListener('pointerdown',e=>{if(!MOB)return;const el=e.target.closest('.sk');if(!el)return;e.preventDefault();mobPrep(el.dataset.k);pressSkill(el.dataset.k)});
+setInterval(()=>{const on=MOB&&joined&&!obs&&!anyWinOpen();mobUI.style.display=on?'block':'none';if(!on&&joyId!==null){joyId=null;joySet(0,0)}},150);
+if(MOB){addEventListener('contextmenu',e=>e.preventDefault());chatEl.addEventListener('blur',()=>{chatEl.style.display='none'});document.getElementById('clHead').addEventListener('click',()=>{if(!chatLogEl.classList.contains('min')&&joined){chatEl.style.display='block';chatEl.focus()}});chatLogEl.classList.add('min');document.getElementById('clArrow').textContent='▸'}
 // ---- key binding ui ----
 const setBtn=document.getElementById('setBtn'),kbScreen=document.getElementById('kbScreen'),kbList=document.getElementById('kbList'),kbMsg=document.getElementById('kbMsg'),hintEl=document.getElementById('hint');
 function kbIsOpen(){return kbScreen.style.display==='flex'}
@@ -806,7 +842,7 @@ const SKN={LightKnight:{cls:'Knight',icon:'LightKnight.png',spr:lkLoad('LightKni
 const skOf=o=>{const k=o&&o.sn&&SKN[o.sn];return k&&k.cls===o.cls?k:null};
 let SHOP=[],mySk={own:[],eqs:{}};
 const skinBtn=document.getElementById('skinBtn');
-{const t=new Image();t.onerror=()=>{skinBtn.classList.add('noimg');skinBtn.textContent='스킨'};t.src='skinButton.png'}
+{const t=new Image();t.onerror=()=>{skinBtn.classList.add('noimg');skinBtn.textContent='스킨'};t.src='%EB%B3%B4%EB%9E%8F%EB%B9%9B_%EA%B0%91%EC%98%B7_%EC%97%A0%EB%B8%94%EB%9F%BC_%EC%8A%A4%ED%82%A8_%EB%B0%B0%EC%A7%80.png'}
 if(/[?&]slots\b/.test(location.search))document.body.classList.add('dbgSlots');
 // shop grid: 5 columns x 4 rows, filled row by row (same ordering as the class panel). Units: shop window 1000 wide x 667 tall.
 const SH_W=1000,SH_H=667,SH_GRID={x:100,y:150,w:150,h:110,gx:12.5,gy:12,cols:5,rows:4};
