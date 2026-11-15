@@ -93,7 +93,7 @@ function startRound() {
       return sysChat('Round cancelled: both teams need at least one player.');
     }
   }
-  phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); balls.length = 0;
+  phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); soulOrbs.clear(); balls.length = 0;
   parts.forEach((p, i) => {
     let a = -Math.PI / 2 + i * 2 * Math.PI / parts.length;
     if (gameMode === 'team') { const side = parts.filter(q => q.team === p.team); a = (p.team === 1 ? Math.PI : 0) + (side.indexOf(p) - (side.length - 1) / 2) * 0.45; }
@@ -123,7 +123,7 @@ function checkRoundEnd() {
 function endRound(winner, tied, teamWin, draw) {
   const tw = teamWin ? [...players.values()].filter(p => p.inRound && p.team === teamWin && p.user && !p.obs) : [];
   const gw = !tied && winner && winner.user && !winner.obs && winner.inRound ? winner : null;
-  phase = 'lobby'; arrows.clear(); bombs.clear(); units.clear(); balls.length = 0;
+  phase = 'lobby'; arrows.clear(); bombs.clear(); units.clear(); soulOrbs.clear(); balls.length = 0;
   for (const q of [...players.values()]) if (q.skel) { players.delete(q.id); broadcast({ t: 'leave', id: q.id }); }
   for (const p of players.values()) {
     if (p.inRound) { p.x = p.lx; p.y = p.ly; }
@@ -448,6 +448,7 @@ function resetCombat(p) {
 function killPlayer(p) {
   if (p.skel) { players.delete(p.id); broadcast({ t: 'leave', id: p.id }); return; }
   const was = p.role === 1, k = was && p.lastBy && Date.now() - p.lastByT < 10000 ? players.get(p.lastBy) : null;
+  if (was && phase === 'round' && p.cls) dropSoul(p.x, p.y, p.cls, 0, 1);
   p.hp = 0; p.role = 2; p.dx = p.dy = 0; p.moving = false; p.deathOrder = ++deathCounter;
   if (was) broadcast({ t: 'kill', k: k ? k.id : 0, kn: k ? k.name : '', kc: k ? k.cls : '', v: p.id, vn: p.name, vc: p.cls });
 }
@@ -493,6 +494,13 @@ function dmgTo(t, amount, now, src) {
     if (back > 0) dmgTo(src.by, back, now, { kill: t });
   }
   if (t.hp <= 0) { if (t.unit) units.delete(t.id); else killPlayer(t); }
+}
+const soulOrbs = new Map(); let soulSeq = 0;
+function dropSoul(x, y, cls, owner, pw) {
+  if (phase !== 'round' || !cls) return;
+  if (soulOrbs.size >= 40) soulOrbs.delete(soulOrbs.keys().next().value);
+  const c = clampArena({ x, y });
+  soulOrbs.set(++soulSeq, { id: soulSeq, x: c.x, y: c.y, cls, o: owner, pw });
 }
 const units = new Map(); let unitSeq = 0; const balls = [], planets = [], galaxies = [];
 const rootOf = t => { const o = t.unit ? players.get(t.owner) : t; return o ? (o.skel || o.id) : t.owner; };
@@ -1726,8 +1734,20 @@ function mkPlayer(id, ws) {
     hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, fires: [], qNext: false, pull: null, charmUntil: 0, charmBy: 0, burnUntil: 0, burnNext: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
 }
 // ---- Reaper ----
-const REAPER = { chargeMs: 1500, rMax: 2 * RADPX, rMin: 0.2, dmg: [50, 270], soul: [0.05, 0.25], maxSouls: 5, R: { cd: 25000 } };
-const sendReap = p => send(p.ws, { t: 'reap', s: p.souls || [] });
+const REAPER = { chargeMs: 1500, rMax: 1.5 * RADPX, rMin: 0.2, dmg: [50, 270], soul: [0.05, 0.20], maxSouls: 5, collect: 0.7 * RADPX, atkPw: 0.7, R: { cd: 25000 } };
+const sendReap = p => send(p.ws, { t: 'reap', s: (p.souls || []).map(x => x.c), q: (p.souls || []).map(x => x.pw >= 1 ? 1 : 0) });
+function stepSouls() {
+  if (!soulOrbs.size || phase !== 'round') return;
+  for (const p of players.values()) {
+    if (p.cls !== 'Reaper' || p.skel || !p.joined || p.role !== 1) continue;
+    for (const s of soulOrbs.values()) {
+      if (p.souls.length >= REAPER.maxSouls) break;
+      if (s.o && s.o !== p.id) continue;
+      if (Math.hypot(s.x - p.x, (s.y - p.y) / 0.8) > REAPER.collect) continue;
+      soulOrbs.delete(s.id); p.souls.push({ c: s.cls, pw: s.pw }); sendReap(p);
+    }
+  }
+}
 function reaperAttack(p, m, now) {
   if (!p.chargeStart) return;
   const ch = Math.min(Math.max(now - p.chargeStart, 1), REAPER.chargeMs), f = ch / REAPER.chargeMs;
@@ -1736,24 +1756,25 @@ function reaperAttack(p, m, now) {
   p.atkReady = now + statsOf(p).atkCd;
   const lag = lagOf(m), r = REAPER.rMax * (REAPER.rMin + (1 - REAPER.rMin) * f);
   const dmg = Math.round(REAPER.dmg[0] + (REAPER.dmg[1] - REAPER.dmg[0]) * f), chance = REAPER.soul[0] + (REAPER.soul[1] - REAPER.soul[0]) * f;
-  broadcast({ t: 'fx', type: 'disc', x: p.x, y: p.y, r, c: 'rgba(170,110,255,.35)', s: '#c9a8ff', dur: 350 });
+  broadcast({ t: 'fx', type: 'disc', by: p.id, x: p.x, y: p.y, r, rm: REAPER.rMax, c: 'rgba(140,140,140,.38)', s: '#d8d8d8', dur: 350 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
     if (Math.hypot(tp.x - p.x, (tp.y - p.y) / 0.8) > r + (t.hr || 0)) continue;
     dmgTo(t, dmg, now, { x: p.x, y: p.y, by: p, basic: true });
-    if (!t.unit && !t.skel && t.cls && (p.souls || []).length < REAPER.maxSouls && Math.random() < chance) { p.souls.push(t.cls); sendReap(p); fxTxt(p.x, p.y, '👻 영혼', '#d9c6ff'); }
+    if (!t.unit && !t.skel && t.cls && t.role === 1 && Math.random() < chance) dropSoul(t.x, t.y, t.cls, p.id, REAPER.atkPw);
   }
   checkRoundEnd();
 }
-function summonSkeleton(p, cls, now, big, hp) {
+function summonSkeleton(p, cls, now, big, hp, pw) {
   const id = nextId++, sk = mkPlayer(id, null);
   let ex = (p.x + Math.cos(p.aim) * 70 - CX) / RX, ey = (p.y + Math.sin(p.aim) * 70 * 0.8 - CY) / RY; const dd = Math.hypot(ex, ey);
   if (dd > 0.95) { ex *= 0.95 / dd; ey *= 0.95 / dd; }
   Object.assign(sk, { x: CX + ex * RX, y: CY + ey * RY, skel: p.id, name: '해골', cls, hue: p.hue, joined: true, role: 1, inRound: false, team: p.team || 0, titles: [], eq: null, skins: [], eqs: {}, gold: 0 });
   sk.lx = sk.x; sk.ly = sk.y;
   resetCombat(sk);
-  if (big) { sk.pw = 1; sk.sz = 1.5; sk.mh = sk.hp = hp; sk.hr = (sk.hr || 0) + 18; sk.noR = false; }
-  else { sk.pw = 0.8; sk.sz = 1; sk.mh = sk.hp = Math.round(sk.hp * 0.8); sk.noR = true; }
+  sk.pw = pw;
+  if (big) { sk.sz = 1.5; sk.mh = sk.hp = Math.round(hp); sk.hr = 18; sk.noR = false; }
+  else { sk.sz = 1; sk.mh = sk.hp = Math.round(sk.hp * pw); sk.hr = 0; sk.noR = true; }
   sk.atkReady = now + 600;
   players.set(id, sk);
   return sk;
@@ -1762,20 +1783,20 @@ function reaperSkill(p, k, m, now) {
   if (k === 'Q') return;
   if (!(p.souls || []).length) { if (!p.skel && !p.ai) fxTxt(p.x, p.y, '영혼 없음', '#cfcfcf'); return; }
   if (k === 'E') {
-    const cls = p.souls.pop(); sendReap(p);
-    summonSkeleton(p, cls, now, false);
+    const s = p.souls.pop(); sendReap(p);
+    summonSkeleton(p, s.c, now, false, 0, s.pw);
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 0.8 * RADPX, c: '#b69cff', dur: 500 });
   } else {
     const list = p.souls.slice(); p.souls = []; sendReap(p);
     p.cdR = now + REAPER.R.cd; send(p.ws, { t: 'cd', k: 'R', ms: REAPER.R.cd });
-    const hp = list.reduce((a, c) => a + statsBase({ cls: c, lf: '' }).hp, 0);
-    summonSkeleton(p, list[list.length - 1], now, true, hp);
+    const hp = list.reduce((a, s) => a + statsBase({ cls: s.c, lf: '' }).hp * s.pw, 0), pw = list.reduce((a, s) => a + s.pw, 0) / list.length;
+    summonSkeleton(p, list[list.length - 1].c, now, true, hp, pw);
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.6 * RADPX, c: '#8a5cff', dur: 800 });
   }
 }
 // ---- AI players ----
 const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper'];
-const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 190 };
+const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 130 };
 let botSeq = 0;
 const randClass = cur => { const l = CLASS_LIST.filter(c => c !== cur); return l[Math.floor(Math.random() * l.length)]; };
 function addBot(cls) {
@@ -1978,7 +1999,7 @@ setInterval(() => {
   stepSanct(now);
   stepArrows(dt, now);
   stepBombs(now);
-  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now);
+  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now); stepSouls();
   const list = [], hidden = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
@@ -2002,7 +2023,8 @@ setInterval(() => {
   }
   const ff = [];
   for (const p of players.values()) if (p.joined) for (const f of p.fires) ff.push({ id: f.id, o: p.id, x: Math.round(f.x), y: Math.round(f.y) });
-  const head = { t: 'state', ph: phase, left: phase === 'round' ? Math.max(0, ROUND_MS - (now - roundStart)) : 0, ff };
+  const sb = [...soulOrbs.values()].map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), c: s.cls, o: s.o }));
+  const head = { t: 'state', ph: phase, left: phase === 'round' ? Math.max(0, ROUND_MS - (now - roundStart)) : 0, ff, sb };
   if (!list.some(e => e.iv)) { const msg = JSON.stringify(Object.assign(head, { p: list })); for (const q of players.values()) if (q.ws) sendState(q.ws, msg); return; }
   const common = JSON.stringify(Object.assign({}, head, { p: hidden }));
   for (const q of players.values()) {
