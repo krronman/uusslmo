@@ -35,7 +35,7 @@ const send = (ws, o) => { if (o && o.t === 'cd') outN++; return ws && ws.readySt
 let curTint = null;
 const STATE_BUF = 64 * 1024;
 const sendState = (ws, msg) => { if (ws.readyState === 1 && ws.bufferedAmount < STATE_BUF) ws.send(msg); };
-const broadcast = o => { outN++; if (curSk && (o.t === 'fx' || o.t === 'arrow')) { o.sp = curSk.p; o.sq = curSk.q; } if (curTint && (o.t === 'fx' || o.t === 'arrow') && !o.tint) o.tint = curTint; const m = JSON.stringify(o); for (const p of players.values()) if (p.ws.readyState === 1) p.ws.send(m); };
+const broadcast = o => { outN++; if (curSk && (o.t === 'fx' || o.t === 'arrow')) { o.sp = curSk.p; o.sq = curSk.q; } if (curTint && (o.t === 'fx' || o.t === 'arrow') && !o.tint) o.tint = curTint; const m = JSON.stringify(o); for (const p of players.values()) if (p.ws && p.ws.readyState === 1) p.ws.send(m); };
 
 const CHAT_TTL = 10 * 60 * 1000;
 const ROUND_MS = 4 * 60 * 1000;
@@ -126,8 +126,9 @@ function endRound(winner, tied, teamWin, draw) {
   phase = 'lobby'; arrows.clear(); bombs.clear(); units.clear(); balls.length = 0;
   for (const p of players.values()) {
     if (p.inRound) { p.x = p.lx; p.y = p.ly; }
-    p.role = 0; p.inRound = false; p.ready = false; p.dx = p.dy = 0; p.hist = [];
+    p.role = 0; p.inRound = false; p.ready = !!p.ai; p.dx = p.dy = 0; p.hist = [];
     resetCombat(p);
+    if (p.ai && p.aiRand) { p.cls = randClass(p.cls); resetCombat(p); }
   }
   broadcast({ t: 'tp' });
   if (draw) { sysChat('⏱ Time is up! Draw.'); broadcast({ t: 'winner', name: 'Draw', draw: 1 }); }
@@ -245,7 +246,7 @@ const ATK = { range: 1 * RADPX, span: 100 * RAD };
 const SM = {
   atk: { need: 4, needAwk: 2, auraDmg: 180, kb: 1 * RADPX, kbMs: 250 },
   Q: { cd: 12000, dmg: 100, pct: 0.15, spd: 1500, range: 6 * RADPX, radius: 1.5 * RADPX },
-  E: { cd: 0, cdAwk: 0, mult: 0.5, multAwk: 1.0, dash: 2 * RADPX, dashMs: 200, dashDir: 1 },
+  E: { cd: 0, cdAwk: 0, mult: 0.7, multAwk: 1.0, dash: 2 * RADPX, dashMs: 200, dashDir: 1 },
   R: { cd: 25000, dur: 10000 }
 };
 const KNIGHT = {
@@ -1706,15 +1707,65 @@ async function handleAuth(p, m, ip) {
   } finally { p.authBusy = false; }
 }
 
+// ---- player factory ----
+function mkPlayer(id, ws) {
+  const a = Math.random() * Math.PI * 2, r = Math.random() * 0.5;
+  return { id, ws, name: 'Player' + id, hue: Math.floor(Math.random() * 360),
+    x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
+    joined: false, cls: '', ready: false, role: 0, inRound: false, lx: 0, ly: 0, deathOrder: 0,
+    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, fires: [], qNext: false, pull: null, charmUntil: 0, charmBy: 0, burnUntil: 0, burnNext: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
+}
+// ---- AI players ----
+const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial'];
+const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95 };
+let botSeq = 0;
+const randClass = cur => { const l = CLASS_LIST.filter(c => c !== cur); return l[Math.floor(Math.random() * l.length)]; };
+function addBot(cls) {
+  if (players.size >= MAX_PLAYERS) return null;
+  const id = nextId++, p = mkPlayer(id, null);
+  p.ai = true; p.aiRand = cls === 'random'; p.name = 'AI ' + (++botSeq); p.user = null; p.joined = true; p.ready = true; p.gold = 0; p.skins = []; p.eqs = {};
+  p.cls = p.aiRand ? randClass('') : cls; resetCombat(p);
+  players.set(id, p); return p;
+}
+function removeBot(q) {
+  players.delete(q.id); broadcast({ t: 'leave', id: q.id });
+  if (phase === 'lobby') checkReady(); else if (phase === 'round') checkRoundEnd();
+}
+function botTick(now) {
+  if (phase !== 'round') return;
+  for (const p of players.values()) {
+    if (!p.ai) continue;
+    if (p.role !== 1) { p.dx = p.dy = 0; continue; }
+    if (now < (p.botT || 0)) continue;
+    p.botT = now + 90;
+    let foe = null, fd = Infinity;
+    for (const t of targetsOf(p)) { if (now < (t.invisUntil || 0)) continue; const d = Math.hypot(t.x - p.x, (t.y - p.y) / 0.8); if (d < fd) { fd = d; foe = t; } }
+    if (!foe) { p.dx = p.dy = 0; continue; }
+    const vx = foe.x - p.x, vy = (foe.y - p.y) / 0.8, d = fd || 1, R = BOT_RANGE[p.cls] || 95;
+    let mx = 0, my = 0;
+    if (d > R * 0.85) { mx = vx / d; my = vy / d; }
+    else if (R > 200 && d < R * 0.45) { mx = -vx / d; my = -vy / d; }
+    else { if (now > (p.botSg || 0)) { p.botSg = now + 900 + Math.random() * 900; p.botDir = Math.random() < 0.5 ? -1 : 1; } mx = -vy / d * (p.botDir || 1); my = vx / d * (p.botDir || 1); }
+    p.dx = Math.abs(mx) > 0.38 ? Math.sign(mx) : 0; p.dy = Math.abs(my) > 0.38 ? Math.sign(my) : 0;
+    setAim(p, Math.atan2(vy, vx));
+    if (d <= R) {
+      if (p.cls === 'Archer') {
+        if (!p.chargeStart) { if (now >= p.atkReady - 60 && canAct(p, now)) { p.chargeStart = now; p.botCh = 500 + Math.random() * 1200; } }
+        else if (now - p.chargeStart >= p.botCh) doAttack(p, {});
+      } else doAttack(p, {});
+    }
+    if (now >= (p.botSk || 0)) {
+      p.botSk = now + 1300 + Math.random() * 2000;
+      const ks = ['Q', 'E', 'R'].filter(k => now >= p['cd' + k]);
+      if (ks.length && d <= Math.max(R * 1.6, 260)) doSkill(p, ks[Math.floor(Math.random() * ks.length)], { cx: foe.x, cy: foe.y - 24 });
+    }
+  }
+}
 wss.on('connection', (ws, req) => {
   const ip = String((req && req.headers && req.headers['x-forwarded-for']) || (req && req.socket && req.socket.remoteAddress) || '?').split(',')[0].trim();
   if (players.size >= MAX_PLAYERS) { send(ws, { t: 'full' }); return ws.close(); }
   const id = nextId++;
-  const a = Math.random() * Math.PI * 2, r = Math.random() * 0.5;
-  const p = { id, ws, name: 'Player' + id, hue: Math.floor(Math.random() * 360),
-    x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
-    joined: false, cls: '', ready: false, role: 0, inRound: false, lx: 0, ly: 0, deathOrder: 0,
-    hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, fires: [], qNext: false, pull: null, charmUntil: 0, charmBy: 0, burnUntil: 0, burnNext: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
+  const p = mkPlayer(id, ws);
   players.set(id, p);
   pruneChat();
   send(ws, { t: 'hello', id, map: mapId, mode: gameMode, arena: { CX, CY, RX, RY }, pred: predCfg() });
@@ -1750,9 +1801,18 @@ wss.on('connection', (ws, req) => {
     } else if (m.t === 'team') {
       const q = players.get(Number(m.id));
       if (p.user === ADMIN_ID && gameMode === 'team' && phase === 'lobby' && q && q.joined && !q.obs && [0, 1, 2].includes(m.team)) { q.team = m.team; sysChat(q.name + (q.team ? ' joined the ' + TEAM_NAME[q.team] + ' team.' : ' left their team.')); }
+    } else if (m.t === 'aiadd') {
+      if (p.user === ADMIN_ID && phase === 'lobby' && (m.cls === 'random' || CLASS_LIST.includes(m.cls))) { const b = addBot(m.cls); if (b) { sysChat(p.name + ' added ' + b.name + '.'); checkReady(); } }
+    } else if (m.t === 'aiset') {
+      const q = players.get(Number(m.id));
+      if (p.user === ADMIN_ID && phase === 'lobby' && q && q.ai && (m.cls === 'random' || CLASS_LIST.includes(m.cls))) { q.aiRand = m.cls === 'random'; q.cls = q.aiRand ? randClass(q.cls) : m.cls; resetCombat(q); }
+    } else if (m.t === 'aidel') {
+      const q = players.get(Number(m.id));
+      if (p.user === ADMIN_ID && q && q.ai) { sysChat(q.name + ' was removed.'); removeBot(q); }
     } else if (m.t === 'kick') {
       const q = players.get(Number(m.id));
-      if (p.user === ADMIN_ID && q && q !== p && q.joined) { sysChat(q.name + ' was kicked.'); send(q.ws, { t: 'kicked' }); try { q.ws.close(); } catch (e) {} }
+      if (p.user === ADMIN_ID && q && q.ai) { sysChat(q.name + ' was removed.'); removeBot(q); }
+      else if (p.user === ADMIN_ID && q && q !== p && q.joined) { sysChat(q.name + ' was kicked.'); send(q.ws, { t: 'kicked' }); try { q.ws.close(); } catch (e) {} }
     } else if (m.t === 'map') {
       if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
     } else if (m.t === 'tequip') {
@@ -1794,6 +1854,7 @@ let last = Date.now();
 setInterval(() => {
   const now = Date.now(), dt = Math.min((now - last) / 1000, 0.1); last = now;
   let needEnd = false;
+  botTick(now);
   for (const p of players.values()) {
     if (!p.joined) continue;
     let { dx, dy } = p;
@@ -1867,7 +1928,7 @@ setInterval(() => {
     if (iv && !p.wasIv) { p.hideX = p.x; p.hideY = p.y; }
     p.wasIv = iv;
     const e = { id: p.id, name: p.name, hue: p.hue, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
-      f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role, tm: p.team || 0,
+      f: p.face, a: Math.round(p.aim * 100) / 100, m: p.moving ? 1 : 0, c: p.cls, r: p.ready ? 1 : 0, o: p.role, tm: p.team || 0, ai: p.ai ? 1 : 0, ar: p.aiRand ? 1 : 0,
       hp: Math.max(0, Math.round(p.hp)), mh: Math.round(p.mh), su: Math.max(0, p.stunUntil - now), gd: now < p.guardUntil ? 1 : 0, sl: now < p.slowUntil ? 1 : 0,
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
@@ -1884,10 +1945,10 @@ setInterval(() => {
   const ff = [];
   for (const p of players.values()) if (p.joined) for (const f of p.fires) ff.push({ id: f.id, o: p.id, x: Math.round(f.x), y: Math.round(f.y) });
   const head = { t: 'state', ph: phase, left: phase === 'round' ? Math.max(0, ROUND_MS - (now - roundStart)) : 0, ff };
-  if (!list.some(e => e.iv)) { const msg = JSON.stringify(Object.assign(head, { p: list })); for (const q of players.values()) sendState(q.ws, msg); return; }
+  if (!list.some(e => e.iv)) { const msg = JSON.stringify(Object.assign(head, { p: list })); for (const q of players.values()) if (!q.ai) sendState(q.ws, msg); return; }
   const common = JSON.stringify(Object.assign({}, head, { p: hidden }));
   for (const q of players.values()) {
-    if (q.ws.readyState !== 1) continue;
+    if (!q.ws || q.ws.readyState !== 1) continue;
     if (q.joined && now < q.invisUntil) sendState(q.ws, JSON.stringify(Object.assign({}, head, { p: hidden.map((e, i) => list[i].id === q.id ? list[i] : e) })));
     else sendState(q.ws, common);
   }
@@ -1895,6 +1956,7 @@ setInterval(() => {
 
 setInterval(() => {
   for (const p of players.values()) {
+    if (p.ai) continue;
     if (!p.alive) { p.ws.terminate(); continue; }
     p.alive = false; p.ws.ping();
   }
