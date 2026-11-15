@@ -99,7 +99,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #admList .who{color:#b9b3ff;font-size:13px;margin-bottom:4px}
 #admList .row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-top:1px solid #2c2e66;text-shadow:2px 2px 0 #0b0b25}
 #admList .row button{flex:none;padding:3px 8px;font-size:12px;background:#6b2f3c;border-color:#d27a8c}
-#patchBtn{position:fixed;right:12px;bottom:calc(78px + env(safe-area-inset-bottom,0px));width:90px;aspect-ratio:200/202;padding:0;border:0;cursor:pointer;background:url(patch-btn.png) 0 0/100% 100% no-repeat;z-index:4}
+#patchBtn{position:fixed;right:172px;bottom:calc(78px + env(safe-area-inset-bottom,0px));width:90px;aspect-ratio:200/202;padding:0;border:0;cursor:pointer;background:url(patch-btn.png) 0 0/100% 100% no-repeat;z-index:4}
 #patchBtn:hover{filter:brightness(1.15)}
 #pnScreen{position:fixed;inset:0;background:rgba(10,12,30,.74);display:none;align-items:center;justify-content:center;z-index:7}
 #pnBox{width:min(560px,92vw);max-height:86vh;display:flex;flex-direction:column;box-sizing:border-box;padding:18px 20px;background:#1b1d40;border:4px solid #7b72e8;box-shadow:0 0 0 3px #0e0f26,inset 0 0 0 3px #2c2e66;border-radius:6px;font:14px/1.4 'Galmuri11','Press Start 2P',monospace;color:#e9e6ff}
@@ -152,7 +152,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #goldTx{position:absolute;left:26%;right:11%;top:0;bottom:0;display:flex;align-items:center;justify-content:flex-end;font:700 20px 'Galmuri11','Press Start 2P',monospace;color:#ffe9a8;text-shadow:2px 2px 0 #0b0a24;white-space:nowrap;overflow:hidden}
 #goldBar.pop{animation:goldPop .5s}
 @keyframes goldPop{30%{transform:scale(1.1)}}
-#skinBtn{position:fixed;right:286px;top:50%;margin-top:-40px;width:120px;height:80px;padding:0;border:0;cursor:pointer;background:url(skinButton.png) center/contain no-repeat;z-index:4}
+#skinBtn{position:fixed;right:27px;top:50%;margin-top:-122px;width:120px;height:80px;padding:0;border:0;cursor:pointer;background:url(skinButton.png) center/contain no-repeat;z-index:4}
 #skinBtn:hover{filter:brightness(1.12)}
 #skinBtn.noimg{background:rgba(20,30,60,.85);border:2px solid #fff;border-radius:8px;color:#fff;font:700 14px 'Galmuri11',system-ui,sans-serif}
 #goldBar.adm{pointer-events:auto;cursor:pointer}
@@ -186,7 +186,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #buyYes{left:15.6%;width:33.2%}#buyNo{left:51.4%;width:32.9%}
 #buyYes:hover,#buyNo:hover{background:rgba(255,255,255,.14)}
 #buyCap{position:absolute;left:0;right:0;top:89%;text-align:center;font:700 16px 'Galmuri11',system-ui,sans-serif;color:#fff;text-shadow:2px 2px 0 #0b0a24}
-#setBtn{position:fixed;right:110px;bottom:calc(78px + env(safe-area-inset-bottom,0px));width:72px;height:72px;padding:0;border:0;cursor:pointer;background:url(settings_gear_button_transparent.png) center/contain no-repeat;z-index:4;display:none}
+#setBtn{position:fixed;right:270px;bottom:calc(78px + env(safe-area-inset-bottom,0px));width:72px;height:72px;padding:0;border:0;cursor:pointer;background:url(settings_gear_button_transparent.png) center/contain no-repeat;z-index:4;display:none}
 #setBtn:hover{filter:brightness(1.15)}
 #kbScreen{position:fixed;inset:0;background:rgba(10,12,30,.74);display:none;align-items:center;justify-content:center;z-index:7}
 #kbScreen[style*="flex"] #kbClose{display:block}
@@ -209,10 +209,24 @@ body.mob #hint{display:none!important}
 #mobAtk.on{background:rgba(255,110,80,.9)}
 body.mob #skillbar{right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:5;gap:10px}
 body.mob .sk{width:66px;height:66px;font-size:30px;touch-action:none}
-body.mob #patchBtn{transform:scale(.55);transform-origin:top right;bottom:auto;top:calc(50px + env(safe-area-inset-top,0px))}
+body.mob #patchBtn{right:12px;transform:scale(.55);transform-origin:top right;bottom:auto;top:calc(50px + env(safe-area-inset-top,0px))}
 body.mob #setBtn{left:calc(12px + env(safe-area-inset-left,0px));right:auto;bottom:auto;top:calc(84px + env(safe-area-inset-top,0px));width:46px;height:46px}
 body.mob #chatLog{bottom:calc(176px + env(safe-area-inset-bottom,0px));width:min(240px,46vw)}
 body.mob #clBody{height:110px}
+#aiBtn{position:fixed;right:12px;top:50%;margin-top:206px;width:150px;padding:8px 0;border:2px solid #fff;border-radius:8px;background:rgba(20,30,60,.8);color:#fff;font:700 14px 'Galmuri11',system-ui,sans-serif;cursor:pointer;z-index:4;display:none}
+#aiBtn:hover{background:rgba(20,30,60,.95)}
+#aiScreen{position:fixed;inset:0;background:rgba(10,12,30,.74);display:none;align-items:center;justify-content:center;z-index:7}
+#aiScreen[style*="flex"] #aiClose{display:block}
+#aiBox{width:min(420px,94vw);max-height:90vh;overflow:auto;box-sizing:border-box;padding:18px 20px;background:#1b1d40;border:4px solid #7b72e8;box-shadow:0 0 0 3px #0e0f26,inset 0 0 0 3px #2c2e66;border-radius:6px;font:14px/1.4 'Galmuri11','Press Start 2P',monospace;color:#e9e6ff}
+#aiBox h2{margin:0 0 10px;font:inherit;font-size:18px;color:#ffd66b;text-align:center}
+#aiBox select,#aiBox button{padding:6px 8px;background:#0f1030;color:#fff;border:2px solid #5b55a8;border-radius:4px;font:inherit;cursor:pointer}
+#aiBox button:hover{border-color:#ffd66b}
+#aiNewRow{display:flex;gap:8px}#aiNewRow select{flex:1;min-width:0}
+#aiList{margin-top:12px;border-top:2px solid #2c2e66;padding-top:6px}
+#aiList .r{display:flex;align-items:center;gap:8px;margin-top:6px}
+#aiList .r span{width:54px;flex:none}#aiList .r select{flex:1;min-width:0}
+#aiList .r button{border-color:#ff6b6b}
+.aiEmpty{margin-top:8px;color:#b9b3ff;font-size:13px}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css" rel="stylesheet">
@@ -223,7 +237,7 @@ body.mob #clBody{height:110px}
 <input id="chat" maxlength="60" placeholder="Type a message and press Enter" autocomplete="off">
 <button id="classBtn" aria-label="class"></button>
 <button id="titleBtn" aria-label="title"></button>
-<button id="mapBtn"></button><button id="modeBtn"></button>
+<button id="mapBtn"></button><button id="modeBtn"></button><button id="aiBtn">🤖 AI 추가</button>
 <div id="pMenu"><div id="pmName"></div><button id="pmKick">[Kick]</button><div id="pmTeams"><button data-t="1">Red</button><button data-t="2">Blue</button><button data-t="0">None</button></div></div>
 <button id="shopBtn" aria-label="shop"></button>
 <button id="skinBtn" aria-label="skins"></button>
@@ -256,6 +270,7 @@ body.mob #clBody{height:110px}
 <div class="gmBtns"><button id="gmSet" class="admBtn" type="button">설정 (=)</button><button id="gmAdd" class="admBtn" type="button">지급 (+)</button></div>
 <div id="gmMsg"></div></div><button id="gmClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="kbScreen"><div id="kbBox"><h2>키 설정</h2><div id="kbList"></div><div class="gmBtns"><button id="kbReset" class="admBtn">기본값으로 초기화</button></div><div id="kbMsg"></div></div><button id="kbClose" class="xBtn" aria-label="close">✕</button></div>
+<div id="aiScreen"><div id="aiBox"><h2>AI 플레이어</h2><div id="aiNewRow"><select id="aiNew"></select><button id="aiAdd">추가</button></div><div id="aiList"></div></div><button id="aiClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="pnScreen"><div id="pnBox"><h2>밸런스 패치 노트</h2><div id="pnBody"></div></div><button id="pnClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="killLog"></div>
 <div id="banner"></div><div id="fade"></div><div id="toast"></div>
@@ -361,7 +376,7 @@ function connect(){
     if(snapNext){o.x=p.x;o.y=p.y}
     const f0=o.face;
     if(p.su>0&&(p.su>(o.su||0)+60||!(o.su>0)))o.sMax=p.su;
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,tm:p.tm,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,sn:p.sn,id:p.id});
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,tm:p.tm,ai:p.ai,ar:p.ar,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,sn:p.sn,id:p.id});
     if(p.id===myId)o.face=f0;
    }
    snapNext=false;
@@ -377,7 +392,7 @@ function connect(){
    if(myCls!==(me?me.c:'')){myCls=me?me.c:'';csRender();skIcons()}
     const fm=(me&&me.lf)||'';if(fm!==myForm){myForm=fm;skIcons()}
    titleBtn.style.display=shopBtn.style.display=skinBtn.style.display=phase==='lobby'?'':'none';
-   modeBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'block':'none';modeBtn.textContent='🎮 '+(gameMode==='team'?'팀전':'개인전');mapBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'':'none';mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
+   aiBtn.style.display=modeBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'block':'none';aiRefresh();modeBtn.textContent='🎮 '+(gameMode==='team'?'팀전':'개인전');mapBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'':'none';mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
    if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose();shopClose();skClose();gmClose()}
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
    setBtn.style.display=joined?'block':'none';goldBar.style.display=(joined&&!obs)?'block':'none';goldBar.classList.toggle('adm',isAdmin);
@@ -637,7 +652,7 @@ const CHARS=[
   skills:[
    {icon:'🌀',name:'오라',key:'패시브',types:['magic','cc'],desc:'일반 공격 4번마다 다음 일반 공격이 180 마법 피해로 강화되고 적을 1 radpx 밀어냅니다.'},
    {icon:'🌙',name:'검기',key:'Q · 12초',types:['magic'],desc:'반경 1.5 radpx 관통 검기를 6 radpx까지 발사: 100 + 대상 현재 체력 15% 마법 피해.'},
-   {icon:'💾',name:'세이브',key:'E · 쿨타임 없음',types:['util'],desc:'직전의 일반 공격/검기를 지연 없이 즉시 현재 위치·방향으로 50% 피해로 재시전. 오라 공격 재시전은 1 radpx 넉백과 함께 바라보는 방향으로 2 radpx 돌진. 재시전 후 다시 공격하기 전까지 사용 불가.'},
+   {icon:'💾',name:'세이브',key:'E · 쿨타임 없음',types:['util'],desc:'직전의 일반 공격/검기를 지연 없이 즉시 현재 위치·방향으로 70% 피해로 재시전. 오라 공격 재시전은 1 radpx 넉백과 함께 바라보는 방향으로 2 radpx 돌진. 재시전 후 다시 공격하기 전까지 사용 불가.'},
    {icon:'✨',name:'각성',key:'R · 25초',types:['buff'],desc:'10초간 오라 필요 공격 횟수 4→2, 세이브 재시전 피해 100%.'}]},
 {id:'Tower',ko:'타워',img:'tower.png',stats:{hp:2200,atk:100},rng:'근접',
   style:'덩치 큰 요새. 용병을 끊임없이 소환해 전선을 만들고, 포격으로 한 번에 쓸어버립니다.',
@@ -792,8 +807,8 @@ shopBtn.onclick=()=>{shopOpen();shopBtn.blur()};
 document.getElementById('shopClose').onclick=()=>shopClose();
 shopScreen.onclick=e=>{if(e.target===shopScreen)shopClose()};
 function goldSet(g,d){goldVal=Math.max(0,g|0);goldTx.textContent=goldVal.toLocaleString();if(d>0){toast('+'+d+' 골드');goldBar.classList.remove('pop');void goldBar.offsetWidth;goldBar.classList.add('pop')}}
-function anyWinOpen(){return csIsOpen()||ttIsOpen()||admIsOpen()||pnIsOpen()||shopIsOpen()||skIsOpen()||gmIsOpen()||kbIsOpen()}
-function closeAllWins(){csClose();ttClose();admClose();pnClose();shopClose();skClose();gmClose();kbClose()}
+function anyWinOpen(){return csIsOpen()||ttIsOpen()||admIsOpen()||pnIsOpen()||shopIsOpen()||skIsOpen()||gmIsOpen()||kbIsOpen()||aiIsOpen()}
+function closeAllWins(){csClose();ttClose();admClose();pnClose();shopClose();skClose();gmClose();kbClose();aiClose()}
 // ---- mobile ----
 const MOB=/Android|iPhone|iPad|iPod|Mobile|Silk/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent))||matchMedia('(pointer:coarse)').matches||/[?&]mobile\b/.test(location.search);
 if(MOB)document.body.classList.add('mob');
@@ -814,6 +829,19 @@ mobAtk.addEventListener('pointerup',atkEnd);mobAtk.addEventListener('pointercanc
 skillbar.addEventListener('pointerdown',e=>{if(!MOB)return;const el=e.target.closest('.sk');if(!el)return;e.preventDefault();mobPrep(el.dataset.k);pressSkill(el.dataset.k)});
 setInterval(()=>{const on=MOB&&joined&&!obs&&!anyWinOpen();mobUI.style.display=on?'block':'none';if(!on&&joyId!==null){joyId=null;joySet(0,0)}},150);
 if(MOB){addEventListener('contextmenu',e=>e.preventDefault());chatEl.addEventListener('blur',()=>{chatEl.style.display='none'});document.getElementById('clHead').addEventListener('click',()=>{if(!chatLogEl.classList.contains('min')&&joined){chatEl.style.display='block';chatEl.focus()}});chatLogEl.classList.add('min');document.getElementById('clArrow').textContent='▸'}
+// ---- ai players ----
+const aiBtn=document.getElementById('aiBtn'),aiScreen=document.getElementById('aiScreen'),aiNew=document.getElementById('aiNew'),aiListEl=document.getElementById('aiList');let aiSig='';
+function aiOpts(sel){sel.textContent='';const r=document.createElement('option');r.value='random';r.textContent='🎲 랜덤 (매 라운드 변경)';sel.appendChild(r);for(const c of CHARS.filter(c=>c&&c.id)){const o=document.createElement('option');o.value=c.id;o.textContent=c.ko;sel.appendChild(o)}}
+aiOpts(aiNew);
+function aiIsOpen(){return aiScreen.style.display==='flex'}
+function aiClose(){aiScreen.style.display='none'}
+function aiRefresh(force){if(!aiIsOpen())return;if(phase!=='lobby'){aiClose();return}
+ const list=[...others].filter(([id,o])=>o.ai).map(([id,o])=>[id,o.name,o.ar?'random':o.cls]),sig=JSON.stringify(list);if(!force&&sig===aiSig)return;aiSig=sig;aiListEl.textContent='';
+ if(!list.length){const e=document.createElement('div');e.className='aiEmpty';e.textContent='AI 플레이어가 없습니다.';aiListEl.appendChild(e)}
+ for(const [id,name,val] of list){const row=document.createElement('div'),n=document.createElement('span'),sel=document.createElement('select'),d=document.createElement('button');row.className='r';n.textContent=name;aiOpts(sel);sel.value=val;sel.onchange=()=>tx({t:'aiset',id,cls:sel.value});d.textContent='삭제';d.onclick=()=>tx({t:'aidel',id});row.append(n,sel,d);aiListEl.appendChild(row)}}
+function aiOpen(){closeAllWins();aiScreen.style.display='flex';aiRefresh(true)}
+aiBtn.onclick=()=>{aiOpen();aiBtn.blur()};document.getElementById('aiAdd').onclick=()=>tx({t:'aiadd',cls:aiNew.value});
+document.getElementById('aiClose').onclick=aiClose;aiScreen.onclick=e=>{if(e.target===aiScreen)aiClose()};
 // ---- key binding ui ----
 const setBtn=document.getElementById('setBtn'),kbScreen=document.getElementById('kbScreen'),kbList=document.getElementById('kbList'),kbMsg=document.getElementById('kbMsg'),hintEl=document.getElementById('hint');
 function kbIsOpen(){return kbScreen.style.display==='flex'}
