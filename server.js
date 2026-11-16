@@ -45,6 +45,7 @@ let phase = 'lobby', roundStart = 0, deathCounter = 0;
 const joinedList = () => [...players.values()].filter(p => p.joined);
 // ---- team mode ----
 let gameMode = 'ffa', bossId = 0;
+const BOSS_CAP = { dmg: 2, spd: 1.5 };
 const TEAM_NAME = { 1: 'Red', 2: 'Blue' };
 const tmOf = t => t ? (t.unit ? ((players.get(t.owner) || {}).team || 0) : (t.team || 0)) : 0;
 const sameTeam = (a, b) => gameMode !== 'ffa' && !!tmOf(a) && tmOf(a) === tmOf(b);
@@ -112,7 +113,7 @@ function startRound() {
     p.x = CX + Math.cos(a) * RX * 0.92; p.y = CY + Math.sin(a) * RY * 0.92;
     p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0; p.hist = [];
     resetCombat(p);
-    if (bossMult && p.id === bossId) { p.pw = p.bm = bossMult; p.mh = p.hp = Math.round(p.mh * bossMult); }
+    if (bossMult && p.id === bossId) { p.pw = Math.min(bossMult, BOSS_CAP.dmg); p.bm = Math.min(bossMult, BOSS_CAP.spd); p.mh = p.hp = Math.round(p.mh * bossMult); }
   });
   joinedList().forEach(p => { if (!p.inRound) p.role = 2; });
   broadcast({ t: 'tp' });
@@ -150,6 +151,24 @@ function endRound(winner, tied, teamWin, draw) {
   else if (winner) { sysChat('🏆 1st place: ' + winner.name); broadcast({ t: 'winner', name: winner.name }); }
   else sysChat('Round ended with no winner.');
   if (gw) awardGold(gw, WIN_GOLD);
+  if (!draw) { const ws = new Set(tw); if (gw) ws.add(gw); ws.forEach(addWin); if (ws.size) sendWinsAll(); }
+}
+// ---- wins ----
+let winsData = {}, winTop = [], winSave = Promise.resolve();
+function calcWinTop() { winTop = Object.values(winsData).filter(e => e.w > 0).sort((a, b) => b.w - a.w || String(a.n).localeCompare(String(b.n))).slice(0, 10).map(e => ({ n: e.n, w: e.w })); }
+function sendWins(p) {
+  if (!p.ws) return;
+  const mine = p.user && winsData[p.user] ? winsData[p.user] : null;
+  send(p.ws, { t: 'wins', top: winTop, my: mine ? mine.w : 0, mi: mine ? winTop.findIndex(e => e.n === mine.n && e.w === mine.w) : -1 });
+}
+function sendWinsAll() { for (const p of players.values()) if (p.ws && p.joined) sendWins(p); }
+function addWin(p) {
+  if (!p.user || p.obs) return;
+  const e = winsData[p.user] || (winsData[p.user] = { n: p.name, w: 0 });
+  e.w++; e.n = p.name;
+  calcWinTop();
+  const json = JSON.stringify(winsData);
+  winSave = winSave.then(() => db.set('wins', json)).catch(err => console.error('wins save failed:', err.message));
 }
 // ---- gold ----
 const WIN_GOLD = 5;
@@ -287,7 +306,7 @@ const GUMIHO = {
   fire: { chance: 0.70, max: 5, pick: 55, lift: 25 },
   eff: { dmg: 120, ms: 2000, radius: 2 * RADPX },
   Q: { cd: 8000 },
-  E: { cd: 12000, pullMs: 500, dmg: 120, rad: 0.6 * RADPX },
+  E: { cd: 15000, pullMs: 500, dmg: 120, rad: 0.6 * RADPX },
   R: { cd: 25000, radius: 2.5 * RADPX, ms: 2500, speed: 0.7, stop: 45 }
 };
 const BURN = { tick: 35, tickMs: 1000 };
@@ -295,7 +314,7 @@ const LUC = {
   base: { hp: 1300, dmg: 150, atkCd: 900, range: 4 * RADPX, spd: 900, radius: ATKR },
   angel: { hp: 1300, dmg: 130, atkCd: 800, range: 4 * RADPX, spd: 900, radius: ATKR },
   devil: { hp: 1300, dmg: 180, atkCd: 1000, range: 4 * RADPX, spd: 900, radius: ATKR },
-  G: { cd: 30000, atkCut: 1000, skillCut: 1500, afterCd: 5000 },
+  G: { cd: 30000, atkCut: 1000, skillCut: 1500, afterCd: 5000, shotMul: 0.5 },
   Q: { cd: 10000, range: 3 * RADPX, dmg: 270, spd: 800, radius: 0.3 * RADPX, sc: 1.6 },
   E: { cd: 10000, range: 3 * RADPX, dmg: 120, spd: 800, radius: 0.3 * RADPX, sc: 1.6, burnMs: 4000 },
   beam: { cd: 15000, ms: 1500, tickMs: 100, dmg: 30, heal: 10, half: 50, pad: 400 },
@@ -832,7 +851,7 @@ function lucTransform(p, form, now) {
   const S = form === 'a' ? LUC.Q : LUC.E, luc = form === 'a' ? 'Q' : 'E', kind = form === 'a' ? 'lsq' : 'lse';
   for (let i = 0; i < 8; i++) {
     const a = Math.atan2(Math.sin(p.aim + i * Math.PI / 4), Math.cos(p.aim + i * Math.PI / 4));
-    spawnArrow(p, { x: p.x, y: p.y }, 0, now, { a, dmg: S.dmg, spd: S.spd, range: S.range, radius: S.radius, kind, type: 'magic', luc, sc: S.sc });
+    spawnArrow(p, { x: p.x, y: p.y }, 0, now, { a, dmg: Math.round(S.dmg * LUC.G.shotMul), spd: S.spd, range: S.range, radius: S.radius, kind, type: 'magic', luc, sc: S.sc });
   }
 }
 function lucHit(ar, t, now) {
@@ -996,10 +1015,10 @@ function luciferSkill(p, k, m, now) {
 const FIN = {
   passive: { ms: 5000, mul: 1.03 },
   Q: { cd: 500, cost: 100, pick: 48 },
-  E: { cd: 15000, min: 150, cost: 150, ms: 2000 },
+  E: { cd: 15000, min: 100, cost: 100, ms: 2000 },
   R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1200, atkMul: 1.15 }
 };
-const stockPL = (f, t) => (f.buyDealt + (t.hp - f.buyHp0)) / 50;
+const stockPL = (f, t) => (f.buyDealt + (t.hp - f.buyHp0)) / 30;
 function stockClear(p) { if (p.buy) send(p.ws, { t: 'stk', id: 0 }); p.buy = 0; }
 function stepIns(p, now) {
   if (p.insUntil && now >= p.insUntil) {
@@ -1312,7 +1331,7 @@ const CEL = {
   cap: 300, store: 0.7, heal: 0.1,
   Q: { cd: 5000, r: 2 * RADPX, delay: 700, dmg: 400, back: 0.2 },
   E: { cd: 1000 },
-  R: { cd: 25000, delay: 0, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.7, burstR: RADPX, burst: 300 }
+  R: { cd: 25000, delay: 0, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.6, burstR: RADPX, burst: 300 }
 };
 function celestialAttack(p, m, now) {
   if (now < p.atkReady) return;
@@ -1399,10 +1418,10 @@ function stepCelestial(dt, now) {
 }
 // ---- Gamer ----
 const GAMER = {
-  atk: { range: 4 * RADPX },
-  Q: { cd: 10000 },
+  atk: { range: 4 * RADPX, melee: 170 },
+  Q: { cd: 8000 },
   E: { cd: 15000, potion: 250, windMs: 4000, wind: 0.5 },
-  R: { cd: 25000, dur: 8000 }
+  R: { cd: 25000, dur: 4000 }
 };
 const GFN = { Knight: knightSkill, Archer: archerSkill, Shielder: shielderSkill, Assassin: assassinSkill, Lucifer: luciferSkill, Celestial: celestialSkill, SwordMaster: swordmasterSkill, Tower: towerSkill, Financier: financierSkill };
 const GCOPY = [
@@ -1432,8 +1451,9 @@ function gamerAttack(p, m, now) {
   breakStealth(p);
   const ranged = p.gNext === 1;
   p.gNext = ranged ? 0 : 1;
-  p.gLast = { ranged, dmg: st.dmg + bonus };
-  gamerStrike(p, o, lag, now, ranged, st.dmg + bonus, 'atk');
+  const base = ranged ? st.dmg : GAMER.atk.melee;
+  p.gLast = { ranged, dmg: base + bonus };
+  gamerStrike(p, o, lag, now, ranged, base + bonus, 'atk');
 }
 function gamerStrike(p, o, lag, now, ranged, dmg, kind) {
   if (ranged) {
@@ -1443,7 +1463,7 @@ function gamerStrike(p, o, lag, now, ranged, dmg, kind) {
   broadcast({ t: 'fx', type: 'gslash', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, dur: 240 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
-    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'magic' });
+    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'phys' });
   }
   checkRoundEnd();
 }
@@ -1565,6 +1585,7 @@ const db = (UP_URL && UP_TOKEN) ? {
   mget: async ks => ks.map(k => { const e = memGet(k); return e ? e.v : null; }),
   keys: async prefix => [...mem.keys()].filter(k => k.startsWith(prefix) && memGet(k))
 };
+(async () => { try { const r = await db.get('wins'); const o = r ? JSON.parse(r) : {}; for (const id of Object.keys(o)) if (o[id] && Number.isInteger(o[id].w) && o[id].w > 0) winsData[id] = { n: String(o[id].n || id).slice(0, 24), w: o[id].w }; calcWinTop(); } catch (e) { console.error('wins load failed:', e.message); } })();
 (async () => { try { const r = await db.get('shopprice'); const o = r ? JSON.parse(r) : {}; for (const id of Object.keys(o)) if (SKINS[id] && Number.isInteger(o[id]) && o[id] >= 0) shopPrices[id] = o[id]; } catch (e) { console.error('shopprice load failed:', e.message); } })();
 console.log((UP_URL && UP_TOKEN) ? 'Accounts: Upstash Redis' : 'WARNING: UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set - accounts live in memory and are LOST on restart');
 
@@ -1684,10 +1705,11 @@ async function loginOk(p, rec, token) {
   const ti = await loadTitles(rec.id);
   p.titles = ti.list; p.eq = ti.eq;
   try { p.gold = Math.max(0, parseInt(await db.get('gold:' + rec.id), 10) || 0); } catch (e) { p.gold = 0; }
+  if (winsData[rec.id] && winsData[rec.id].n !== rec.nick) { winsData[rec.id].n = rec.nick; calcWinTop(); }
   if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }
   send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token, admin: rec.id === ADMIN_ID ? 1 : 0 });
   const sk = await loadSkins(rec.id); p.skins = sk.own; p.eqs = sk.eqs; p.skinsErr = sk.err;
-  sendTinfo(p); send(p.ws, { t: 'gold', g: p.gold }); sendSinfo(p); sendShop(p.ws);
+  sendTinfo(p); send(p.ws, { t: 'gold', g: p.gold }); sendSinfo(p); sendShop(p.ws); sendWins(p);
   const all = {};
   for (const q of players.values()) if (q.joined && q !== p) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
   send(p.ws, { t: 'ttls', m: all });
@@ -1811,12 +1833,12 @@ function reaperSkill(p, k, m, now) {
 // ---- AI players ----
 const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper'];
 const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 130 };
-let botSeq = 0;
+const nextBotNo = () => { const used = new Set([...players.values()].filter(q => q.ai).map(q => q.name)); let n = 1; while (used.has('AI ' + n)) n++; return n; };
 const randClass = cur => { const l = CLASS_LIST.filter(c => c !== cur); return l[Math.floor(Math.random() * l.length)]; };
 function addBot(cls, iq) {
   if (players.size >= MAX_PLAYERS) return null;
   const id = nextId++, p = mkPlayer(id, null);
-  p.ai = true; p.iq = Number.isInteger(iq) && iq >= 0 && iq <= 10 ? iq : 5; p.aiRand = cls === 'random'; p.name = 'AI ' + (++botSeq); p.user = null; p.joined = true; p.ready = true; p.gold = 0; p.skins = []; p.eqs = {};
+  p.ai = true; p.iq = Number.isInteger(iq) && iq >= 0 && iq <= 10 ? iq : 5; p.aiRand = cls === 'random'; p.name = 'AI ' + nextBotNo(); p.user = null; p.joined = true; p.ready = true; p.gold = 0; p.skins = []; p.eqs = {};
   p.cls = p.aiRand ? randClass('') : cls; resetCombat(p);
   players.set(id, p); return p;
 }
