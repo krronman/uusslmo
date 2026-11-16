@@ -262,9 +262,10 @@ const CLASS_STATS = {
   Tower: { hp: 2200, dmg: 100, reduce: 0, atkCd: 2000 },
   Gamer: { hp: 1000, dmg: 150, reduce: 0, atkCd: 700 },
   Celestial: { hp: 1500, dmg: 100, reduce: 0, atkCd: 800 },
-  Reaper: { hp: 1200, dmg: 50, reduce: 0, atkCd: 700 }
+  Reaper: { hp: 1200, dmg: 50, reduce: 0, atkCd: 700 },
+  Berserker: { hp: 1200, dmg: 170, reduce: 0, atkCd: 900 }
 };
-const statsBase = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : CLASS_STATS[p.cls] || BASE;
+const statsBase = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : p.cls === 'Berserker' && !axeHeld(p) ? Object.assign({}, CLASS_STATS.Berserker, { dmg: 50 }) : CLASS_STATS[p.cls] || BASE;
 const statsOf = p => { const s = statsBase(p); return p.pw && p.pw !== 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
 const RADPX = 112.5;
 const MAP = 1254;
@@ -290,7 +291,7 @@ const KNIGHT = {
 };
 
 const SHIELDER = {
-  span: 90 * RAD, block: 0.8,
+  span: 90 * RAD, block: 0.9,
   Q: { cd: 12000, radius: 2.5 * RADPX, ms: 2000, slow: 0.8, stop: 45 },
   E: { cd: 11000, dist: 3.5 * RADPX, dashMs: 450, dmg: 200, hit: 55, kb: RADPX, kbMs: 300, stun: 500 },
   R: { cd: 25000, dur: 6000, reduce: 0.3, reflect: 0.4, speed: 0.85 }
@@ -455,6 +456,7 @@ function stepArrows(dt, now) {
 }
 
 function resetCombat(p) {
+  p.axes = p.cls === 'Berserker' ? [{ s: 0, x: 0, y: 0, a: 0, d: 0 }] : []; p.bRUntil = 0;
   p.pw = 1; p.bm = 0;
   p.lf = ''; p.lPend = p.lUsed = false; p.beam = p.pure = p.sanct = null; p.libUntil = p.dmUntil = 0; p.dmList = [];
   p.mh = p.hp = statsOf(p).hp;
@@ -464,7 +466,7 @@ function resetCombat(p) {
   p.tauntUntil = p.tauntBy = p.kbUntil = p.hornUntil = 0; p.dash = null;
   p.markUntil = p.asUntil = p.asBonus = 0;
   p.fires = []; p.qNext = false; p.eNext = 0; p.lastBy = 0; p.charmUntil = p.charmBy = p.burnUntil = p.burnNext = 0;
-  p.fDmg = 90; p.finNext = Date.now() + 5000; p.insUntil = p.depUntil = 0; p.insAcc = 0; p.stkNext = 0; p.buyDealt = 0; p.buyHp0 = 0;
+  p.fDmg = 90; p.fMul = 1; p.finNext = Date.now() + 5000; p.insUntil = p.depUntil = 0; p.insAcc = 0; p.stkNext = 0; p.buyDealt = 0; p.buyHp0 = 0;
   if (p.buy) send(p.ws, { t: 'stk', id: 0 }); p.buy = 0;
   p.hr = p.cls === 'Tower' ? TOWER.hr : 0; p.towerRUntil = 0; p.mercNext = Date.now() + TOWER.merc.ms;
   for (const u of units.values()) if (u.owner === p.id) units.delete(u.id);
@@ -484,6 +486,9 @@ function killPlayer(p) {
   p.hp = 0; p.role = 2; p.dx = p.dy = 0; p.moving = false; p.deathOrder = ++deathCounter;
   if (was) broadcast({ t: 'kill', k: k ? k.id : 0, kn: k ? k.name : '', kc: k ? k.cls : '', v: p.id, vn: p.name, vc: p.cls });
 }
+const bRage = p => p.cls === 'Berserker' && p.role === 1 && p.hp > 0 && p.hp <= p.mh * 0.5;
+const berserkInc = (a, src, now) => a.cls !== 'Berserker' ? 0 : (bRage(a) ? 1 : 0) + (src.basic && now < (a.bRUntil || 0) ? 0.3 : 0);
+const axeHeld = p => !p.axes || !p.axes.length || p.axes.some(a => a.s === 0);
 function shieldBlocks(t, src) {
   if (t.cls !== 'Shielder' || !src) return false;
   let dir = src.dir;
@@ -498,7 +503,10 @@ function shieldBlocks(t, src) {
 
 function dmgTo(t, amount, now, src) {
   if (inSanct(t, now)) return;
-  const atk0 = src && (src.by || src.kill); if (atk0 && atk0.pw && atk0.pw !== 1) amount *= atk0.pw;
+  const atk0 = src && (src.by || src.kill);
+  let incA = 0;
+  if (atk0) { if (atk0.pw && atk0.pw !== 1) incA += atk0.pw - 1; incA += berserkInc(atk0, src, now); }
+  const amount0 = amount; amount = amount0 * (1 + incA);
   const type = (src && src.type) || (src && src.by && (src.by.cls === 'Assassin' || src.by.gPierce) ? 'pierce' : 'phys');
   const pierce = type === 'pierce', magic = type === 'magic';
   if (!pierce && now < (t.invulnUntil || 0)) return;
@@ -509,11 +517,12 @@ function dmgTo(t, amount, now, src) {
     blocked = shieldBlocks(t, src);
     if (blocked) cut += SHIELDER.block;
     else if (t.cls === 'Shielder' && now < t.hornUntil) cut += SHIELDER.R.reduce;
-    if (now < t.dmUntil) cut *= 1 - LUC.mark.defCut;
+    if (now < t.dmUntil) cut = Math.max(0, cut - LUC.mark.defCut);
   }
-  let d = (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount * (1 - Math.min(cut, 0.95))));
-  if (d > 0 && now < t.markUntil) d = Math.round(d * (1 + ASSASSIN.Q.mark));
-  if (d > 0 && now < t.dmUntil) { const mo = players.get(t.dmBy); d = Math.round(d * (1 + (mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp))); }
+  let incT = 0;
+  if (now < t.markUntil) incT += ASSASSIN.Q.mark;
+  if (now < t.dmUntil) { const mo = players.get(t.dmBy); incT += mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp; }
+  let d = (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount0 * (1 + incA + incT) * (1 - Math.min(cut, 0.95))));
   t.hp -= d;
   if (t.cls === 'Celestial' && t.role === 1 && d > 0) { t.dim = Math.min(CEL.cap, (t.dim || 0) + d * CEL.store); if (t.hp > 0) t.hp = Math.min(t.mh, t.hp + d * CEL.heal); }
   if (now < (t.insUntil || 0)) t.insAcc += d;
@@ -615,6 +624,7 @@ function runSkill(p, k, m) {
   else if (p.cls === 'Gamer') gamerSkill(p, k, m, now);
   else if (p.cls === 'Celestial') celestialSkill(p, k, m, now);
   else if (p.cls === 'Reaper') reaperSkill(p, k, m, now);
+  else if (p.cls === 'Berserker') berserkerSkill(p, k, m, now);
 }
 function archerSkill(p, k, m, now) {
   const S = ARCHER[k], o = originOf(p, m), lag = lagOf(m);
@@ -1027,12 +1037,12 @@ function stepIns(p, now) {
   }
 }
 function stepFinancier(p, now) {
-  for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.mul; p.hp *= FIN.passive.mul; p.fDmg *= FIN.passive.mul; }
+  for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.mul; p.hp *= FIN.passive.mul; p.fMul += FIN.passive.mul - 1; p.fDmg = 90 * p.fMul; }
   stepIns(p, now);
   if (p.depUntil) {
     while (p.depNext <= p.depUntil && now >= p.depNext) { const h0 = p.hp; p.hp = Math.max(1, p.hp - FIN.R.drain); if (p.insUntil) p.insAcc += h0 - p.hp; p.depNext += 1000; }
     if (now >= p.depUntil) {
-      p.depUntil = 0; p.mh *= FIN.R.hpMul; heal(p, FIN.R.heal); p.fDmg *= FIN.R.atkMul;
+      p.depUntil = 0; p.mh *= FIN.R.hpMul; heal(p, FIN.R.heal); p.fMul += FIN.R.atkMul - 1; p.fDmg = 90 * p.fMul;
       fxTxt(p.x, p.y - 30, '🏦 만기!', '#ffe08a');
       broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.4 * RADPX, c: '#ffd66b', dur: 700 });
     }
@@ -1050,7 +1060,7 @@ function financierSkill(p, k, m, now) {
       const t = players.get(p.buy);
       if (!t || t.role !== 1) return stockClear(p);
       const pl = stockPL(p, t), gain = Math.max(0, 100 + pl);
-      cd(FIN.Q.cd); heal(p, gain); p.fDmg *= Math.max(0.1, 1 + pl / 100); stockClear(p);
+      cd(FIN.Q.cd); heal(p, gain); p.fMul = Math.max(0.1, p.fMul + pl / 100); p.fDmg = 90 * p.fMul; stockClear(p);
       fxTxt(p.x, p.y - 30, '📈 ' + (pl >= 0 ? '+' : '') + pl.toFixed(1) + '% · +' + Math.round(gain) + ' HP', pl >= 0 ? '#9dffb0' : '#ff8a8a');
     } else {
       const cx = Number(m && m.cx), cy = Number(m && m.cy);
@@ -1769,6 +1779,65 @@ function mkPlayer(id, ws) {
     joined: false, cls: '', ready: false, role: 0, inRound: false, lx: 0, ly: 0, deathOrder: 0,
     hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, fires: [], qNext: false, pull: null, charmUntil: 0, charmBy: 0, burnUntil: 0, burnNext: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
 }
+// ---- Berserker ----
+const BERS = {
+  Q: { cd: 1000, range: 4 * RADPX, spd: 900, hit: 45, dmg: 250, pick: 0.6 * RADPX },
+  E: { cd: 15000, r: 1.5 * RADPX, dmg: 100, stun: 1000, cut: 2000 },
+  R: { cd: 25000, ms: 10000 }
+};
+function berserkerSkill(p, k, m, now) {
+  const cd = ms => { p['cd' + k] = now + ms; send(p.ws, { t: 'cd', k, ms }); };
+  if (!p.axes || !p.axes.length) return;
+  if (k === 'Q') {
+    const ax = p.axes.find(a => a.s === 0); if (!ax) return;
+    ax.s = 1; ax.x = p.x; ax.y = p.y; ax.a = p.aim; ax.d = 0; ax.hit = new Set(); ax.vid = ++arrowSeq;
+    broadcast({ t: 'arrow', id: ax.vid, by: p.id, x: p.x, y: p.y, a: p.aim, spd: BERS.Q.spd, range: BERS.Q.range, adv: 0, sc: 1, kd: 'axe', bm: 0 });
+    cd(now < p.bRUntil ? 0 : BERS.Q.cd);
+  } else if (k === 'E') {
+    cd(BERS.E.cd);
+    for (const ax of p.axes) {
+      const c = ax.s === 0 ? { x: p.x, y: p.y } : { x: ax.x, y: ax.y };
+      broadcast({ t: 'fx', type: 'disc', x: c.x, y: c.y, r: BERS.E.r, c: 'rgba(255,120,50,.35)', s: '#ff9a5a', dur: 450 });
+      for (const t of targetsOf(p)) {
+        if (Math.hypot(t.x - c.x, (t.y - c.y) / 0.8) > BERS.E.r + (t.hr || 0)) continue;
+        dmgTo(t, BERS.E.dmg, now, { x: c.x, y: c.y, by: p, type: 'phys' });
+        if (t.role === 1 && !t.unit) t.stunUntil = Math.max(t.stunUntil || 0, now + BERS.E.stun);
+      }
+    }
+    checkRoundEnd();
+  } else {
+    cd(BERS.R.cd); p.bRUntil = now + BERS.R.ms;
+    if (p.axes.length < 2) p.axes.push({ s: 0, x: 0, y: 0, a: 0, d: 0 });
+    p.cdQ = 0; send(p.ws, { t: 'cd', k: 'Q', ms: 0 });
+    broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.3 * RADPX, c: '#ff5a3a', dur: 600 });
+  }
+}
+function stepBerserker(dt, now) {
+  for (const p of players.values()) {
+    if (p.cls !== 'Berserker' || !p.axes) continue;
+    if (p.bRUntil && now >= p.bRUntil) { p.bRUntil = 0; for (const a of p.axes.splice(1)) if (a.s === 1) broadcast({ t: 'arrowEnd', id: a.vid }); }
+    if (p.role !== 1 || phase !== 'round') continue;
+    let any = false;
+    for (const a of p.axes) {
+      if (a.s === 1) {
+        const step = Math.min(BERS.Q.spd * dt, BERS.Q.range - a.d);
+        const nx = a.x + Math.cos(a.a) * step, ny = a.y + Math.sin(a.a) * step * 0.8, ex = (nx - CX) / RX, ey = (ny - CY) / RY;
+        let land = false;
+        if (ex * ex + ey * ey > 1) land = true; else { a.x = nx; a.y = ny; a.d += step; if (a.d >= BERS.Q.range - 0.01) land = true; }
+        for (const t of targetsOf(p)) {
+          if (a.hit.has(t.id) || Math.hypot(t.x - a.x, (t.y - a.y) / 0.8) > BERS.Q.hit + (t.hr || 0)) continue;
+          a.hit.add(t.id); any = true;
+          dmgTo(t, BERS.Q.dmg, now, { dir: a.a + Math.PI, kill: p, type: 'phys' });
+        }
+        if (land) { a.s = 2; broadcast({ t: 'arrowEnd', id: a.vid }); }
+      } else if (a.s === 2 && Math.hypot(p.x - a.x, (p.y - a.y) / 0.8) <= BERS.Q.pick) {
+        a.s = 0; p.cdE = Math.max(now, p.cdE - BERS.E.cut); send(p.ws, { t: 'cd', k: 'E', ms: Math.max(0, p.cdE - now) });
+        fxTxt(p.x, p.y - 30, '🪓 회수', '#ffb27a');
+      }
+    }
+    if (any) checkRoundEnd();
+  }
+}
 // ---- Reaper ----
 const REAPER = { chargeMs: 1500, rMax: 1.5 * RADPX, rMin: 0.2, dmg: [50, 270], soul: [0.05, 0.20], maxSouls: 5, collect: 0.7 * RADPX, atkPw: 0.7, R: { cd: 25000 } };
 const sendReap = p => send(p.ws, { t: 'reap', s: (p.souls || []).map(x => x.c), q: (p.souls || []).map(x => x.pw >= 1 ? 1 : 0) });
@@ -1831,8 +1900,8 @@ function reaperSkill(p, k, m, now) {
   }
 }
 // ---- AI players ----
-const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper'];
-const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 130 };
+const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper', 'Berserker'];
+const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 130, Berserker: 95 };
 const nextBotNo = () => { const used = new Set([...players.values()].filter(q => q.ai).map(q => q.name)); let n = 1; while (used.has('AI ' + n)) n++; return n; };
 const randClass = cur => { const l = CLASS_LIST.filter(c => c !== cur); return l[Math.floor(Math.random() * l.length)]; };
 function addBot(cls, iq) {
@@ -2072,7 +2141,7 @@ setInterval(() => {
   stepSanct(now);
   stepArrows(dt, now);
   stepBombs(now);
-  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now); stepSouls();
+  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now); stepSouls(); stepBerserker(dt, now);
   const list = [], hidden = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
@@ -2085,7 +2154,7 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0 };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);
   }
