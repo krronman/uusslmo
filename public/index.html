@@ -112,7 +112,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #killLog{position:fixed;right:12px;top:calc(82px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;align-items:flex-end;gap:4px;z-index:3;pointer-events:none;font:13px 'Galmuri11',system-ui,sans-serif}
 #killLog div{background:rgba(20,30,60,.75);color:#fff;padding:4px 10px;border-radius:8px;border:2px solid #fff;transition:opacity .5s}
 #killLog b{color:#ffe066}
-#skillbar{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:none;gap:8px;z-index:3}
+#skillbar{position:fixed;right:80px;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:none;gap:8px;z-index:3}
 .sk{position:relative;width:52px;height:52px;background:rgba(20,30,60,.8);border:2px solid #fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px}
 .sk b{position:absolute;left:4px;top:1px;font-size:11px;color:#ffe066}
 .sk i{position:absolute;inset:0;border-radius:6px;display:none;align-items:center;justify-content:center;font:700 20px system-ui,sans-serif;font-style:normal;background:rgba(0,0,0,.62);color:#fff}
@@ -151,6 +151,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #goldBar{position:fixed;right:12px;top:calc(8px + env(safe-area-inset-top,0px));width:220px;height:67px;background:url(coinBar.png) -3px -3px/226px 75.3px no-repeat;z-index:3;pointer-events:none;display:none}
 #goldTx{position:absolute;left:26%;right:11%;top:0;bottom:0;display:flex;align-items:center;justify-content:flex-end;font:700 20px 'Galmuri11','Press Start 2P',monospace;color:#ffe9a8;text-shadow:2px 2px 0 #0b0a24;white-space:nowrap;overflow:hidden}
 #goldBar.pop{animation:goldPop .5s}
+#winBar{position:fixed;right:12px;top:calc(80px + env(safe-area-inset-top,0px));padding:3px 12px;background:rgba(40,24,18,.85);border:2px solid #c9a24a;border-radius:8px;color:#ffe6a8;font-weight:700;font-size:14px;line-height:1.3;z-index:3;pointer-events:none;display:none}
 @keyframes goldPop{30%{transform:scale(1.1)}}
 #skinBtn{position:fixed;right:27px;top:50%;margin-top:-122px;width:120px;height:80px;padding:0;border:0;cursor:pointer;background:url(skinButton.png) center/contain no-repeat;z-index:4}
 #skinBtn:hover{filter:brightness(1.12)}
@@ -186,7 +187,7 @@ kbd{background:#fff;color:#123;border-radius:4px;padding:1px 6px;margin:0 1px;fo
 #buyYes{left:15.6%;width:33.2%}#buyNo{left:51.4%;width:32.9%}
 #buyYes:hover,#buyNo:hover{background:rgba(255,255,255,.14)}
 #buyCap{position:absolute;left:0;right:0;top:89%;text-align:center;font:700 16px 'Galmuri11',system-ui,sans-serif;color:#fff;text-shadow:2px 2px 0 #0b0a24}
-#setBtn{position:fixed;right:270px;bottom:calc(78px + env(safe-area-inset-bottom,0px));width:72px;height:72px;padding:0;border:0;cursor:pointer;background:url(settings_gear_button_transparent.png) center/contain no-repeat;z-index:4;display:none}
+#setBtn{position:fixed;right:0;bottom:0;width:72px;height:72px;padding:0;border:0;cursor:pointer;background:url(settings_gear_button_transparent.png) center/contain no-repeat;z-index:4;display:none}
 #setBtn:hover{filter:brightness(1.15)}
 #kbScreen{position:fixed;inset:0;background:rgba(10,12,30,.74);display:none;align-items:center;justify-content:center;z-index:7}
 #kbScreen[style*="flex"] #kbClose{display:block}
@@ -244,7 +245,7 @@ body.mob #clBody{height:110px}
 <div id="pMenu"><div id="pmName"></div><button id="pmBoss">👑 보스 지정</button><button id="pmKick">[Kick]</button><div id="pmTeams"><button data-t="1">Red</button><button data-t="2">Blue</button><button data-t="0">None</button></div></div>
 <button id="shopBtn" aria-label="shop"></button>
 <button id="skinBtn" aria-label="skins"></button>
-<div id="goldBar"><span id="goldTx">0</span></div>
+<div id="goldBar"><span id="goldTx">0</span></div><div id="winBar">🏆 승수 <span id="winTx">0</span></div>
 <button id="readyBtn">0/2</button>
 <button id="patchBtn" aria-label="patch notes"></button>
 <button id="setBtn" aria-label="settings"></button>
@@ -296,6 +297,7 @@ const swordImg=new Image();swordImg.src='sword.png';
 const towerImg=new Image(),tInfImg=new Image(),tArcImg=new Image(),cbImg=new Image();towerImg.src='tower.png';tInfImg.src='towerinfantry.png';const stkImg=new Image();stkImg.src='stock.png';tArcImg.src='towerarcher.png';cbImg.src='cannonball.png';
 const smSlashImg=new Image(),smQImg=new Image(),smSwordImg=new Image();smSlashImg.src='swordmaster_normalattack.png';smQImg.src='swordmaster_Qskill.png';smSwordImg.src='swordMasterSword.png';const smAuraSwordImg=new Image();smAuraSwordImg.src='swordmasterAuraSword.png';
 const kshImg=new Image();kshImg.src='knightshield.png';
+const lbImg=new Image();lbImg.src='leaderboard.png';let lbTop=[],lbMi=-1;const LB={x:6,y:6,w:300};
 const skelImg=new Image(),scytheImg=new Image(),soulImg=new Image();skelImg.src='skeleton.png';scytheImg.src='scythe.png';soulImg.src='soul.png';
 const arrowImg=new Image();arrowImg.src='arrow.png';
 const bowImg=new Image();bowImg.src='bow.png';
@@ -400,7 +402,7 @@ function connect(){
    aiBtn.style.display=modeBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'block':'none';aiRefresh();modeBtn.textContent='🎮 '+(gameMode==='team'?'팀전':gameMode==='boss'?'보스전':'개인전');mapBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'':'none';mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
    if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose();shopClose();skClose();gmClose()}
    skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
-   setBtn.style.display=joined?'block':'none';goldBar.style.display=(joined&&!obs)?'block':'none';goldBar.classList.toggle('adm',isAdmin);
+   setBtn.style.display=joined?'block':'none';goldBar.style.display=(joined&&!obs)?'block':'none';winBar.style.display=(joined&&!obs)?'block':'none';goldBar.classList.toggle('adm',isAdmin);
    if(obs){readyBtn.style.display=titleBtn.style.display=shopBtn.style.display=skinBtn.style.display=skillbar.style.display='none';shopClose();skClose();gmClose();classBtn.style.display='';logoutBtn.style.display='block'}
   }
   else if(m.t==='chat'){addLog(m.name,m.text,m.sys,0);if(m.id)bubbles.set(m.id,{text:m.text,until:performance.now()+4000})}
@@ -411,12 +413,13 @@ function connect(){
   else if(m.t==='arrow'){m.t0=performance.now();if(eatEcho(m))return;
    if(m.by===myId&&(m.kd==='atk'||m.kd==='orb')){const i=arrowsC.findIndex(a=>a.local);if(i>=0)arrowsC.splice(i,1)}
    arrowsC.push(m);const o=others.get(m.by);if(o&&(m.by!==myId||m.kd!=='atk'))o.shot=m.t0}
-  else if(m.t==='arrowEnd'){const i=arrowsC.findIndex(a=>a.id===m.id);if(i>=0)arrowsC.splice(i,1)}
+  else if(m.t==='arrowEnd'){const i=arrowsC.findIndex(a=>a.id===m.id);if(i>=0){const a=arrowsC[i];if(a.kd==='smq'&&!a.endT)a.endT=performance.now()+220;else arrowsC.splice(i,1)}}
   else if(m.t==='winner'){winnerText=m.draw?'⏱ 시간 제한! 무승부':m.second?'⏱ 시간 제한! 2nd place: '+m.name:'🏆 '+m.name+' 승리!';winnerUntil=performance.now()+5000}
   else if(m.t==='cd'){skCd[m.k]=performance.now()+m.ms}
   else if(m.t==='ack'){const e=pend.get(m.q);pend.delete(m.q);if(e&&!m.ok)unpredict(m.q,e)}
   else if(m.t==='cel'){celS={d:m.d,b:m.b}}
   else if(m.t==='gold'){goldSet(m.g,m.d)}
+  else if(m.t==='wins'){lbTop=m.top||[];lbMi=m.mi;winTx.textContent=(m.my|0).toLocaleString()}
   else if(m.t==='shop'){SHOP=m.items||[];shopRender();skRender();shAdmRender()}
   else if(m.t==='sinfo'){mySk={own:m.own||[],eqs:m.eqs||{}};skRender();shopRender()}
   else if(m.t==='buy'){toast(m.msg||'')}
@@ -626,7 +629,7 @@ const CHARS=[
   skills:[
    {icon:'🔥',name:'여우불',key:'패시브',types:['summon'],desc:'공격이 적에게 적중하면 70% 확률로 여우불 생성(최대 5개, 초과 시 가장 오래된 것 소멸).'},
    {icon:'✨',name:'요술',key:'Q · 8초',types:['util','magic'],desc:'커서의 여우불로 순간이동, 가까운 여우불 폭발(2 radpx): 120 피해+화상(초당 35 물리).'},
-   {icon:'💫',name:'미수옥',key:'E · 12초',types:['buff'],desc:'여우불을 모두 회수, 다음 기본 공격 강화: 개당 피해 +120, 폭발 범위 +0.6 radpx.'},
+   {icon:'💫',name:'미수옥',key:'E · 15초',types:['buff'],desc:'여우불을 모두 회수, 다음 기본 공격 강화: 개당 피해 +120, 폭발 범위 +0.6 radpx.'},
    {icon:'💗',name:'매혹',key:'R · 25초',types:['cc'],desc:'2.5 radpx 안의 적을 2.5초간 매혹: 공격·이동 불가, 나에게 끌려옴(끌려오는 속도: 이동속도 30% 감소).'}]},
  {id:'Lucifer',ko:'루시퍼',img:'luciferCharacter.png',stats:{hp:1300,atk:150},rng:'4 radpx (원거리)',
    style:'선과 악의 양면을 지닌 변신형 원거리 딜러. 먼저 적중시킨 화살에 따라 천사 또는 악마로 영구 변신합니다. (캐릭터 이미지를 눌러 폼 정보 확인)',
@@ -635,7 +638,7 @@ const CHARS=[
     {icon:'🌈',name:'축복',key:'패시브',types:['buff'],desc:'선과 악은 시작 쿨타임 후 단 1회 사용. 일반 공격 적중 시 쿨타임 1초, 스킬 적중 시 1.5초 감소.'},
     {icon:'☀️',name:'라이트 샷',key:'Q · 10초',types:['magic'],desc:'직선 빛 화살(3 radpx): 적중한 적 1명에게 270 피해.'},
     {icon:'🔥',name:'파이어 샷',key:'E · 10초',types:['magic'],desc:'불꽃 발사(3 radpx): 120 피해 + 화상 4초(초당 35 물리).'},
-    {icon:'⚖️',name:'선악',key:'R · 30초',types:['buff'],desc:'빛/불 화살 5초로 단축. 먼저 적중한 쪽으로 영구 변신: 정화, 체력 300 회복, 스킬 초기화, 8방향 빛/불 화살 발사.'}]},
+    {icon:'⚖️',name:'선악',key:'R · 30초',types:['buff'],desc:'빛/불 화살 5초로 단축. 먼저 적중한 쪽으로 영구 변신: 정화, 체력 300 회복, 스킬 초기화, 8방향 빛/불 화살 발사(피해는 원래 Q/E의 50%).'}]},
    {tag:'천사',img:'angelForm.png',as:0.8,stats:{hp:1300,atk:130},rng:'4 radpx (원거리)',skills:[
     {icon:'🕊️',name:'축복',key:'패시브',types:['heal'],desc:'초당 20 체력을 회복합니다.'},
     {icon:'🌟',name:'라이트 빔',key:'Q · 15초',types:['magic','heal'],desc:'1.5초간 화면 끝까지 닿는 광선: 적에게 0.1초마다 30 피해, 접촉 시 나는 0.1초마다 10 회복.'},
@@ -671,23 +674,23 @@ const CHARS=[
   style:'시간이 지날수록 불어나는 복리형 근접 딜러. 상대에게 투자해 수익을 거두고, 보험과 예금으로 체력을 굴립니다.',
   skills:[
    {icon:'💰',name:'적금',key:'패시브',types:['buff'],desc:'5초마다 최대 체력·현재 체력·공격력이 3%씩 복리로 증가합니다.'},
-   {icon:'📈',name:'주식',key:'Q · 0.5초',types:['buff'],desc:'커서 아래 적에게 \'구매\'(체력 100 소모). 다시 사용하면 매각: 손익률만큼 체력(100×(100+손익)%)과 공격력 증가. 손익 = (대상이 준 피해 + 체력 변화)/50.'},
-   {icon:'🛡️',name:'보험',key:'E · 15초',types:['heal'],desc:'체력 150 초과 시 사용. 체력 150 소모 후 2초간 잃은 체력(소모한 체력 포함)을 모아 종료 시 모두 회복.'},
+   {icon:'📈',name:'주식',key:'Q · 0.5초',types:['buff'],desc:'커서 아래 적에게 \'구매\'(체력 100 소모). 다시 사용하면 매각: 손익률만큼 체력(100×(100+손익)%)과 공격력 증가. 손익 = (대상이 준 피해 + 체력 변화)/30.'},
+   {icon:'🛡️',name:'보험',key:'E · 15초',types:['heal'],desc:'체력 100 초과 시 사용. 체력 100 소모 후 2초간 잃은 체력(소모한 체력 포함)을 모아 종료 시 모두 회복.'},
    {icon:'🏦',name:'정기적금',key:'R · 25초',types:['heal','buff'],desc:'10초간 매초 체력 70 차감. 만기 시 최대 체력 +20%, 체력 1200 회복, 공격력 +15%.'}]},
  {id:'Gamer',ko:'게이머',img:'gamer.png',stats:{hp:1000,atk:150},rng:'1 radpx (근접) / 4 radpx (원거리) 교대',
   style:'근접과 원거리를 번갈아 공격하는 복사형 캐릭터. 다른 플레이어의 스킬을 복사해 쓰고, 뽑기로 보너스를 얻습니다.',
   skills:[
-   {icon:'🔁',name:'변환',key:'패시브',types:['buff'],desc:'공격마다 방식이 번갈아 바뀜: 1타 근접(마법 150), 2타 원거리(4 radpx, 마법 150), 3타 다시 근접. 반복.'},
-   {icon:'📋',name:'카피',key:'Q · 10초',types:['buff'],desc:'다른 플레이어 직업의 Q/E 스킬 1개를 무작위 복사. 복사 중 다시 누르면 원본과 동일하게 사용 후 삭제. 복사 시 10초 쿨타임. 접속 중인 직업과 무관하게 모든 직업의 스킬이 대상. 제외: 궁수 E, 도박사 Q·E, 구미호 Q·E, 악마 E, 금융인 Q. 시전마다 무작위 색→흰색 그라데이션 이펙트.'},
+   {icon:'🔁',name:'변환',key:'패시브',types:['buff'],desc:'공격마다 방식이 번갈아 바뀜: 1타 근접(물리 170), 2타 원거리(4 radpx, 마법 150), 3타 다시 근접. 반복.'},
+   {icon:'📋',name:'카피',key:'Q · 8초',types:['buff'],desc:'다른 플레이어 직업의 Q/E 스킬 1개를 무작위 복사. 복사 중 다시 누르면 원본과 동일하게 사용 후 삭제. 복사 시 8초 쿨타임. 접속 중인 직업과 무관하게 모든 직업의 스킬이 대상. 제외: 궁수 E, 도박사 Q·E, 구미호 Q·E, 악마 E, 금융인 Q. 시전마다 무작위 색→흰색 그라데이션 이펙트.'},
    {icon:'🎁',name:'가챠',key:'E · 15초',types:['buff','heal'],desc:'상자를 열어 무작위 1개: [Extra Slot] 카피로 스킬 2개 동시 복사·동시 발동 / [Health Potion] 체력 250 회복 / [Wind Rune] 4초간 공격속도 +50%.'},
-   {icon:'💻',name:'치트',key:'R · 25초',types:['buff'],desc:'8초간 카피 쿨타임 제거, 가챠가 3가지 효과를 모두 동시에 적용.'}]},
+   {icon:'💻',name:'치트',key:'R · 25초',types:['buff'],desc:'4초간 카피 쿨타임 제거, 가챠가 3가지 효과를 모두 동시에 적용.'}]},
  {id:'Celestial',ko:'천체',img:'astro.png',stats:{hp:1500,atk:100},rng:'1 radpx (근접, 마법)',
   style:'받은 피해를 4차원에 저장하고 한 번에 터뜨리는 우주 계열 캐릭터. 행성 폭발과 은하 충돌로 광역 피해를 줍니다.',
   skills:[
    {icon:'🕳️',name:'블랙홀',key:'패시브',types:['buff'],desc:'받은 피해의 70%를 <4차원>에 저장(최대 300), 받은 피해의 10%만큼 체력 회복.'},
    {icon:'🪐',name:'행성 폭발',key:'Q · 5초',types:['phys'],desc:'자신의 위치에 반경 2 radpx 행성을 소환, 0.7초 뒤 폭발하여 범위 내 모든 적에게 400 물리 피해. 입힌 피해량의 20%를 <4차원>에 저장.'},
    {icon:'⚪',name:'화이트홀',key:'E · 1초',types:['buff'],desc:'저장된 <4차원> 피해를 모두 제거하고, 제거한 양만큼 다음 일반 공격 또는 스킬(행성 폭발·은하 충돌 마지막 폭발) 피해 증가.'},
-   {icon:'🌌',name:'은하 충돌',key:'R · 25초',types:['pierce','cc'],desc:'자신의 발밑에 반경 3 radpx 은하를 즉시 펼쳐 4초간 유지: 범위 내 적에게 초당 40 관통 피해, 이동속도 70%의 힘으로 중심으로 끌어당김. 소멸 직후 중심 반경 1 radpx 내 적에게 300 관통 피해.'}]},
+   {icon:'🌌',name:'은하 충돌',key:'R · 25초',types:['pierce','cc'],desc:'자신의 발밑에 반경 3 radpx 은하를 즉시 펼쳐 4초간 유지: 범위 내 적에게 초당 40 관통 피해, 이동속도 60%의 힘으로 중심으로 끌어당김. 소멸 직후 중심 반경 1 radpx 내 적에게 300 관통 피해.'}]},
  {id:'Reaper',ko:'리퍼',img:'reaper.png',stats:{hp:1200,atk:'50~270'},rng:'0.3~1.5 radpx (원형 범위)',
    style:'낫을 휘둘러 영혼을 수확하고, 영혼으로 해골 군단을 일으키는 소환 계열 캐릭터.',
    skills:[
@@ -811,6 +814,7 @@ async function pnOpen(){csClose();ttClose();admClose();shopClose();skClose();gmC
  catch(e){pnBody.textContent='아직 패치 노트가 없습니다.'}}
 document.getElementById('patchBtn').onclick=e=>{pnOpen();e.currentTarget.blur()};
 // ---- shop / gold ----
+const winBar=document.getElementById('winBar'),winTx=document.getElementById('winTx');
 const shopBtn=document.getElementById('shopBtn'),shopScreen=document.getElementById('shopScreen'),goldBar=document.getElementById('goldBar'),goldTx=document.getElementById('goldTx');
 let goldVal=0;
 function shopIsOpen(){return shopScreen.style.display==='flex'}
@@ -1081,7 +1085,7 @@ function drawProj(r,d,t,pj){
  if(pj.bomb){const S=2*RADPX*(r.sc||1)/15;ctx.scale(1,.9);ctx.rotate(t/260);ctx.shadowColor='#ff7a3a';ctx.shadowBlur=18;if(imOk(im))ctx.drawImage(im,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();return}
  ctx.rotate(th+(pj.rot===undefined?Math.PI:pj.rot));if(pj.glow){ctx.shadowColor=pj.glow;ctx.shadowBlur=18}
  const S=pj.s;
- if(imOk(im))ctx.drawImage(im,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);
+ if(imOk(im))ctx.drawImage(im,0,0,im.naturalWidth,im.naturalHeight,-7.5*S,-7.5*S,15*S,15*S);
  else{ctx.fillStyle=pj.fb||'#fff';ctx.strokeStyle='#4b2a7a';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-14,0);ctx.lineTo(0,-9);ctx.lineTo(14,0);ctx.lineTo(0,9);ctx.closePath();ctx.fill();ctx.stroke()}
  ctx.restore()}
 function drawArrowOne(r,d,t){
@@ -1096,9 +1100,24 @@ function drawArrowOne(r,d,t){
   if(sc>1){ctx.shadowColor='#ffd66b';ctx.shadowBlur=24}
   ctx.drawImage(arrowImg,0,0,14,3,0,-1.5*PX*sc,14*PX*sc,3*PX*sc);ctx.restore();
 }
+function drawLB(){
+ if(!imOk(lbImg))return;
+ const k=LB.w/615,ROWS=[266,301,334.5,370,403.5,437.5,471.5,505,536.5,567.5];
+ ctx.save();ctx.translate(LB.x,LB.y);ctx.scale(k,k);
+ ctx.drawImage(lbImg,0,0,615,639);
+ ctx.textBaseline='middle';ctx.font='700 17px sans-serif';ctx.textAlign='center';ctx.fillStyle='#f3deb0';ctx.strokeStyle='rgba(30,12,4,.9)';ctx.lineWidth=3;
+ ctx.strokeText('승수',388,223);ctx.fillText('승수',388,223);
+ for(let i=0;i<lbTop.length&&i<10;i++){
+  const e=lbTop[i],y=ROWS[i]+1,me=i===lbMi;
+  ctx.fillStyle=me?'#ffe27a':i<3?['#ffd24a','#e4e8ee','#e39a62'][i]:'#e9dcc2';
+  ctx.textAlign='left';let n=e.n||'';if(ctx.measureText(n).width>146){while(n.length>1&&ctx.measureText(n+'…').width>146)n=n.slice(0,-1);n+='…'}
+  ctx.strokeText(n,178,y);ctx.fillText(n,178,y);
+  ctx.textAlign='center';const w=String(e.w);ctx.strokeText(w,388,y);ctx.fillText(w,388,y)}
+ ctx.restore()}
 function drawArrows(t){
  for(let i=arrowsC.length-1;i>=0;i--){
   const r=arrowsC[i],pj0=r.kd&&PROJ[r.kd],d=(r.adv||0)*(pj0&&!pj0.bomb?Math.min(1,(t-r.t0)/150):1)+r.spd*(t-r.t0)/1000;
+  if(r.endT&&t>r.endT){arrowsC.splice(i,1);continue}
   if(d>=r.range+40||(r.local&&t-r.t0>rtt*2+250)){arrowsC.splice(i,1);continue}
   if(r.tint){tintBegin();try{drawArrowOne(r,d,t)}finally{tintEnd(r.tint,r.x+Math.cos(r.a)*d,r.y+Math.sin(r.a)*d*.8-30,70*(r.sc||1))}}
   else drawArrowOne(r,d,t)
@@ -1449,7 +1468,7 @@ function draw(t){
   ox=sw>cv.width+1?Math.max(cv.width-sw,Math.min(0,cv.width/2-camX*scale)):(cv.width-sw)/2;
   oy=sh>cv.height+1?Math.max(cv.height-sh,Math.min(0,cv.height/2-camY*scale)):(cv.height-sh)/2;
   mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale}
- ctx.setTransform(scale,0,0,scale,ox,oy);if(imOk(bg))ctx.drawImage(bg,0,0,W,W);ctx.imageSmoothingEnabled=false;
+ ctx.setTransform(scale,0,0,scale,ox,oy);if(imOk(bg))ctx.drawImage(bg,0,0,W,W);ctx.imageSmoothingEnabled=false;drawLB();
  const k=1-Math.exp(-dt*18),list=[];
  for(const [id,o] of others){
   if(id===myId&&arena&&myRole!==2){
