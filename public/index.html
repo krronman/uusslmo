@@ -629,9 +629,9 @@ const CHARS=[
  {id:'Gumiho',ko:'구미호',img:'gumiho.png',stats:{hp:1100,atk:130},rng:'3.5 radpx (원거리)',
   style:'원거리 마법사. 여우불을 깔았다 터뜨려 적을 불태우고, 매혹으로 전장을 휘어잡습니다.',
   skills:[
-   {icon:'🔥',name:'여우불',key:'패시브',types:['summon'],desc:'공격이 적에게 적중하면 70% 확률로 여우불 생성(최대 5개, 초과 시 가장 오래된 것 소멸).'},
-   {icon:'✨',name:'요술',key:'Q · 8초',types:['util','magic'],desc:'커서의 여우불로 순간이동, 가까운 여우불 폭발(2 radpx): 120 피해+화상(초당 35 물리).'},
-   {icon:'💫',name:'미수옥',key:'E · 15초',types:['buff'],desc:'여우불을 모두 회수, 다음 기본 공격 강화: 개당 피해 +120, 폭발 범위 +0.6 radpx.'},
+   {icon:'🔥',name:'여우불',key:'패시브',types:['summon'],desc:'공격이 적에게 적중하면 100% 확률로 여우불 생성(최대 5개, 초과 시 가장 오래된 것 소멸).'},
+   {icon:'✨',name:'요술',key:'Q · 10초',types:['util','magic'],desc:'커서의 여우불로 순간이동, 가까운 여우불 폭발(2 radpx): 120 피해+화상(초당 35 물리).'},
+   {icon:'💫',name:'미수옥',key:'E · 12초',types:['buff'],desc:'여우불을 모두 회수, 다음 기본 공격 강화: 개당 피해 +60, 폭발 범위 +0.6 radpx.'},
    {icon:'💗',name:'매혹',key:'R · 25초',types:['cc'],desc:'2.5 radpx 안의 적을 2.5초간 매혹: 공격·이동 불가, 나에게 끌려옴(끌려오는 속도: 이동속도 30% 감소).'}]},
  {id:'Lucifer',ko:'루시퍼',img:'luciferCharacter.png',stats:{hp:1300,atk:150},rng:'4 radpx (원거리)',
    style:'선과 악의 양면을 지닌 변신형 원거리 딜러. 먼저 적중시킨 화살에 따라 천사 또는 악마로 영구 변신합니다. (캐릭터 이미지를 눌러 폼 정보 확인)',
@@ -894,7 +894,8 @@ try{document.fonts.load("13px 'Galmuri11'","칭호가나다")}catch(e){}
 
 // ---- skins / shop items / admin gold ----
 const lkLoad=f=>{const i=new Image();i.src=f;return i};
-const SKN={LightKnight:{cls:'Knight',icon:'LightKnight.png',spr:lkLoad('LightKnight.png'),sw:lkLoad('LightKnightSword.png'),sl:lkLoad('LightKnightSlash.png'),sh:lkLoad('LightKnightShield.png')}};
+const SKN={LightKnight:{cls:'Knight',icon:'LightKnight.png',spr:lkLoad('LightKnight.png'),sw:lkLoad('LightKnightSword.png'),sl:lkLoad('LightKnightSlash.png'),sh:lkLoad('LightKnightShield.png')},ChessTower:{cls:'Tower',icon:'ChessTower.png',spr:lkLoad('ChessTower.png'),ui:lkLoad('ChessInfantry.png'),ua:lkLoad('ChessTowerArcher.png')},LightArcher:{cls:'Archer',icon:'LightArcher.png',spr:lkLoad('LightArcher.png'),bow:lkLoad('LightArcherBow.png'),ar:lkLoad('LightArcherArrow.png')}};
+const unitSkin=o=>{const k=o&&o.ut&&o.sn&&SKN[o.sn];return k&&k.ui?k:null};
 const skOf=o=>{const k=o&&o.sn&&SKN[o.sn];return k&&k.cls===o.cls?k:null};
 let SHOP=[],mySk={own:[],eqs:{}};
 const skinBtn=document.getElementById('skinBtn');
@@ -1066,14 +1067,15 @@ function drawBlade(o,h,lift){
  ctx.drawImage(daggerImg,0,0,15,15,-1.5*S,-12.5*S,15*S,15*S);ctx.restore();
 }
 function drawBow(o,h,lift){
- if(!(bowImg.complete&&bowImg.naturalWidth))return;
+ const lk=skOf(o),lb=lk&&lk.bow&&imOk(lk.bow)?lk.bow:null,la=lk&&lk.ar&&imOk(lk.ar)?lk.ar:null;
+ if(!lb&&!(bowImg.complete&&bowImg.naturalWidth))return;
  const now=performance.now(),a=o.da||0,th=Math.atan2(.8*Math.sin(a),Math.cos(a));
  const rc=o.shot?Math.max(0,1-(now-o.shot)/180):0,bob=Math.sin(now/260+o.x*.05)*2.5+(o.moving?Math.sin(o.phase*2)*2:0);
  const ch=o.chg>=0?o.chg:0,shk=o.chg>=1?Math.sin(now/35)*1.5:0;
  const dist=36-8*rc-4*ch,cx=o.x+Math.cos(th)*dist+shk,cy=o.y-h*.5-lift+8+Math.sin(th)*dist*.8+bob;
  ctx.save();ctx.translate(cx,cy);ctx.rotate(th+Math.PI);
- if(o.chg>=0&&arrowImg.complete&&arrowImg.naturalWidth)ctx.drawImage(arrowImg,0,0,14,3,-6+14*ch,-1.5*PX,14*PX,3*PX);
- ctx.drawImage(bowImg,0,0,8,15,-4*PX,-7.5*PX,8*PX,15*PX);ctx.restore();
+ if(o.chg>=0){const hx=-6+14*ch;if(la){ctx.save();ctx.scale(-1,1);ctx.drawImage(la,0,0,15,15,-hx-15*PX,-7.5*PX,15*PX,15*PX);ctx.restore()}else if(arrowImg.complete&&arrowImg.naturalWidth)ctx.drawImage(arrowImg,0,0,14,3,hx,-1.5*PX,14*PX,3*PX)}
+ if(lb)ctx.drawImage(lb,0,0,15,15,-7.5*PX,-7.5*PX,15*PX,15*PX);else ctx.drawImage(bowImg,0,0,8,15,-4*PX,-7.5*PX,8*PX,15*PX);ctx.restore();
 }
 function drawGun(o,h,lift){
  if(!imOk(revImg))return;
@@ -1124,11 +1126,12 @@ function drawArrowOne(r,d,t){
    if(r.kd==='orb'){if(!(orbImg.complete&&orbImg.naturalWidth))return;
    const S=(3.2+.6*(r.bm||0))*(1+.06*Math.sin(t/70));ctx.save();ctx.translate(r.x+Math.cos(r.a)*d,r.y+Math.sin(r.a)*d*.8-30);ctx.shadowColor='#6f8fff';ctx.shadowBlur=16;
    ctx.drawImage(orbImg,0,0,15,15,-7.5*S,-7.5*S,15*S,15*S);ctx.restore();return}
-  if(!(arrowImg.complete&&arrowImg.naturalWidth))return;
+  const ask=skOf(others.get(r.by)),aL=ask&&ask.ar&&imOk(ask.ar)?ask.ar:null;
+  if(!aL&&!(arrowImg.complete&&arrowImg.naturalWidth))return;
   const dd=d+28,th=Math.atan2(.8*Math.sin(r.a),Math.cos(r.a));
   ctx.save();ctx.translate(r.x+Math.cos(r.a)*dd,r.y+Math.sin(r.a)*dd*.8-30);ctx.rotate(th+Math.PI);
-  if(sc>1){ctx.shadowColor='#ffd66b';ctx.shadowBlur=24}
-  ctx.drawImage(arrowImg,0,0,14,3,0,-1.5*PX*sc,14*PX*sc,3*PX*sc);ctx.restore();
+  if(sc>1){ctx.shadowColor=aL?'#ff9a2e':'#ffd66b';ctx.shadowBlur=24}
+  if(aL){ctx.scale(-1,1);ctx.drawImage(aL,0,0,15,15,-15*PX*sc,-7.5*PX*sc,15*PX*sc,15*PX*sc)}else ctx.drawImage(arrowImg,0,0,14,3,0,-1.5*PX*sc,14*PX*sc,3*PX*sc);ctx.restore();
 }
 function drawLB(){
  if(!imOk(lbImg))return;
@@ -1174,14 +1177,14 @@ function drawPlayer(o,isMe){
 function drawPlayerBody(o,isMe){
  const lift=o.su>0?Math.sin((1-Math.min(1,o.su/(o.sMax||1000)))*Math.PI)*55:0;
  const s=Math.sin(o.phase),step=o.moving?s:0,bob=o.moving&&Math.abs(s)>.6?1:0;
- const lL=step>.3?1:0,lR=step<-.3?1:0,tw=o.cls==='Tower'&&!o.skl,w=(tw?30:15)*PX,h=(tw?40:15)*PX,x0=o.x-w/2,yb=o.y-h-lift,sp=o.ut?(o.ut==='i'?tInfImg:tArcImg):tw?towerImg:o.skl&&imOk(skelImg)?skelImg:(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:spriteFor(o.hue,o.cls,o.lf)),whole=(o.skl&&sp===skelImg)||(o.cls==='Reaper'&&!o.skl&&sp===clsImg.Reaper);
+ const lL=step>.3?1:0,lR=step<-.3?1:0,tw=o.cls==='Tower'&&!o.skl,us=unitSkin(o),ush=us&&imOk(o.ut==='i'?us.ui:us.ua)?(o.ut==='i'?us.ui:us.ua):null,w=(tw?30:15)*PX,h=(tw?40:ush?ush.naturalHeight:15)*PX,x0=o.x-w/2,yb=o.y-h-lift,sp=o.ut?(ush||(o.ut==='i'?tInfImg:tArcImg)):tw?(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:towerImg):o.skl&&imOk(skelImg)?skelImg:(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:spriteFor(o.hue,o.cls,o.lf)),whole=!!ush||(o.skl&&sp===skelImg)||(o.cls==='Reaper'&&!o.skl&&sp===clsImg.Reaper);
  if((o.ut||tw)&&!imOk(sp))return;
  ctx.fillStyle='rgba(30,40,80,.3)';ctx.beginPath();ctx.ellipse(o.x,o.y-2,(tw?46:22)-(bob?2:0),PX*(tw?2.2:1.3),0,0,7);ctx.fill();
  if(o.skl){ctx.save();ctx.strokeStyle=o.so===myId?'#4cd964':'#ff5a4a';ctx.lineWidth=2.5;ctx.beginPath();ctx.ellipse(o.x,o.y-2,26,9,0,0,7);ctx.stroke();ctx.restore()}
  if(o.ut){ctx.save();ctx.strokeStyle=o.ow===myId?'#4cd964':'#ff5a4a';ctx.lineWidth=2.5;ctx.beginPath();ctx.ellipse(o.x,o.y-2,26,9,0,0,7);ctx.stroke();ctx.restore()}
  const _gt=o.gt;if(_gt)tintBegin();
  if(o.gd){const lk=skOf(o);ctx.save();ctx.strokeStyle=lk?'#ff9a2e':'#7fd3ff';ctx.fillStyle=lk?'rgba(255,154,46,.2)':'rgba(127,211,255,.18)';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.5,h*.62,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
- if(o.hs){ctx.save();ctx.strokeStyle='#ffe066';ctx.fillStyle='rgba(255,224,102,.14)';ctx.lineWidth=3;ctx.setLineDash([8,6]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.58,h*.66,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
+ if(o.hs){const lka=skOf(o);ctx.save();ctx.strokeStyle=lka?'#ff9a2e':'#ffe066';ctx.fillStyle=lka?'rgba(255,154,46,.16)':'rgba(255,224,102,.14)';ctx.lineWidth=3;ctx.setLineDash([8,6]);ctx.beginPath();ctx.ellipse(o.x,o.y-h/2-lift,w*.58,h*.66,0,0,7);ctx.fill();ctx.stroke();ctx.restore()}
  if(o.cls==='Shielder'){const aa=o.da||0,wd=SHIELD_SPAN/2;ctx.save();ctx.translate(o.x,o.y-4);ctx.scale(1,.8);
   ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,64,aa-wd,aa+wd);ctx.closePath();
   ctx.fillStyle=o.hn?'rgba(255,214,107,.28)':'rgba(255,214,107,.12)';ctx.fill();ctx.lineWidth=2;ctx.strokeStyle=o.hn?'rgba(255,230,140,.95)':'rgba(255,214,107,.5)';ctx.stroke();ctx.restore()}
@@ -1249,7 +1252,7 @@ function drawPlayerBody(o,isMe){
  if(o.rl){ctx.font="bold 13px 'Galmuri11',system-ui,sans-serif";ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(10,20,50,.9)';ctx.fillStyle='#ffd66b';ctx.strokeText('재장전…',o.x,o.y+(phase==='round'&&o.mh?32:20));ctx.fillText('재장전…',o.x,o.y+(phase==='round'&&o.mh?32:20))}
  if(o.chg>=0){const bw=46,bx=o.x-bw/2,by=o.y+(phase==='round'&&o.mh?20:8);
   ctx.fillStyle='rgba(10,20,50,.85)';ctx.fillRect(bx-2,by-2,bw+4,8);
-  ctx.fillStyle=o.chg>=1&&Math.sin(performance.now()/60)>0?'#fff':'#ffd66b';ctx.fillRect(bx,by,bw*o.chg,4)}
+  ctx.fillStyle=o.chg>=1&&Math.sin(performance.now()/60)>0?'#fff':skOf(o)?'#ff9a2e':'#ffd66b';ctx.fillRect(bx,by,bw*o.chg,4)}
 }
 function drawDash(f,k){
  ctx.save();ctx.globalAlpha=(1-k)*.85;ctx.lineCap='round';
