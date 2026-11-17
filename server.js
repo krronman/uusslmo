@@ -181,7 +181,7 @@ async function awardGold(p, n) {
 }
 
 // ---- shop / skins ----
-const SKINS = { LightKnight: { cls: 'Knight', name: '라이트 나이트 스킨', price: 200 } };
+const SKINS = { LightKnight: { cls: 'Knight', name: '라이트 나이트 스킨', price: 200 }, ChessTower: { cls: 'Tower', name: '체스 타워 스킨', price: 150 }, LightArcher: { cls: 'Archer', name: '라이트 아처 스킨', price: 200 } };
 const SKIN_ORDER = Object.keys(SKINS);
 let shopPrices = {};
 const priceOf = id => Number.isInteger(shopPrices[id]) ? shopPrices[id] : SKINS[id].price;
@@ -304,10 +304,10 @@ const ASSASSIN = {
 };
 const GUMIHO = {
   atk: { range: 3.5 * RADPX, speed: 1020, radius: 30 },
-  fire: { chance: 0.70, max: 5, pick: 55, lift: 25 },
+  fire: { chance: 1.0, max: 5, pick: 55, lift: 25 },
   eff: { dmg: 120, ms: 2000, radius: 2 * RADPX },
-  Q: { cd: 8000 },
-  E: { cd: 15000, pullMs: 500, dmg: 120, rad: 0.6 * RADPX },
+  Q: { cd: 10000 },
+  E: { cd: 12000, pullMs: 500, dmg: 60, rad: 0.6 * RADPX },
   R: { cd: 25000, radius: 2.5 * RADPX, ms: 2500, speed: 0.7, stop: 45 }
 };
 const BURN = { tick: 35, tickMs: 1000 };
@@ -2159,7 +2159,7 @@ setInterval(() => {
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);
   }
   for (const u of units.values()) {
-    const e = { id: u.id, name: '', hue: 0, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, f: u.face, a: Math.round(u.aim * 100) / 100, m: u.moving ? 1 : 0, c: u.cls, ut: u.ut, ow: u.owner, r: 0, o: 1,
+    const e = { id: u.id, name: '', hue: 0, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, f: u.face, a: Math.round(u.aim * 100) / 100, m: u.moving ? 1 : 0, c: u.cls, ut: u.ut, ow: u.owner, sn: players.has(u.owner) ? skinOf(players.get(u.owner)) : 0, r: 0, o: 1,
       hp: Math.max(0, Math.round(u.hp)), mh: u.mh, su: Math.max(0, u.stunUntil - now), sl: now < u.slowUntil ? 1 : 0, kb: now < u.kbUntil ? 1 : 0 };
     list.push(e); hidden.push(e);
   }
