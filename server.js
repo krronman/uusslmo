@@ -106,9 +106,11 @@ function startRound() {
     }
   }
   phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); soulOrbs.clear(); balls.length = 0;
-  parts.forEach((p, i) => {
-    let a = -Math.PI / 2 + i * 2 * Math.PI / parts.length;
-    if (gameMode !== 'ffa') { const side = parts.filter(q => q.team === p.team); a = (p.team === 1 ? Math.PI : 0) + (side.indexOf(p) - (side.length - 1) / 2) * 0.45; }
+  const order = parts.slice(); for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  const rot = Math.random() * Math.PI * 2;
+  order.forEach((p, i) => {
+    let a = rot + i * 2 * Math.PI / order.length;
+    if (gameMode !== 'ffa') { const side = order.filter(q => q.team === p.team); a = (p.team === 1 ? Math.PI : 0) + (side.indexOf(p) - (side.length - 1) / 2) * 0.45; }
     p.lx = p.x; p.ly = p.y;
     p.x = CX + Math.cos(a) * RX * 0.92; p.y = CY + Math.sin(a) * RY * 0.92;
     p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0; p.hist = [];
@@ -134,8 +136,8 @@ function checkRoundEnd() {
   endRound(winner);
 }
 function endRound(winner, tied, teamWin, draw) {
-  const tw = teamWin ? [...players.values()].filter(p => p.inRound && p.team === teamWin && p.user && !p.obs) : [];
-  const gw = !tied && winner && winner.user && !winner.obs && winner.inRound ? winner : null;
+  const tw = teamWin ? [...players.values()].filter(p => p.inRound && p.team === teamWin && (p.user || p.guest) && !p.obs) : [];
+  const gw = !tied && winner && (winner.user || winner.guest) && !winner.obs && winner.inRound ? winner : null;
   phase = 'lobby'; arrows.clear(); bombs.clear(); units.clear(); soulOrbs.clear(); balls.length = 0;
   for (const q of [...players.values()]) if (q.skel) { players.delete(q.id); broadcast({ t: 'leave', id: q.id }); }
   for (const p of players.values()) {
@@ -173,6 +175,7 @@ function addWin(p) {
 // ---- gold ----
 const WIN_GOLD = 5;
 async function awardGold(p, n) {
+  if (p.guest) { p.gold = (p.gold || 0) + n; send(p.ws, { t: 'gold', g: p.gold, d: n }); return; }
   try {
     p.gold = (p.gold || 0) + n; send(p.ws, { t: 'gold', g: p.gold, d: n });
     const v = Number(await db.incrby('gold:' + p.user, n));
@@ -181,7 +184,7 @@ async function awardGold(p, n) {
 }
 
 // ---- shop / skins ----
-const SKINS = { LightKnight: { cls: 'Knight', name: '라이트 나이트 스킨', price: 200 }, ChessTower: { cls: 'Tower', name: '체스 타워 스킨', price: 150 }, LightArcher: { cls: 'Archer', name: '라이트 아처 스킨', price: 200 } };
+const SKINS = { LightKnight: { cls: 'Knight', name: '라이트 나이트 스킨', price: 200 }, LightArcher: { cls: 'Archer', name: '라이트 아처 스킨', price: 200 }, ChessTower: { cls: 'Tower', name: '체스 타워 스킨', price: 150 } };
 const SKIN_ORDER = Object.keys(SKINS);
 let shopPrices = {};
 const priceOf = id => Number.isInteger(shopPrices[id]) ? shopPrices[id] : SKINS[id].price;
@@ -202,17 +205,17 @@ async function loadSkins(id) {
 }
 async function equipSkin(p, id) {
   const now = Date.now();
-  if (!p.user || p.obs || p.skinsErr || now - (p.lastSkEq || 0) < 300) return sendSinfo(p);
+  if ((!p.user && !p.guest) || p.obs || p.skinsErr || now - (p.lastSkEq || 0) < 300) return sendSinfo(p);
   if (typeof id !== 'string' || !SKINS[id] || !p.skins.includes(id)) return sendSinfo(p);
   p.lastSkEq = now;
   const c = SKINS[id].cls;
   if (p.eqs[c] === id) delete p.eqs[c]; else p.eqs[c] = id;
-  await db.set('eqskin:' + p.user, JSON.stringify(p.eqs));
+  if (!p.guest) await db.set('eqskin:' + p.user, JSON.stringify(p.eqs));
   sendSinfo(p);
 }
 async function buySkin(p, id, expect) {
   const reply = (ok, msg) => send(p.ws, { t: 'buy', ok, msg, id });
-  if (!p.user || p.obs) return;
+  if ((!p.user && !p.guest) || p.obs) return;
   if (p.buying) return reply(0, '처리 중입니다. 잠시만 기다려 주세요.');
   if (typeof id !== 'string' || !SKINS[id]) return reply(0, '존재하지 않는 상품입니다.');
   if (p.skinsErr) return reply(0, '일시적인 오류입니다. 다시 로그인해 주세요.');
@@ -220,6 +223,12 @@ async function buySkin(p, id, expect) {
   const price = priceOf(id);
   if (expect !== price) { sendShop(p.ws); return reply(0, '가격이 변경되었습니다. 다시 확인해 주세요.'); }
   p.buying = true; let charged = false;
+  if (p.guest) {
+    if ((p.gold || 0) < price) { p.buying = false; return reply(0, '골드가 부족합니다.'); }
+    p.gold -= price; p.skins = p.skins.concat(id); p.buying = false;
+    send(p.ws, { t: 'gold', g: p.gold }); sendSinfo(p);
+    return reply(1, SKINS[id].name + ' 구매 완료!');
+  }
   try {
     const v = Number(await db.incrby('gold:' + p.user, -price));
     if (!Number.isFinite(v)) throw new Error('bad balance');
@@ -256,7 +265,7 @@ const CLASS_STATS = {
   Archer: { hp: 1000, dmg: 180, reduce: 0, atkCd: 800 },
   Shielder: { hp: 1600, dmg: 80, reduce: 0, atkCd: 800 },
   Assassin: { hp: 1000, dmg: 135, reduce: 0, atkCd: 600 },
-  Gumiho: { hp: 1100, dmg: 130, reduce: 0, atkCd: 700 },
+  Gumiho: { hp: 1100, dmg: 120, reduce: 0, atkCd: 700 },
   Gambler: { hp: 1000, dmg: 180, reduce: 0, atkCd: 600 },
   SwordMaster: { hp: 1200, dmg: 140, reduce: 0, atkCd: 400 },
   Tower: { hp: 2200, dmg: 100, reduce: 0, atkCd: 2000 },
@@ -273,7 +282,7 @@ const ARROW = { speed: 800, range: 5 * RADPX, radius: 28 };
 const ATKR = 0.5 * RADPX;
 const ARCHER = {
   charge: { maxMs: 2000, min: 0.5, max: 1.5 },
-  Q: { cd: 11000, arrows: 7, step: 10 * RAD, dmg: 130, invis: 1500 },
+  Q: { cd: 11000, arrows: 7, step: 10 * RAD, dmg: 115, invis: 1500 },
   E: { cd: 15000, dur: 4000, chargeMul: 0 },
   R: { cd: 25000, dmg: 380, stun: 1000, scale: 8, radius: 90 }
 };
@@ -307,7 +316,7 @@ const GUMIHO = {
   fire: { chance: 1.0, max: 5, pick: 55, lift: 25 },
   eff: { dmg: 120, ms: 2000, radius: 2 * RADPX },
   Q: { cd: 10000 },
-  E: { cd: 12000, pullMs: 500, dmg: 60, rad: 0.6 * RADPX },
+  E: { cd: 12000, pullMs: 500, dmg: 55, rad: 0.6 * RADPX },
   R: { cd: 25000, radius: 2.5 * RADPX, ms: 2500, speed: 0.7, stop: 45 }
 };
 const BURN = { tick: 35, tickMs: 1000 };
@@ -487,7 +496,7 @@ function killPlayer(p) {
   if (was) broadcast({ t: 'kill', k: k ? k.id : 0, kn: k ? k.name : '', kc: k ? k.cls : '', v: p.id, vn: p.name, vc: p.cls });
 }
 const bRage = p => p.cls === 'Berserker' && p.role === 1 && p.hp > 0 && p.hp <= p.mh * 0.5;
-const berserkInc = (a, src, now) => a.cls !== 'Berserker' ? 0 : (bRage(a) ? 1 : 0) + (src.basic && now < (a.bRUntil || 0) ? 0.3 : 0);
+const berserkInc = (a, src, now) => a.cls !== 'Berserker' ? 0 : (bRage(a) ? 0.85 : 0) + (now < (a.bRUntil || 0) ? 0.3 : 0);
 const axeHeld = p => !p.axes || !p.axes.length || p.axes.some(a => a.s === 0);
 function shieldBlocks(t, src) {
   if (t.cls !== 'Shielder' || !src) return false;
@@ -1037,7 +1046,7 @@ function stepIns(p, now) {
   }
 }
 function stepFinancier(p, now) {
-  for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.mul; p.hp *= FIN.passive.mul; p.fMul += FIN.passive.mul - 1; p.fDmg = 90 * p.fMul; }
+  for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.mul; p.hp *= FIN.passive.mul; p.fMul *= FIN.passive.mul; p.fDmg = 90 * p.fMul; }
   stepIns(p, now);
   if (p.depUntil) {
     while (p.depNext <= p.depUntil && now >= p.depNext) { const h0 = p.hp; p.hp = Math.max(1, p.hp - FIN.R.drain); if (p.insUntil) p.insAcc += h0 - p.hp; p.depNext += 1000; }
@@ -1339,9 +1348,9 @@ function gamblerSkill(p, k, m, now) {
 // ---- Celestial ----
 const CEL = {
   cap: 300, store: 0.7, heal: 0.1,
-  Q: { cd: 5000, r: 2 * RADPX, delay: 700, dmg: 400, back: 0.2 },
+  Q: { cd: 7000, r: 2 * RADPX, delay: 700, dmg: 400, back: 0.2 },
   E: { cd: 1000 },
-  R: { cd: 25000, delay: 0, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.6, burstR: RADPX, burst: 300 }
+  R: { cd: 25000, delay: 0, r: 3 * RADPX, ms: 4000, tickMs: 250, tick: 10, pull: 0.55, burstR: RADPX, burst: 300 }
 };
 function celestialAttack(p, m, now) {
   if (now < p.atkReady) return;
@@ -1445,8 +1454,10 @@ const GCOPY = [
   { cls: 'SwordMaster', k: 'Q', n: '검기' }, { cls: 'SwordMaster', k: 'E', n: '세이브' },
   { cls: 'Tower', k: 'Q', n: '포격' }, { cls: 'Tower', k: 'E', n: '수리' },
   { cls: 'Financier', k: 'E', n: '보험' },
-  { cls: 'Celestial', k: 'Q', n: '행성 폭발' }
+  { cls: 'Celestial', k: 'Q', n: '행성 폭발' },
+  { cls: 'Berserker', k: 'Q', n: '도끼' }, { cls: 'Berserker', k: 'E', n: '대지 강타' }
 ];
+const GCOPY_BAN = new Set(['Celestial:E', 'Reaper:E']);
 function randTint() {
   const h = Math.random() * 360, s = 0.85, l = 0.55, a = s * Math.min(l, 1 - l);
   const f = n => { const k = (n + h / 30) % 12; return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0'); };
@@ -1489,6 +1500,10 @@ function castCopied(p, e, m, now) {
         broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 0.7 * RADPX, c: '#8fe3ff', dur: 450 });
         gamerStrike(p, o2, 0, now, L.ranged, Math.round(L.dmg * SM.E.mult), 'atk');
       } else fxTxt(p.x, p.y, '직전 공격 없음', '#cfcfcf');
+    } else if (e.cls === 'Berserker') {
+      fired = true;
+      if (e.k === 'Q') spawnArrow(p, originOf(p, m), lagOf(m), now, { a: p.aim, dmg: BERS.Q.dmg, spd: BERS.Q.spd, range: BERS.Q.range, radius: BERS.Q.hit, pierce: true, kind: 'axe', type: 'phys' });
+      else berserkSlam(p, { x: p.x, y: p.y }, now);
     } else { GFN[e.cls](p, e.k, m, now); fired = p['cd' + e.k] > 0; }
   } finally { curTint = null; }
   p.gPierce = false; p.lf = lf0;
@@ -1516,7 +1531,7 @@ function gamerSkill(p, k, m, now) {
       checkRoundEnd();
       return;
     }
-    const pool = GCOPY.slice();
+    const pool = GCOPY.filter(e => !GCOPY_BAN.has(e.cls + ':' + e.k));
     const got = [];
     for (let i = 0, n = Math.min(p.gSlots, pool.length); i < n; i++) got.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
     p.gCopy = got; p.gBig = p.gSlots > 1;
@@ -1730,11 +1745,33 @@ async function newSession(id) {
   await db.setex('sess:' + sha(token), SESSION_TTL, id);
   return token;
 }
+async function guestLogin(p, m) {
+  const nick = clean(m.name, 14), lc = nick.toLowerCase();
+  if (nick.length < 2) return authFail(p, '닉네임은 2~14자로 입력해 주세요.');
+  if (['system', 'admin', 'server'].includes(lc)) return authFail(p, '사용할 수 없는 닉네임입니다.');
+  let taken = false;
+  try { taken = !!(await db.get('nick:' + lc)); } catch (e) { return authFail(p, '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'); }
+  if (taken) return authFail(p, '이미 가입된 닉네임입니다.');
+  for (const q of players.values()) if (q !== p && q.joined && !q.skel && String(q.name).toLowerCase() === lc) return authFail(p, '이미 사용 중인 닉네임입니다.');
+  if (p.user || p.guest || p.joined) return;
+  p.guest = true; p.user = null; p.name = nick;
+  p.titles = []; p.eq = null; p.gold = 0; p.skins = []; p.eqs = {}; p.skinsErr = false;
+  p.joined = true; if (phase === 'round') p.role = 2;
+  send(p.ws, { t: 'auth', ok: 1, name: nick, token: '', admin: 0, guest: 1 });
+  sendTinfo(p); send(p.ws, { t: 'gold', g: 0 }); sendSinfo(p); sendShop(p.ws); sendWins(p);
+  const all = {};
+  for (const q of players.values()) if (q.joined && q !== p) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
+  send(p.ws, { t: 'ttls', m: all });
+}
 async function handleAuth(p, m, ip) {
-  if (p.user || p.authBusy) return;
+  if (p.user || p.guest || p.authBusy) return;
   p.authBusy = true;
   try {
     if (!rateOk('a:' + ip, 40, 60000)) return authFail(p, '시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.');
+    if (m.t === 'guest') {
+      if (!rateOk('g:' + ip, 30, 3600 * 1000)) return authFail(p, '입장 시도가 너무 많습니다. 나중에 다시 시도해 주세요.');
+      return await guestLogin(p, m);
+    }
     if (m.t === 'resume') {
       const tk = m.token;
       const id = isToken(tk) ? await db.get('sess:' + sha(tk)) : null;
@@ -1782,9 +1819,17 @@ function mkPlayer(id, ws) {
 // ---- Berserker ----
 const BERS = {
   Q: { cd: 1000, range: 4 * RADPX, spd: 900, hit: 45, dmg: 250, pick: 0.6 * RADPX },
-  E: { cd: 15000, r: 1.5 * RADPX, dmg: 100, stun: 1000, cut: 2000 },
+  E: { cd: 15000, r: 1.5 * RADPX, dmg: 100, stun: 1000, cut: 1000 },
   R: { cd: 25000, ms: 10000 }
 };
+function berserkSlam(p, c, now) {
+  broadcast({ t: 'fx', type: 'disc', x: c.x, y: c.y, r: BERS.E.r, c: 'rgba(255,120,50,.35)', s: '#ff9a5a', dur: 450 });
+  for (const t of targetsOf(p)) {
+    if (Math.hypot(t.x - c.x, (t.y - c.y) / 0.8) > BERS.E.r + (t.hr || 0)) continue;
+    dmgTo(t, BERS.E.dmg, now, { x: c.x, y: c.y, by: p, type: 'phys' });
+    if (t.role === 1 && !t.unit) t.stunUntil = Math.max(t.stunUntil || 0, now + BERS.E.stun);
+  }
+}
 function berserkerSkill(p, k, m, now) {
   const cd = ms => { p['cd' + k] = now + ms; send(p.ws, { t: 'cd', k, ms }); };
   if (!p.axes || !p.axes.length) return;
@@ -1797,12 +1842,7 @@ function berserkerSkill(p, k, m, now) {
     cd(BERS.E.cd);
     for (const ax of p.axes) {
       const c = ax.s === 0 ? { x: p.x, y: p.y } : { x: ax.x, y: ax.y };
-      broadcast({ t: 'fx', type: 'disc', x: c.x, y: c.y, r: BERS.E.r, c: 'rgba(255,120,50,.35)', s: '#ff9a5a', dur: 450 });
-      for (const t of targetsOf(p)) {
-        if (Math.hypot(t.x - c.x, (t.y - c.y) / 0.8) > BERS.E.r + (t.hr || 0)) continue;
-        dmgTo(t, BERS.E.dmg, now, { x: c.x, y: c.y, by: p, type: 'phys' });
-        if (t.role === 1 && !t.unit) t.stunUntil = Math.max(t.stunUntil || 0, now + BERS.E.stun);
-      }
+      berserkSlam(p, c, now);
     }
     checkRoundEnd();
   } else {
@@ -1812,10 +1852,23 @@ function berserkerSkill(p, k, m, now) {
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.3 * RADPX, c: '#ff5a3a', dur: 600 });
   }
 }
+// ---- buff duration bars ----
+const BUFFS = ['hasteUntil', 'invisUntil', 'hornUntil', 'guardUntil', 'libUntil', 'insUntil', 'depUntil', 'towerRUntil', 'smAwkUntil', 'gbUntil', 'gbPlusUntil', 'fastUntil', 'asUntil', 'gCheatUntil', 'bRUntil'];
+function buffsOf(p, now) {
+  if (p.role !== 1 || phase !== 'round') return 0;
+  const bt = p._bt || (p._bt = {}); let out = null;
+  for (let i = 0; i < BUFFS.length; i++) {
+    const f = BUFFS[i], u = p[f] || 0, rem = u - now;
+    if (rem <= 0 || rem > 60000) { if (bt[f]) delete bt[f]; continue; }
+    let b = bt[f]; if (!b || b.u !== u) b = bt[f] = { u, t: rem };
+    (out || (out = [])).push([Math.round(rem), Math.round(b.t), i]);
+  }
+  return out || 0;
+}
 function stepBerserker(dt, now) {
   for (const p of players.values()) {
     if (p.cls !== 'Berserker' || !p.axes) continue;
-    if (p.bRUntil && now >= p.bRUntil) { p.bRUntil = 0; for (const a of p.axes.splice(1)) if (a.s === 1) broadcast({ t: 'arrowEnd', id: a.vid }); }
+    if (p.bRUntil && now >= p.bRUntil) { p.bRUntil = 0; if (p.axes.length > 1) { const keep = p.axes.find(a => a.s === 0) || p.axes.find(a => a.s === 2) || p.axes[0]; for (const a of p.axes) if (a !== keep && a.s === 1) broadcast({ t: 'arrowEnd', id: a.vid }); p.axes = [keep]; } }
     if (p.role !== 1 || phase !== 'round') continue;
     let any = false;
     for (const a of p.axes) {
@@ -1878,7 +1931,7 @@ function summonSkeleton(p, cls, now, big, hp, pw) {
   sk.lx = sk.x; sk.ly = sk.y;
   resetCombat(sk);
   sk.pw = pw;
-  if (big) { sk.sz = 1.5; sk.mh = sk.hp = Math.round(hp); sk.hr = 18; sk.noR = false; }
+  if (big) { sk.sz = 1.5; sk.mh = sk.hp = Math.round(hp); sk.hr = 18; sk.noR = true; }
   else { sk.sz = 1; sk.mh = sk.hp = Math.round(sk.hp * pw); sk.hr = 0; sk.noR = true; }
   sk.atkReady = now + 600;
   players.set(id, sk);
@@ -1954,7 +2007,7 @@ function botTick(now) {
     let ax = vx, ay = vy;
     if (iq >= 6) { const v = velOf(foe, now), lt = Math.min(0.35, d / 800) * (iq - 5) / 5; ax += v.x * lt; ay += v.y / 0.8 * lt; }
     setAim(p, Math.atan2(ay, ax) + (Math.random() - 0.5) * (10 - iq) * 0.05);
-    if (d <= R) {
+    if (iq > 0 && d <= R) {
       if (p.cls === 'Archer' || p.cls === 'Reaper') {
         if (!p.chargeStart) { if (now >= p.atkReady - 60 && canAct(p, now)) { p.chargeStart = now; p.botCh = 300 + iq * 150 + Math.random() * 300; } }
         else if (now - p.chargeStart >= p.botCh) doAttack(p, {});
@@ -1963,7 +2016,7 @@ function botTick(now) {
     if (iq > 0 && now >= (p.botSk || 0)) {
       p.botSk = now + 3600 - iq * 300 + Math.random() * (2400 - iq * 180);
       if (Math.random() < 0.35 + iq * 0.065) {
-        const ks = ['Q', 'E', 'R'].filter(k => now >= p['cd' + k] && !(k === 'R' && p.noR) && !(k === 'Q' && p.cls === 'Reaper'));
+        const ks = ['Q', 'E', 'R'].filter(k => now >= p['cd' + k] && !(k === 'R' && (p.noR || p.skel)) && !(k === 'Q' && p.cls === 'Reaper'));
         if (ks.length && d <= Math.max(R * 1.6, 260)) doSkill(p, ks[Math.floor(Math.random() * ks.length)], { cx: foe.x, cy: foe.y - 24 });
       }
     }
@@ -1983,7 +2036,7 @@ wss.on('connection', (ws, req) => {
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     if (!m || typeof m !== 'object') return;
-    if (m.t === 'signup' || m.t === 'login' || m.t === 'resume') {
+    if (m.t === 'signup' || m.t === 'login' || m.t === 'resume' || m.t === 'guest') {
       handleAuth(p, m, ip).catch(err => { console.error('auth error:', err.message); authFail(p, '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'); });
       return;
     }
@@ -2154,9 +2207,9 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now) };
     list.push(e);
-    hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0 }) : e);
+    hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0, bu: 0 }) : e);
   }
   for (const u of units.values()) {
     const e = { id: u.id, name: '', hue: 0, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, f: u.face, a: Math.round(u.aim * 100) / 100, m: u.moving ? 1 : 0, c: u.cls, ut: u.ut, ow: u.owner, sn: players.has(u.owner) ? skinOf(players.get(u.owner)) : 0, r: 0, o: 1,
