@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8' };
 
-const ARENAS = [{ CX: 630, CY: 640, RX: 410, RY: 335 }, { CX: 630, CY: 600, RX: 460, RY: 370 }];
+const ARENAS = [{ CX: 1260, CY: 1280, RX: 820, RY: 670 }, { CX: 1260, CY: 1200, RX: 920, RY: 740 }];
 let mapId = 1, { CX, CY, RX, RY } = ARENAS[1];
 const SPEED = 300, TICK = 30, MAX_PLAYERS = 50;
 
@@ -277,7 +277,7 @@ const CLASS_STATS = {
 const statsBase = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : p.cls === 'Berserker' && !axeHeld(p) ? Object.assign({}, CLASS_STATS.Berserker, { dmg: 50 }) : CLASS_STATS[p.cls] || BASE;
 const statsOf = p => { const s = statsBase(p); return p.pw && p.pw !== 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
 const RADPX = 112.5;
-const MAP = 1254;
+const MAP = 2508;
 const ARROW = { speed: 800, range: 5 * RADPX, radius: 28 };
 const ATKR = 0.5 * RADPX;
 const ARCHER = {
@@ -479,7 +479,7 @@ function resetCombat(p) {
   if (p.buy) send(p.ws, { t: 'stk', id: 0 }); p.buy = 0;
   p.hr = p.cls === 'Tower' ? TOWER.hr : 0; p.towerRUntil = 0; p.mercNext = Date.now() + TOWER.merc.ms;
   for (const u of units.values()) if (u.owner === p.id) units.delete(u.id);
-  p.smN = 0; p.smAura = false; p.smAwkUntil = 0; p.smLast = null; p.smSaved = false;
+  p.smN = 0; p.smAura = false; p.smAwkUntil = 0; p.smLast = null; p.smSaved = false; p.bleedUntil = 0; p.bleedNext = 0; p.bleedBy = 0;
   p.ch = null; p.chi = 0; p.reloadUntil = 0; p.myTurn = false; p.gbUntil = p.gbPlusUntil = p.fastUntil = 0;
   p.dim = p.nextBonus = 0; p.celKey = ''; for (const arr of [planets, galaxies]) for (let i = arr.length - 1; i >= 0; i--) if (arr[i].owner === p.id) arr.splice(i, 1);
   p.gCopy = []; p.gSlots = 1; p.gBig = false; p.gLast = null; p.gNext = 0; p.gCheatUntil = p.gtUntil = 0; p.gCdPend = 0; p.gtint = ''; p.gInvis = p.gPierce = false; send(p.ws, { t: 'gc', l: [], s: 1, ch: 0 });
@@ -514,7 +514,7 @@ function dmgTo(t, amount, now, src) {
   if (inSanct(t, now)) return;
   const atk0 = src && (src.by || src.kill);
   let incA = 0;
-  if (atk0) { if (atk0.pw && atk0.pw !== 1) incA += atk0.pw - 1; incA += berserkInc(atk0, src, now); }
+  if (atk0 && !(src && src.fixed)) { if (atk0.pw && atk0.pw !== 1) incA += atk0.pw - 1; incA += berserkInc(atk0, src, now); }
   const amount0 = amount; amount = amount0 * (1 + incA);
   const type = (src && src.type) || (src && src.by && (src.by.cls === 'Assassin' || src.by.gPierce) ? 'pierce' : 'phys');
   const pierce = type === 'pierce', magic = type === 'magic';
@@ -531,7 +531,7 @@ function dmgTo(t, amount, now, src) {
   let incT = 0;
   if (now < t.markUntil) incT += ASSASSIN.Q.mark;
   if (now < t.dmUntil) { const mo = players.get(t.dmBy); incT += mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp; }
-  let d = (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount0 * (1 + incA + incT) * (1 - Math.min(cut, 0.95))));
+  let d = (src && src.fixed) ? Math.round(amount0) : (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount0 * (1 + incA + incT) * (1 - Math.min(cut, 0.95))));
   t.hp -= d;
   if (t.cls === 'Celestial' && t.role === 1 && d > 0) { t.dim = Math.min(CEL.cap, (t.dim || 0) + d * CEL.store); if (t.hp > 0) t.hp = Math.min(t.mh, t.hp + d * CEL.heal); }
   if (now < (t.insUntil || 0)) t.insAcc += d;
@@ -1852,8 +1852,25 @@ function berserkerSkill(p, k, m, now) {
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.3 * RADPX, c: '#ff5a3a', dur: 600 });
   }
 }
+// ---- bleeding (public status effect) ----
+const BLEED = { dmg: 50, ms: 1000 };
+function applyBleed(t, ms, now, src) {
+  if (!t || t.unit || t.role !== 1 || phase !== 'round') return;
+  if (!(t.bleedUntil > now)) t.bleedNext = now + BLEED.ms;
+  t.bleedUntil = Math.max(t.bleedUntil || 0, now + ms); t.bleedBy = src ? src.id : 0;
+}
+function stepBleed(p, now) {
+  if (!p.bleedUntil) return;
+  if (p.role !== 1 || phase !== 'round') { p.bleedUntil = 0; return; }
+  while (p.bleedUntil && p.bleedNext <= p.bleedUntil && now >= p.bleedNext) {
+    p.bleedNext += BLEED.ms;
+    dmgTo(p, BLEED.dmg, now, { kill: players.get(p.bleedBy) || null, type: 'pierce', fixed: true });
+    if (p.role !== 1) { p.bleedUntil = 0; return; }
+  }
+  if (p.bleedUntil && now >= p.bleedUntil) p.bleedUntil = 0;
+}
 // ---- buff duration bars ----
-const BUFFS = ['hasteUntil', 'invisUntil', 'hornUntil', 'guardUntil', 'libUntil', 'insUntil', 'depUntil', 'towerRUntil', 'smAwkUntil', 'gbUntil', 'gbPlusUntil', 'fastUntil', 'asUntil', 'gCheatUntil', 'bRUntil'];
+const BUFFS = ['hasteUntil', 'invisUntil', 'hornUntil', 'guardUntil', 'libUntil', 'insUntil', 'depUntil', 'towerRUntil', 'smAwkUntil', 'gbUntil', 'gbPlusUntil', 'fastUntil', 'asUntil', 'gCheatUntil', 'bRUntil', 'bleedUntil'];
 function buffsOf(p, now) {
   if (p.role !== 1 || phase !== 'round') return 0;
   const bt = p._bt || (p._bt = {}); let out = null;
@@ -2065,6 +2082,9 @@ wss.on('connection', (ws, req) => {
     } else if (m.t === 'team') {
       const q = players.get(Number(m.id));
       if (p.user === ADMIN_ID && gameMode === 'team' && phase === 'lobby' && q && q.joined && !q.obs && [0, 1, 2].includes(m.team)) { q.team = m.team; sysChat(q.name + (q.team ? ' joined the ' + TEAM_NAME[q.team] + ' team.' : ' left their team.')); }
+    } else if (m.t === 'bleed') {
+      const q = players.get(Number(m.id));
+      if (p.user === ADMIN_ID && phase === 'round' && q && q.joined && q.role === 1) applyBleed(q, 5000, Date.now(), null);
     } else if (m.t === 'boss') {
       const q = players.get(Number(m.id));
       if (p.user === ADMIN_ID && gameMode === 'boss' && phase === 'lobby' && q && q.joined && !q.obs && !q.skel) { bossId = bossId === q.id ? 0 : q.id; sysChat(bossId ? q.name + ' is the Boss.' : 'Boss designation cleared.'); }
@@ -2173,6 +2193,7 @@ setInterval(() => {
       p.mercNext = now + (now < p.towerRUntil ? TOWER.merc.msAwk : TOWER.merc.ms);
     }
     if (p.cls === 'Financier' && p.role === 1 && phase === 'round') stepFinancier(p, now);
+    if (p.bleedUntil) stepBleed(p, now);
     if (now < p.kbUntil && p.role === 1) {
       p.x += p.kbx * dt; p.y += p.kby * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
@@ -2207,9 +2228,9 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now) };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0 };
     list.push(e);
-    hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0, bu: 0 }) : e);
+    hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0, bu: 0, bd: 0 }) : e);
   }
   for (const u of units.values()) {
     const e = { id: u.id, name: '', hue: 0, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, f: u.face, a: Math.round(u.aim * 100) / 100, m: u.moving ? 1 : 0, c: u.cls, ut: u.ut, ow: u.owner, sn: players.has(u.owner) ? skinOf(players.get(u.owner)) : 0, r: 0, o: 1,
