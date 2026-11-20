@@ -272,9 +272,10 @@ const CLASS_STATS = {
   Gamer: { hp: 1000, dmg: 150, reduce: 0, atkCd: 700 },
   Celestial: { hp: 1500, dmg: 100, reduce: 0, atkCd: 800 },
   Reaper: { hp: 1200, dmg: 50, reduce: 0, atkCd: 700 },
-  Berserker: { hp: 1200, dmg: 170, reduce: 0, atkCd: 900 }
+  Berserker: { hp: 1200, dmg: 170, reduce: 0, atkCd: 900 },
+  PlumBlossom: { hp: 1000, dmg: 90, reduce: 0, atkCd: 800 }
 };
-const statsBase = p => p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : p.cls === 'Berserker' && !axeHeld(p) ? Object.assign({}, CLASS_STATS.Berserker, { dmg: 50 }) : CLASS_STATS[p.cls] || BASE;
+const statsBase = p => p.cls === 'PlumBlossom' ? { hp: Math.round(1000 * pbMul(p)), dmg: 90 * pbMul(p), reduce: 0, atkCd: 800 } : p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : p.cls === 'Berserker' && !axeHeld(p) ? Object.assign({}, CLASS_STATS.Berserker, { dmg: 50 }) : CLASS_STATS[p.cls] || BASE;
 const statsOf = p => { const s = statsBase(p); return p.pw && p.pw !== 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
 const RADPX = 112.5;
 const MAP = 2508;
@@ -394,6 +395,7 @@ function endArrow(ar) { arrows.delete(ar.id); broadcast({ t: 'arrowEnd', id: ar.
 function moveArrow(ar, step, time) {
   const nx = ar.x + Math.cos(ar.a) * step, ngy = ar.gy + Math.sin(ar.a) * step;
   const found = [];
+  if (ar.fake) { ar.x = nx; ar.gy = ngy; ar.left -= step; return []; }
   const arOw = players.get(ar.owner), arRoot = arOw ? rootOf(arOw) : ar.owner;
   if (phase === 'round') for (const t of [...players.values(), ...units.values()]) {
     if (t.id === ar.owner || t.owner === ar.owner || !(t.unit || t.joined) || t.role !== 1 || ar.hitIds.has(t.id) || sameTeam(arOw, t) || rootOf(t) === arRoot) continue;
@@ -415,6 +417,7 @@ function arrowHit(ar, t, now) {
   const inDir = ar.a + Math.PI;
   const type = ar.type || (ar.orb ? 'magic' : 'phys');
   if (type === 'phys' && t.cls === 'Shielder' && now < t.hornUntil && shieldBlocks(t, { dir: inDir })) { deflectArrow(ar, t); return true; }
+  if (t.cls === 'PlumBlossom' && now < (t.pbBlockUntil || 0) && pbTryBlock(t, { dir: inDir }, now)) { ar.left = 0; return false; }
   dmgTo(t, ar.hpPct ? ar.dmg + Math.round(t.hp * ar.hpPct) : ar.dmg, now, { dir: inDir, kill: players.get(ar.owner), type });
   if (ar.stun && t.role === 1) t.stunUntil = now + ar.stun;
   if (ar.luc) lucHit(ar, t, now);
@@ -432,7 +435,7 @@ function deflectArrow(ar, t) {
 function spawnArrow(p, o, lag, now, spec) {
   const id = ++arrowSeq;
   const ar = { id, owner: p.id, x: o.x, gy: o.y / 0.8, a: spec.a, dmg: spec.dmg, spd: spec.spd, radius: spec.radius || ARROW.radius, type: spec.type || '', luc: spec.luc || '', kd: spec.kind || 'atk', r0: spec.range || ARROW.range,
-    orb: !!spec.orb, eff: !!spec.eff, boom: spec.boom || 0, pierce: !!spec.pierce, noArena: !!spec.noArena, sc: spec.sc || 1, stun: spec.stun || 0, hpPct: spec.hpPct || 0, hitIds: new Set(), left: spec.range || ARROW.range };
+    orb: !!spec.orb, eff: !!spec.eff, boom: spec.boom || 0, pierce: !!spec.pierce, noArena: !!spec.noArena, sc: spec.sc || 1, stun: spec.stun || 0, hpPct: spec.hpPct || 0, fake: !!spec.fake, hitIds: new Set(), left: spec.range || ARROW.range };
   let adv = 0, ended = false;
   const pending = [];
   const steps = lag > 0 ? Math.ceil(lag / 33) : 0, stepMs = steps ? lag / steps : 0;
@@ -447,11 +450,13 @@ function spawnArrow(p, o, lag, now, spec) {
   for (const t of pending) if (arrowHit(ar, t, now)) { deflected = true; break; }
   if (ended && !deflected) { broadcast({ t: 'arrowEnd', id }); orbLand(ar, pending[0], now); } else arrows.set(id, ar);
   if (pending.length) checkRoundEnd();
+  return id;
 }
 function stepArrows(dt, now) {
   let any = false;
   for (const ar of arrows.values()) {
     const stp = Math.min(ar.spd * dt, ar.left);
+    if (pbWalls.length && !ar.fake && pbArrowWall(ar, ar.x + Math.cos(ar.a) * stp, ar.gy + Math.sin(ar.a) * stp, now)) { endArrow(ar); continue; }
     if (sanctBlocked(ar.owner, ar.x, ar.gy, ar.x + Math.cos(ar.a) * stp, ar.gy + Math.sin(ar.a) * stp, now)) { endArrow(ar); continue; }
     const hits = moveArrow(ar, stp, now);
     let deflected = false;
@@ -467,6 +472,7 @@ function stepArrows(dt, now) {
 function resetCombat(p) {
   p.axes = p.cls === 'Berserker' ? [{ s: 0, x: 0, y: 0, a: 0, d: 0 }] : []; p.bRUntil = 0;
   p.pw = 1; p.bm = 0;
+  p.pbD = p.pbA = p.pbStage = 0; p.pbCd = {}; p.pbCmd = null; p.pbCh = null; p.pbResume = null; p.pbBonus = false; p.pbBn = 0; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = p.pbSlowUntil = 0; p.pbSlowMul = 1; p.pbKey = ''; pbClean(p.id);
   p.lf = ''; p.lPend = p.lUsed = false; p.beam = p.pure = p.sanct = null; p.libUntil = p.dmUntil = 0; p.dmList = [];
   p.mh = p.hp = statsOf(p).hp;
   p.atkReady = p.cdQ = p.cdE = p.cdR = 0;
@@ -512,6 +518,8 @@ function shieldBlocks(t, src) {
 
 function dmgTo(t, amount, now, src) {
   if (inSanct(t, now)) return;
+  if (pbWalls.length && src && src.x !== undefined && pbMeleeWall(t, amount, src, now)) return;
+  if (t.cls === 'PlumBlossom' && now < (t.pbBlockUntil || 0) && pbTryBlock(t, src, now)) return;
   const atk0 = src && (src.by || src.kill);
   let incA = 0;
   if (atk0 && !(src && src.fixed)) { if (atk0.pw && atk0.pw !== 1) incA += atk0.pw - 1; incA += berserkInc(atk0, src, now); }
@@ -533,6 +541,7 @@ function dmgTo(t, amount, now, src) {
   if (now < t.dmUntil) { const mo = players.get(t.dmBy); incT += mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp; }
   let d = (src && src.fixed) ? Math.round(amount0) : (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount0 * (1 + incA + incT) * (1 - Math.min(cut, 0.95))));
   t.hp -= d;
+  if (t.cls === 'PlumBlossom' && t.pbCh && d > 0 && t.pbCh.t !== 7) pbStop(t, now, false);
   if (t.cls === 'Celestial' && t.role === 1 && d > 0) { t.dim = Math.min(CEL.cap, (t.dim || 0) + d * CEL.store); if (t.hp > 0) t.hp = Math.min(t.mh, t.hp + d * CEL.heal); }
   if (now < (t.insUntil || 0)) t.insAcc += d;
   const atkr = src && (src.by || src.kill);
@@ -582,6 +591,7 @@ function doAttack(p, m) {
   if (!canAct(p, now)) return;
   if (p.cls === 'Archer') return archerAttack(p, m, now);
   if (p.cls === 'Reaper') return reaperAttack(p, m, now);
+  if (p.cls === 'PlumBlossom') return plumAttack(p, m, now);
   if (p.cls === 'Gumiho') return gumihoAttack(p, m, now);
   if (p.cls === 'Lucifer') return luciferAttack(p, m, now);
   if (p.cls === 'Gambler') return gamblerAttack(p, m, now);
@@ -634,6 +644,7 @@ function runSkill(p, k, m) {
   else if (p.cls === 'Celestial') celestialSkill(p, k, m, now);
   else if (p.cls === 'Reaper') reaperSkill(p, k, m, now);
   else if (p.cls === 'Berserker') berserkerSkill(p, k, m, now);
+  else if (p.cls === 'PlumBlossom') plumSkill(p, k, m, now);
 }
 function archerSkill(p, k, m, now) {
   const S = ARCHER[k], o = originOf(p, m), lag = lagOf(m);
@@ -1908,6 +1919,328 @@ function stepBerserker(dt, now) {
     if (any) checkRoundEnd();
   }
 }
+// ---- Plum Blossom ----
+const PB = {
+  g0: 0.02, max: [50, 100, 200, 400, 800, 1600], cost: [0, 1, 2, 4, 8, 16, 16], cmd: 300, slack: 100, menu: 3000,
+  hw: 0.3 * RADPX, blk: { ms: 500, r: 1.1 * RADPX, span: 150 * RAD }, spd: 1200,
+  cd: { E1: 4000, E2: 4000, E3: 4000, S1: 8000, S2: 8000, S3: 8000, R1: 16000, R2: 8000, R3: 8000 },
+  names: ['삼류', '이류', '일류', '절정', '초절정', '화경', '현경']
+};
+PB.mul = (() => { let m = 1; return [0, 1, 2, 3, 4, 5, 6].map(i => (m *= 1 + PB.g0 * Math.pow(2, i))); })();
+const pbMul = p => PB.mul[p.pbStage | 0];
+const PB_Q = [null,
+  { iv: 500, en: 2 },
+  { iv: 500, en: 3, hp: 20 },
+  { iv: 1000, en: 8 },
+  { iv: 1000, en: 15, as: 0.1, frac: 0.5 },
+  { iv: 2000, en: 50 },
+  { iv: 1000, en: 30, as: 0.2, frac: 0.75 },
+  { iv: 2000, heal: 0.05, mobile: true }
+];
+const pbWalls = [], pbZones = [], pbTimers = []; let pbSeq = 0;
+const pbLater = (p, ms, fn) => pbTimers.push({ at: Date.now() + ms, owner: p.id, fn });
+function pbClean(id) {
+  for (const arr of [pbZones, pbTimers]) for (let i = arr.length - 1; i >= 0; i--) if (arr[i].owner === id) arr.splice(i, 1);
+  for (let i = pbWalls.length - 1; i >= 0; i--) if (pbWalls[i].owner === id) { broadcast({ t: 'pbend', id: pbWalls[i].id }); pbWalls.splice(i, 1); }
+}
+function pbGain(p, n) {
+  p.pbD += n; p.pbA += n;
+  let up = false;
+  while (p.pbStage < 6 && p.pbD > PB.max[p.pbStage]) {
+    p.pbStage++; up = true;
+    const f = 1 + PB.g0 * Math.pow(2, p.pbStage);
+    p.mh = Math.round(p.mh * f); p.hp = Math.min(p.mh, p.hp * f);
+  }
+  if (up) {
+    p.pbA = p.pbD;
+    broadcast({ t: 'fx', type: 'pbburst', x: p.x, y: p.y, r: 1.6 * RADPX, dur: 900 });
+    fxTxt(p.x, p.y - 50, '✨ ' + PB.names[p.pbStage], '#F4AABB');
+  }
+}
+function pbStart(p, n, now) {
+  if (n < 1 || n > p.pbStage + 1) return;
+  p.pbResume = null;
+  p.pbCh = { t: n, t0: now, next: now + PB_Q[n].iv };
+  broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 0.8 * RADPX, c: '#F4AABB', dur: 500 });
+}
+function pbStop(p, now, byAtk) {
+  const ch = p.pbCh; if (!ch) return;
+  p.pbCh = null;
+  const T = PB_Q[ch.t];
+  if (T.as) { const dur = (now - ch.t0) * T.frac; if (dur > 200) { p.asUntil = now + dur; p.asBonus = T.as; } }
+  if (ch.t === 7 && byAtk) p.pbResume = { at: now + 1000 };
+}
+function pbTryBlock(t, src, now) {
+  if (!src || now >= (t.pbBlockUntil || 0)) return false;
+  let dir = src.dir;
+  if (dir === undefined) {
+    if (src.x === undefined) return false;
+    const dx = src.x - t.x, dy = (src.y - t.y) / 0.8;
+    if (Math.hypot(dx, dy) > PB.blk.r) return false;
+    dir = Math.atan2(dy, dx);
+  }
+  if (Math.abs(Math.atan2(Math.sin(dir - t.aim), Math.cos(dir - t.aim))) > PB.blk.span / 2) return false;
+  t.pbBlockUntil = 0;
+  broadcast({ t: 'hit', id: t.id, dmg: 0, bl: 2 });
+  broadcast({ t: 'fx', type: 'pbburst', x: t.x, y: t.y, r: 0.9 * RADPX, dur: 500 });
+  fxTxt(t.x, t.y - 50, '막기!', '#F4AABB');
+  return true;
+}
+function segsNear(ax, ay, bx, by, cx, cy, dx, dy, tol) {
+  const o = (px, py, qx, qy, rx, ry) => Math.sign((qx - px) * (ry - py) - (qy - py) * (rx - px));
+  if (o(ax, ay, bx, by, cx, cy) !== o(ax, ay, bx, by, dx, dy) && o(cx, cy, dx, dy, ax, ay) !== o(cx, cy, dx, dy, bx, by)) return true;
+  return segDist(ax, ay, cx, cy, dx, dy) <= tol || segDist(bx, by, cx, cy, dx, dy) <= tol || segDist(cx, cy, ax, ay, bx, by) <= tol || segDist(dx, dy, ax, ay, bx, by) <= tol;
+}
+function pbWallHit(w, x0, gy0, x1, gy1) {
+  if (w.kind === 'seg') return segsNear(x0, gy0, x1, gy1, w.x1, w.gy1, w.x2, w.gy2, 10);
+  return (Math.hypot(x0 - w.x, gy0 - w.gy) <= w.r) !== (Math.hypot(x1 - w.x, gy1 - w.gy) <= w.r);
+}
+function pbWallBreak(w) { const i = pbWalls.indexOf(w); if (i >= 0) pbWalls.splice(i, 1); broadcast({ t: 'pbend', id: w.id }); }
+function pbAbsorb(attId, x0, gy0, x1, gy1, amt, type, now) {
+  const a = players.get(attId);
+  for (const w of pbWalls) {
+    if (w.owner === attId || now >= w.until) continue;
+    const wo = players.get(w.owner); if (a && wo && sameTeam(a, wo)) continue;
+    if (!pbWallHit(w, x0, gy0, x1, gy1)) continue;
+    w.hp -= type === 'pierce' ? amt * 2 : amt;
+    if (w.hp < 0) pbWallBreak(w);
+    return true;
+  }
+  return false;
+}
+function pbArrowWall(ar, nx, ngy, now) { return ar.dmg > 0 && pbAbsorb(ar.owner, ar.x, ar.gy, nx, ngy, ar.dmg, ar.type, now); }
+function pbMeleeWall(t, amount, src, now) {
+  const att = src.by || src.kill; if (!att) return false;
+  const type = src.type || (att.cls === 'Assassin' || att.gPierce ? 'pierce' : 'phys');
+  return pbAbsorb(att.id, src.x, src.y / 0.8, t.x, t.y / 0.8, amount, type, now);
+}
+function pbTargetPt(m, p) {
+  let cx = Number(m && m.cx), cy = Number(m && m.cy) + 30;
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) { cx = p.x + Math.cos(p.aim) * 3 * RADPX; cy = p.y + Math.sin(p.aim) * 3 * RADPX * 0.8; }
+  return { x: cx, gy: cy / 0.8 };
+}
+function pbThrust(p, o, lag, now, len, mult, bleedMs) {
+  const a = p.aim, gx = o.x, gy = o.y / 0.8, ex = gx + Math.cos(a) * len, ey = gy + Math.sin(a) * len, hits = [], dmg = Math.round(statsOf(p).dmg * mult);
+  broadcast({ t: 'fx', type: 'pbline', x: o.x, y: o.y, a, len, w: PB.hw * 2, dur: 380 });
+  for (const t of targetsOf(p)) {
+    const tp = posAt(t, now - lag);
+    if (segDist(tp.x, tp.y / 0.8, gx, gy, ex, ey) > PB.hw + (t.hr || 0)) continue;
+    dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, type: 'pierce' });
+    if (bleedMs) applyBleed(t, bleedMs, now, p);
+    hits.push(t);
+  }
+  checkRoundEnd();
+  return hits;
+}
+function plumAttack(p, m, now) {
+  if (now < p.atkReady) return;
+  pbStop(p, now, true);
+  const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
+  p.atkReady = now + st.atkCd / atkSpeed(p, now);
+  let mult = 1; if (p.pbBonus) { mult = 1.2; p.pbBonus = false; }
+  const dmg = Math.round(st.dmg * mult);
+  broadcast({ t: 'fx', type: 'smslash', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, aura: 0, echo: 0, pb: 1, dur: 280 });
+  for (const t of targetsOf(p)) {
+    const tp = posAt(t, now - lag);
+    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'phys' });
+  }
+  pbGain(p, 1);
+  checkRoundEnd();
+}
+function plumSkill(p, k, m, now) {
+  if (p.role !== 1) return;
+  if (k === 'E') {
+    if (pbRedirect(p, m, now)) return;
+    if (p.pbRe.e2 && now < p.pbRe.e2.until) return pbReuseE2(p, m, now);
+  }
+  if (k === 'R' && p.pbRe.r2 && now < p.pbRe.r2.until) return pbReuseR2(p, m, now);
+  if (k === 'Q' && p.pbCh) { pbStop(p, now, false); p.pbCmd = null; return; }
+  p.pbCmd = { k, sp: false, until: now + (k === 'Q' ? PB.menu : PB.cmd + PB.slack) };
+}
+function plumKey(p, m) {
+  const now = Date.now(), c = p.pbCmd;
+  if (p.cls !== 'PlumBlossom' || !c || now > c.until || p.role !== 1 || !canAct(p, now)) return;
+  if (m.sp) { if (c.k === 'E' && !c.sp && p.pbStage >= 1) { c.sp = true; c.until = now + PB.cmd + PB.slack; } return; }
+  const n = Number(m.n) | 0;
+  if (n < 1 || n > 7 || (c.k !== 'Q' && n > 3) || (c.k === 'Q' && n > p.pbStage + 1)) return;
+  p.pbCmd = null;
+  if (c.k === 'Q') pbStart(p, n, now);
+  else pbCast(p, (c.k === 'R' ? 'R' : c.sp ? 'S' : 'E') + n, m, now);
+}
+function pbCast(p, id, m, now) {
+  const need = id[0] === 'E' ? 0 : id[0] === 'S' ? 1 : 2;
+  if (p.pbStage < need) return false;
+  if (now < (p.pbCd[id] || 0)) { fxTxt(p.x, p.y - 40, '쿨타임', '#cfcfcf'); return false; }
+  const c = PB.cost[p.pbStage];
+  if (p.pbA < c) { fxTxt(p.x, p.y - 40, '내공 부족', '#9fd0ff'); return false; }
+  p.pbA -= c; p.pbCd[id] = now + PB.cd[id];
+  const o = originOf(p, m), lag = lagOf(m), base = statsOf(p).dmg, mast = p.pbStage >= 3;
+  const slashAt = (ms, fn) => pbLater(p, ms, fn);
+  if (id === 'E1') {
+    broadcast({ t: 'fx', type: 'ring', x: o.x, y: o.y, r: 0.5 * RADPX, c: '#F4AABB', dur: 300 });
+    slashAt(100, () => {
+      const t0 = Date.now(), a = p.aim, L = 1.5 * RADPX, gx = p.x, gy = p.y / 0.8, ex = gx + Math.cos(a) * L, ey = gy + Math.sin(a) * L;
+      broadcast({ t: 'fx', type: 'pbline', x: p.x, y: p.y, a, len: L, w: PB.hw * 2, dur: 380, down: 1 });
+      for (const t of targetsOf(p)) {
+        if (segDist(t.x, t.y / 0.8, gx, gy, ex, ey) > PB.hw + (t.hr || 0)) continue;
+        dmgTo(t, Math.round(base * 0.8), t0, { x: p.x, y: p.y, by: p, type: 'phys' });
+        if (t.role === 1) t.stunUntil = Math.max(t.stunUntil || 0, t0 + 100);
+      }
+      checkRoundEnd();
+    });
+  } else if (id === 'E2') {
+    pbThrust(p, o, lag, now, 1 * RADPX, 0.9, 2000);
+  } else if (id === 'E3') {
+    p.pbBlockUntil = now + PB.blk.ms;
+    broadcast({ t: 'fx', type: 'pbfan', ow: p.id, x: o.x, y: o.y, a: p.aim, span: PB.blk.span, r: PB.blk.r, dur: PB.blk.ms });
+  } else if (id === 'S1') {
+    broadcast({ t: 'fx', type: 'ring', x: o.x, y: o.y, r: 0.5 * RADPX, c: '#F4AABB', dur: 300 });
+    slashAt(100, () => spawnArrow(p, { x: p.x, y: p.y }, 0, Date.now(), { a: p.aim, dmg: Math.round(base), spd: PB.spd, range: 4 * RADPX, radius: 0.45 * RADPX, kind: 'pbq', type: 'magic' }));
+  } else if (id === 'S2') {
+    pbZone(p, o, 3 * RADPX, 6 * RADPX, 1500, 0.6, now);
+    p.pbRe.e2 = { until: now + 2000 };
+  } else if (id === 'S3') {
+    const a = p.aim, cx = o.x + Math.cos(a) * 0.9 * RADPX, cgy = o.y / 0.8 + Math.sin(a) * 0.9 * RADPX, h = RADPX, nx = -Math.sin(a) * h, ny = Math.cos(a) * h, wid = ++pbSeq;
+    pbWalls.push({ id: wid, owner: p.id, kind: 'seg', x1: cx - nx, gy1: cgy - ny, x2: cx + nx, gy2: cgy + ny, hp: 1000, until: now + 1000 });
+    broadcast({ t: 'fx', type: 'pbwall', id: wid, x1: cx - nx, y1: (cgy - ny) * 0.8, x2: cx + nx, y2: (cgy + ny) * 0.8, dur: 1000 });
+  } else if (id === 'R1') {
+    pbFlurry(p, now, mast, base);
+  } else if (id === 'R2') {
+    pbZone(p, o, 4 * RADPX, 6 * RADPX, 2000, 0.5, now);
+    p.pbRe.r2 = { until: now + 2000, left: 2, mast };
+    if (mast) for (const d of [500, 1000]) slashAt(d, () => {
+      let best = null, bd = Infinity;
+      for (const t of targetsOf(p)) { const dd = Math.hypot(t.x - p.x, (t.y - p.y) / 0.8); if (dd < bd) { bd = dd; best = t; } }
+      if (best) broadcast({ t: 'fx', type: 'pbline', x: p.x, y: p.y, a: Math.atan2((best.y - p.y) / 0.8, best.x - p.x), len: 5 * RADPX, w: PB.hw * 2, dur: 360, fake: 1 });
+    });
+  } else if (id === 'R3') {
+    const wid = ++pbSeq, hp = mast ? 3000 : 2000;
+    pbWalls.push({ id: wid, owner: p.id, kind: 'circ', x: o.x, gy: o.y / 0.8, r: RADPX, hp, until: now + 4000, follow: mast });
+    broadcast({ t: 'fx', type: 'pbbarrier', id: wid, ow: p.id, x: o.x, y: o.y, r: RADPX, follow: mast ? 1 : 0, dur: 4000 });
+  }
+  return true;
+}
+function pbZone(p, o, w, len, ms, mul, now) {
+  const id = ++pbSeq;
+  pbZones.push({ id, owner: p.id, gx: o.x, gy: o.y / 0.8, a: p.aim, len, w, mul, until: now + ms });
+  broadcast({ t: 'fx', type: 'pbzone', x: o.x, y: o.y, a: p.aim, len, w, dur: ms });
+}
+function pbFlurry(p, now, mast, base) {
+  const spd = PB.spd * (mast ? 1.2 : 1), fly = p.pbFly = { ids: new Set(), end: now + 600 + 250, redir: null, done: false, mast };
+  const fire = (a, dmg, fake, track) => {
+    if (p.role !== 1) return;
+    const id = spawnArrow(p, { x: p.x, y: p.y }, 0, Date.now(), { a, dmg, spd, range: 6 * RADPX, radius: 0.4 * RADPX, kind: 'pbq', type: 'magic', fake });
+    if (track && id) fly.ids.add(id);
+  };
+  for (let i = 0; i < 4; i++) pbLater(p, i * 200, () => fire(p.aim, Math.round(base * 0.8), false, false));
+  for (let r = 0; r < 3; r++) pbLater(p, r * 300, () => {
+    for (let i = 0; i < 8; i++) {
+      let a = Math.random() * Math.PI * 2;
+      if (fly.redir) a = Math.atan2(fly.redir.gy - p.y / 0.8, fly.redir.x - p.x) + (Math.random() - 0.5) * 0.5;
+      fire(a, Math.round(base * 0.4), false, true);
+      if (mast) fire(fly.redir ? a + (Math.random() - 0.5) * 0.3 : Math.random() * Math.PI * 2, 0, true, true);
+    }
+  });
+}
+function pbRedirect(p, m, now) {
+  const fly = p.pbFly;
+  if (!fly || !fly.mast || fly.done || now > fly.end) return false;
+  if (p.pbA < PB.cost[p.pbStage]) { fxTxt(p.x, p.y - 40, '내공 부족', '#9fd0ff'); return true; }
+  p.pbA -= PB.cost[p.pbStage]; fly.done = true;
+  const tg = pbTargetPt(m, p); fly.redir = tg;
+  for (const id of fly.ids) {
+    const ar = arrows.get(id); if (!ar) continue;
+    const x = ar.x, y = ar.gy * 0.8, a = Math.atan2(tg.gy - ar.gy, tg.x - ar.x), dmg = ar.dmg, fake = ar.fake;
+    endArrow(ar);
+    spawnArrow(p, { x, y }, 0, now, { a, dmg, spd: ar.spd, range: 6 * RADPX, radius: ar.radius, kind: 'pbq', type: 'magic', fake });
+  }
+  return true;
+}
+function pbReuseE2(p, m, now) {
+  if (p.pbA < PB.cost[p.pbStage]) return void fxTxt(p.x, p.y - 40, '내공 부족', '#9fd0ff');
+  p.pbA -= PB.cost[p.pbStage]; p.pbRe.e2 = null;
+  pbThrust(p, originOf(p, m), lagOf(m), now, 3 * RADPX, 1.0, 2000);
+}
+function pbReuseR2(p, m, now) {
+  const R = p.pbRe.r2;
+  if (p.pbA < PB.cost[p.pbStage]) return void fxTxt(p.x, p.y - 40, '내공 부족', '#9fd0ff');
+  p.pbA -= PB.cost[p.pbStage]; R.left--;
+  const o = originOf(p, m), hits = pbThrust(p, o, lagOf(m), now, (4 + (R.mast ? 1 : 0)) * RADPX, 1.2, 3000);
+  if (R.left > 0) return;
+  p.pbRe.r2 = null; pbStop(p, now, false);
+  let dest, a = p.aim;
+  if (hits.length) {
+    let t = hits[0], bd = Infinity;
+    for (const h of hits) { const dd = Math.hypot(h.x - o.x, (h.y - o.y) / 0.8); if (dd < bd) { bd = dd; t = h; } }
+    dest = { x: t.x + Math.cos(a) * 0.9 * RADPX, y: t.y + Math.sin(a) * 0.9 * RADPX * 0.8 };
+  } else dest = { x: o.x + Math.cos(a) * 4 * RADPX, y: o.y + Math.sin(a) * 4 * RADPX * 0.8 };
+  dest = clampArena(dest);
+  broadcast({ t: 'fx', type: 'dash', x: p.x, y: p.y, x2: dest.x, y2: dest.y, c: 'rgba(244,170,187,.7)', dur: 380 });
+  p.x = dest.x; p.y = dest.y; send(p.ws, { t: 'warp', x: dest.x, y: dest.y });
+  broadcast({ t: 'fx', type: 'pbburst', x: dest.x, y: dest.y, r: 1.1 * RADPX, dur: 600 });
+}
+function plumBot(p, foe, now) {
+  if (p.pbRe.e2 && now < p.pbRe.e2.until) return pbReuseE2(p, {}, now);
+  if (p.pbRe.r2 && now < p.pbRe.r2.until) return pbReuseR2(p, {}, now);
+  const ids = ['E1', 'E2', 'E3', 'S1', 'S2', 'S3', 'R1', 'R2', 'R3'].filter(i => now >= (p.pbCd[i] || 0) && p.pbStage >= (i[0] === 'E' ? 0 : i[0] === 'S' ? 1 : 2) && p.pbA >= PB.cost[p.pbStage]);
+  if (ids.length) pbCast(p, ids[Math.floor(Math.random() * ids.length)], { cx: foe.x, cy: foe.y - 24 }, now);
+}
+function pbSend(p, now) {
+  const cmd = p.pbCmd && now < p.pbCmd.until ? p.pbCmd : null;
+  const key = [p.pbD, p.pbA, p.pbStage, p.pbCh ? p.pbCh.t : 0, cmd ? cmd.k + (cmd.sp ? 's' : '') + cmd.until : '', p.pbBonus ? 1 : 0, Object.values(p.pbCd).join(','), p.pbRe.e2 ? p.pbRe.e2.until : 0, p.pbRe.r2 ? p.pbRe.r2.until + ':' + p.pbRe.r2.left : 0, p.pbFly && !p.pbFly.done ? p.pbFly.end : 0].join('|');
+  if (key === p.pbKey) return;
+  p.pbKey = key;
+  const cds = {}; for (const k in p.pbCd) { const r = p.pbCd[k] - now; if (r > 0) cds[k] = Math.round(r); }
+  const re = { e: p.pbRe.e2 && now < p.pbRe.e2.until ? Math.round(p.pbRe.e2.until - now) : 0, r: p.pbRe.r2 && now < p.pbRe.r2.until ? Math.round(p.pbRe.r2.until - now) : 0, rl: p.pbRe.r2 ? p.pbRe.r2.left : 0, f: p.pbFly && !p.pbFly.done && now < p.pbFly.end ? Math.round(p.pbFly.end - now) : 0 };
+  send(p.ws, { t: 'pb', d: p.pbD, a: p.pbA, s: p.pbStage, ch: p.pbCh ? p.pbCh.t : 0, cmd: cmd ? cmd.k + (cmd.sp ? 's' : '') : '', cm: cmd ? Math.round(cmd.until - now) : 0, cds, re, bn: p.pbBonus ? 1 : 0 });
+}
+function stepPlum(dt, now) {
+  for (let i = pbTimers.length - 1; i >= 0; i--) {
+    const T = pbTimers[i]; if (now < T.at) continue;
+    pbTimers.splice(i, 1);
+    const o = players.get(T.owner);
+    if (o && o.role === 1) { try { T.fn(); } catch (e) { console.error('pb timer:', e.message); } }
+  }
+  for (let i = pbZones.length - 1; i >= 0; i--) {
+    const z = pbZones[i], own = players.get(z.owner);
+    if (now >= z.until || !own || own.role !== 1) { pbZones.splice(i, 1); continue; }
+    const c = Math.cos(z.a), s = Math.sin(z.a);
+    for (const t of targetsOf(own)) {
+      const dx = t.x - z.gx, dy = t.y / 0.8 - z.gy, u = dx * c + dy * s, v = -dx * s + dy * c;
+      if (u < 0 || u > z.len || Math.abs(v) > z.w / 2) continue;
+      t.pbSlowMul = now < (t.pbSlowUntil || 0) ? Math.min(t.pbSlowMul, z.mul) : z.mul; t.pbSlowUntil = now + 120;
+    }
+  }
+  for (let i = pbWalls.length - 1; i >= 0; i--) {
+    const w = pbWalls[i], own = players.get(w.owner);
+    if (now >= w.until || !own || own.role !== 1) { pbWalls.splice(i, 1); continue; }
+    if (w.follow) {
+      const dx = own.x - w.x, dy = own.y / 0.8 - w.gy, d = Math.hypot(dx, dy), st = Math.min(d, 450 * dt);
+      if (d > 0.01) { w.x += dx / d * st; w.gy += dy / d * st; }
+    }
+  }
+  for (const p of players.values()) {
+    if (p.cls !== 'PlumBlossom') continue;
+    if (p.role !== 1) { p.pbCh = null; p.pbResume = null; p.pbCmd = null; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = 0; continue; }
+    if (p.pbCmd && now > p.pbCmd.until) p.pbCmd = null;
+    const ch = p.pbCh;
+    if (ch) {
+      const T = PB_Q[ch.t];
+      if (!T.mobile && (p.moving || p.dash || now < p.kbUntil)) pbStop(p, now, false);
+      else {
+        while (now >= ch.next) {
+          ch.next += T.iv;
+          if (T.en) pbGain(p, T.en);
+          if (T.hp) heal(p, T.hp);
+          if (T.heal) heal(p, (p.mh - p.hp) * T.heal);
+        }
+        if (ch.t === 7) { p.pbBn += dt * 1000; if (p.pbBn >= 5000) { p.pbBn -= 5000; p.pbBonus = true; } }
+      }
+    } else if (p.pbResume && now >= p.pbResume.at && canAct(p, now)) pbStart(p, 7, now);
+    pbSend(p, now);
+  }
+}
+
 // ---- Reaper ----
 const REAPER = { chargeMs: 1500, rMax: 1.5 * RADPX, rMin: 0.2, dmg: [50, 270], soul: [0.05, 0.20], maxSouls: 5, collect: 0.7 * RADPX, atkPw: 0.7, R: { cd: 25000 } };
 const sendReap = p => send(p.ws, { t: 'reap', s: (p.souls || []).map(x => x.c), q: (p.souls || []).map(x => x.pw >= 1 ? 1 : 0) });
@@ -1970,8 +2303,8 @@ function reaperSkill(p, k, m, now) {
   }
 }
 // ---- AI players ----
-const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper', 'Berserker'];
-const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 130, Berserker: 95 };
+const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper', 'Berserker', 'PlumBlossom'];
+const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 130, Berserker: 95, PlumBlossom: 95 };
 const nextBotNo = () => { const used = new Set([...players.values()].filter(q => q.ai).map(q => q.name)); let n = 1; while (used.has('AI ' + n)) n++; return n; };
 const randClass = cur => { const l = CLASS_LIST.filter(c => c !== cur); return l[Math.floor(Math.random() * l.length)]; };
 function addBot(cls, iq) {
@@ -2033,8 +2366,10 @@ function botTick(now) {
     if (iq > 0 && now >= (p.botSk || 0)) {
       p.botSk = now + 3600 - iq * 300 + Math.random() * (2400 - iq * 180);
       if (Math.random() < 0.35 + iq * 0.065) {
+        if (p.cls === 'PlumBlossom') plumBot(p, foe, now); else {
         const ks = ['Q', 'E', 'R'].filter(k => now >= p['cd' + k] && !(k === 'R' && (p.noR || p.skel)) && !(k === 'Q' && p.cls === 'Reaper'));
         if (ks.length && d <= Math.max(R * 1.6, 260)) doSkill(p, ks[Math.floor(Math.random() * ks.length)], { cx: foe.x, cy: foe.y - 24 });
+        }
       }
     }
   }
@@ -2131,6 +2466,9 @@ wss.on('connection', (ws, req) => {
     } else if (m.t === 'skill') {
       if (m.a !== undefined) setAim(p, Number(m.a));
       doSkill(p, String(m.k), m);
+    } else if (m.t === 'pbk') {
+      if (m.a !== undefined) setAim(p, Number(m.a));
+      plumKey(p, m);
     } else if (m.t === 'ready') {
       if (phase !== 'lobby' || joinedList().length < 2) return;
       p.ready = !p.ready; checkReady();
@@ -2201,7 +2539,7 @@ setInterval(() => {
     }
     if (dx || dy) {
       const l = Math.hypot(dx, dy); dx /= l; dy /= l;
-      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1) * (p.bm || 1);
+      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1) * (p.bm || 1);
       p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
@@ -2215,7 +2553,7 @@ setInterval(() => {
   stepSanct(now);
   stepArrows(dt, now);
   stepBombs(now);
-  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now); stepSouls(); stepBerserker(dt, now);
+  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now); stepSouls(); stepBerserker(dt, now); stepPlum(dt, now);
   const list = [], hidden = [];
   for (const p of players.values()) {
     if (!p.joined) continue;
@@ -2228,7 +2566,7 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0, pbs: p.cls === 'PlumBlossom' ? p.pbStage + 1 : 0, pbc: p.pbCh ? p.pbCh.t : 0, pz: p.role === 1 && now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 0, pbk: p.cls === 'PlumBlossom' && now < (p.pbBlockUntil || 0) ? 1 : 0 };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0, bu: 0, bd: 0 }) : e);
   }
