@@ -317,7 +317,7 @@ const daggerImg=new Image();daggerImg.src='assassin-sword.png',slashImg=new Imag
 slashImg.src='slash.png';orbImg.src='orb.png';fireImg.src='foxfire.png';charmImg.src='charm.png';
 const RADPX=112.5,SHIELD_SPAN=90*Math.PI/180;
 const clsImg={};for(const c of ['Knight','Archer','Shielder','Assassin','Gumiho','Gambler','SwordMaster','Tower','Financier']){const i=new Image();i.src=c.toLowerCase()+'.png';clsImg[c]=i}
-for(const [k,f] of [['Lucifer','luciferCharacter.png'],['Lucifer:a','angelForm.png'],['Lucifer:d','devilForm.png'],['Gamer','gamer.png'],['Celestial','astro.png'],['Reaper','reaper.png'],['Berserker','berserker.png']]){const i=new Image();i.src=f;clsImg[k]=i}
+for(const [k,f] of [['Lucifer','luciferCharacter.png'],['Lucifer:a','angelForm.png'],['Lucifer:d','devilForm.png'],['Gamer','gamer.png'],['PlumBlossom','MaeHwa_sword.png'],['Celestial','astro.png'],['Reaper','reaper.png'],['Berserker','berserker.png']]){const i=new Image();i.src=f;clsImg[k]=i}
 const gMelWImg=new Image(),gRngWImg=new Image(),gSlashImg=new Image(),grImg=new Image(),gachaImg=new Image();gMelWImg.src='gamerMeleeAttackWeapon.png';gRngWImg.src='gamerRangedAttackWeapon.png';gSlashImg.src='gamerMeleeAttack.png';grImg.src='gamerRangedAttack.png';gachaImg.src='gacha.png';
 const lsImg=new Image(),fsImg=new Image(),crImg=new Image(),fbImg=new Image(),hfImg=new Image(),lgImg=new Image(),wlImg=new Image(),wrImg=new Image();
 lsImg.src='lightshot.png';fsImg.src='fireshot.png';crImg.src='crystal.png';fbImg.src='flamebomb.png';hfImg.src='holyfield.png';lgImg.src='light.png';wlImg.src='angelForm_s_left_wing.png';wrImg.src='angelForm_s_right_wing.png';
@@ -729,7 +729,7 @@ const CHARS=[
     {icon:'🪓',name:'도끼',key:'Q · 1초',types:['phys'],desc:'도끼를 바라보는 방향으로 4 radpx 던져 적중한 적에게 250 물리 피해(적마다 1회). 도끼는 떨어진 자리에 남고, 던진 동안 공격력은 50으로 감소. 도끼에 가까이 가면 자동 회수하며 회수 시 E 쿨타임 1초 감소.'},
     {icon:'💥',name:'대지 강타',key:'E · 15초',types:['phys','cc'],desc:'도끼를 들고 있으면 자신의 위치, 떨어뜨렸다면 도끼가 있는 위치를 중심으로 반경 1.5 radpx 내 모든 적에게 100 물리 피해와 1초 기절.'},
     {icon:'😡',name:'버서커',key:'R · 25초',types:['buff'],desc:'10초간 도끼가 2개로 증가, 공격력 +30%(일반 공격과 모든 스킬), Q 쿨타임 제거. E 사용 시 두 도끼의 위치 모두에 대지 강타 발동.'}]},
-{id:'PlumBlossom',ko:'매화검',img:'player.png',stats:{hp:1000,atk:90},rng:'1 radpx (근접)',
+{id:'PlumBlossom',ko:'매화검',img:'MaeHwa_sword.png',stats:{hp:1000,atk:90},rng:'1 radpx (근접)',
    style:'내공을 쌓아 삼류에서 현경까지 경지를 오르는 검객. 단계가 오를수록 체력과 공격력이 복리로 폭증하고, 익힌 무공이 늘어납니다.',
    skills:[
     {icon:'🌸',name:'내공 / 무공',key:'패시브',types:['buff'],desc:'경지(삼류→이류→일류→절정→초절정→화경→현경)는 단전 내공으로 결정. 일반 공격마다 내공 +1(단전·진기 동시 증가). 스킬은 진기만 소모(삼류 0 / 이류 1 / 일류 2 / 절정 4 / 초절정 8 / 화경·현경 16), 단전은 줄지 않음. 경지 상승 시 최대·현재 체력과 기본 공격력이 복리 성장(2%부터 단계마다 2배) 하고 진기가 단전과 같아짐. 재사용은 진기를 추가 소모.'},
@@ -1028,10 +1028,10 @@ function drawSword(o,h,lift){
  ctx.restore();
 }
 function drawSMSword(o,h,lift){
- const swImg=o.sa&&imOk(smAuraSwordImg)?smAuraSwordImg:smSwordImg;if(!imOk(swImg))return;
+ const swImg=o.cls==='PlumBlossom'?pbSwordImg:o.sa&&imOk(smAuraSwordImg)?smAuraSwordImg:smSwordImg;if(!imOk(swImg))return;
  const now=performance.now(),sw=o.sw,k=sw?(now-sw.t0)/sw.dur:2,cx=o.x,cy=o.y-h*.5-lift,S=3.6;
  ctx.save();
- if(o.cls==='PlumBlossom'){ctx.shadowColor='#F4AABB';ctx.shadowBlur=o.pbc||o.pbk?24:12;if(ctxFilterOk)ctx.filter=PB_FILT}
+ if(o.cls==='PlumBlossom'){ctx.shadowColor='#F4AABB';ctx.shadowBlur=o.pbc||o.pbk?24:12}
  else if(o.sa||o.sk){ctx.shadowColor=o.sk?'#ff9ad5':'#9fe8ff';ctx.shadowBlur=o.sk?22:18}
  if(sw&&k<1){
   const base=Math.atan2(.8*Math.sin(sw.a),Math.cos(sw.a)),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2,th=base+(e-.5)*sw.span*1.15;
@@ -1513,6 +1513,7 @@ function updateGc(t){
  if(celS.d>0||celS.b>0){const l4=document.createElement('div');l4.textContent='🌌 '+celS.d+(celS.b>0?' / 다음 공격 +'+celS.b:'');gcHud.appendChild(l4)}
  if(cheat){const l3=document.createElement('div');l3.textContent='💻 치트 '+Math.ceil((gcS.ch-t)/1000)+'초';gcHud.appendChild(l3)}}
 // ---- Plum Blossom ----
+const pbSwordImg=new Image();pbSwordImg.src='MaehwaSword.png';
 const PB_FILT='hue-rotate(145deg) saturate(.75) brightness(1.25)',ctxFilterOk=typeof ctx.filter==='string';
 const pbRnd=seed=>()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
 function pbPetal(x,y,rot,s,al){if(al<=0)return;ctx.save();ctx.globalAlpha=Math.min(1,al);ctx.translate(x,y);ctx.rotate(rot);ctx.shadowColor='#F4AABB';ctx.shadowBlur=8;ctx.fillStyle='#F4AABB';ctx.beginPath();ctx.ellipse(0,0,s*1.5,s*.8,0,0,7);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='rgba(255,255,255,.7)';ctx.beginPath();ctx.ellipse(-s*.3,0,s*.75,s*.3,0,0,7);ctx.fill();ctx.restore()}
