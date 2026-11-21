@@ -391,7 +391,7 @@ function offMapRange(x, y, a, sc) {
   }
   return 4000;
 }
-function endArrow(ar) { arrows.delete(ar.id); broadcast({ t: 'arrowEnd', id: ar.id }); }
+function endArrow(ar, t) { arrows.delete(ar.id); broadcast(t && ar.kd === 'smq' ? { t: 'arrowEnd', id: ar.id, ex: t.x, ey: t.y } : { t: 'arrowEnd', id: ar.id }); }
 function moveArrow(ar, step, time) {
   const nx = ar.x + Math.cos(ar.a) * step, ngy = ar.gy + Math.sin(ar.a) * step;
   const found = [];
@@ -448,7 +448,7 @@ function spawnArrow(p, o, lag, now, spec) {
   broadcast({ t: 'arrow', id, by: p.id, x: o.x, y: o.y, a: spec.a, spd: ar.spd, range: ar.left + adv, adv, sc: spec.sc || 1, kd: spec.kind || 'atk', bm: spec.boom || 0 });
   let deflected = false;
   for (const t of pending) if (arrowHit(ar, t, now)) { deflected = true; break; }
-  if (ended && !deflected) { broadcast({ t: 'arrowEnd', id }); orbLand(ar, pending[0], now); } else arrows.set(id, ar);
+  if (ended && !deflected) { broadcast(spec.kind === 'smq' && pending[0] ? { t: 'arrowEnd', id, ex: pending[0].x, ey: pending[0].y } : { t: 'arrowEnd', id }); orbLand(ar, pending[0], now); } else arrows.set(id, ar);
   if (pending.length) checkRoundEnd();
   return id;
 }
@@ -462,7 +462,7 @@ function stepArrows(dt, now) {
     let deflected = false;
     for (const t of hits) { any = true; if (arrowHit(ar, t, now)) { deflected = true; break; } }
     if (deflected) continue;
-    if (!ar.pierce && hits.length) { endArrow(ar); orbLand(ar, hits[0], now); continue; }
+    if (!ar.pierce && hits.length) { endArrow(ar, hits[0]); orbLand(ar, hits[0], now); continue; }
     const ex = (ar.x - CX) / RX, ey = (ar.gy * 0.8 - CY) / RY;
     if (ar.left <= 0 || (!ar.noArena && ex * ex + ey * ey > 1.15)) { endArrow(ar); orbLand(ar, null, now); }
   }
@@ -2055,12 +2055,13 @@ function plumSkill(p, k, m, now) {
   }
   if (k === 'R' && p.pbRe.r2 && now < p.pbRe.r2.until) return pbReuseR2(p, m, now);
   if (k === 'Q' && p.pbCh) { pbStop(p, now, false); p.pbCmd = null; return; }
-  p.pbCmd = { k, sp: false, until: now + (k === 'Q' ? PB.menu : PB.cmd + PB.slack) };
+  const win = m && m.mob ? 1500 : PB.cmd + PB.slack;
+  p.pbCmd = { k, sp: false, win, until: now + (k === 'Q' ? PB.menu : win) };
 }
 function plumKey(p, m) {
   const now = Date.now(), c = p.pbCmd;
   if (p.cls !== 'PlumBlossom' || !c || now > c.until || p.role !== 1 || !canAct(p, now)) return;
-  if (m.sp) { if (c.k === 'E' && !c.sp && p.pbStage >= 1) { c.sp = true; c.until = now + PB.cmd + PB.slack; } return; }
+  if (m.sp) { if (c.k === 'E' && !c.sp && p.pbStage >= 1) { c.sp = true; c.until = now + (c.win || PB.cmd + PB.slack); } return; }
   const n = Number(m.n) | 0;
   if (n < 1 || n > 7 || (c.k !== 'Q' && n > 3) || (c.k === 'Q' && n > p.pbStage + 1)) return;
   p.pbCmd = null;
