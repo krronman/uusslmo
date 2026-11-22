@@ -206,6 +206,7 @@ body.mob #stkHud,body.mob #rvHud,body.mob #gcHud,body.mob #celHud{right:210px}
 #kbScreen[style*="flex"] #kbClose{display:block}
 #kbBox{width:min(380px,92vw);max-height:90vh;overflow:auto;box-sizing:border-box;padding:18px 20px;background:#1b1d40;border:4px solid #7b72e8;box-shadow:0 0 0 3px #0e0f26,inset 0 0 0 3px #2c2e66;border-radius:6px;font:14px/1.4 'Galmuri11','Press Start 2P',monospace;color:#e9e6ff}
 #kbBox h2{margin:0 0 10px;font:inherit;font-size:18px;color:#ffd66b;text-align:center}
+#mapScaleRow{display:none;align-items:center;justify-content:space-between;gap:8px;margin-top:14px;flex-wrap:wrap}#mapScaleBtns{display:flex;gap:6px}#mapScaleBtns button{min-width:48px;padding:6px 8px;background:#0f1030;color:#fff;border:2px solid #5b55a8;border-radius:4px;font:inherit;cursor:pointer}#mapScaleBtns button.on{background:#ffd66b;color:#222;border-color:#ffd66b}#mapScaleBtns button:disabled{opacity:.45;cursor:default}#mapScaleNote{flex-basis:100%;font-size:11px;color:#9aa0d8}
 #kbList .r{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
 #kbList button{min-width:120px;padding:6px 8px;background:#0f1030;color:#fff;border:2px solid #5b55a8;border-radius:4px;font:inherit;cursor:pointer}
 #kbList button:hover{border-color:#ffd66b}
@@ -286,8 +287,8 @@ body.mob #clBody{height:110px}
 <label for="gmAmt">금액</label><input id="gmAmt" class="admIn" style="width:100%" type="number" min="0" max="1000000000" step="1" placeholder="골드 금액" autocomplete="off">
 <div class="gmBtns"><button id="gmSet" class="admBtn" type="button">설정 (=)</button><button id="gmAdd" class="admBtn" type="button">지급 (+)</button></div>
 <div id="gmMsg"></div></div><button id="gmClose" class="xBtn" aria-label="close">✕</button></div>
-<div id="kbScreen"><div id="kbBox"><h2>키 설정</h2><div id="kbList"></div><div class="gmBtns"><button id="kbReset" class="admBtn">기본값으로 초기화</button></div><div id="kbMsg"></div></div><button id="kbClose" class="xBtn" aria-label="close">✕</button></div>
-<div id="aiScreen"><div id="aiBox"><h2>AI 플레이어</h2><div id="aiNewRow"><select id="aiNew"></select><select id="aiIq" style="flex:none;width:92px"></select><button id="aiAdd">추가</button></div><div id="aiList"></div></div><button id="aiClose" class="xBtn" aria-label="close">✕</button></div>
+<div id="kbScreen"><div id="kbBox"><h2>키 설정</h2><div id="kbList"></div><div id="mapScaleRow"><span>🗺 맵 크기</span><span id="mapScaleBtns"></span><span id="mapScaleNote">로비에서만 변경할 수 있습니다.</span></div><div class="gmBtns"><button id="kbReset" class="admBtn">기본값으로 초기화</button></div><div id="kbMsg"></div></div><button id="kbClose" class="xBtn" aria-label="close">✕</button></div>
+<div id="aiScreen"><div id="aiBox"><h2>AI 플레이어</h2><div id="aiNewRow"><select id="aiNew"></select><select id="aiIq" style="flex:none;width:92px"></select><button id="aiAdd">추가</button></div><button id="aiClear" style="margin-top:8px;width:100%">🗑 AI 전체 삭제</button><div id="aiList"></div></div><button id="aiClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="pnScreen"><div id="pnBox"><h2>밸런스 패치 노트</h2><div id="pnBody"></div></div><button id="pnClose" class="xBtn" aria-label="close">✕</button></div>
 <div id="killLog"></div>
 <div id="banner"></div><div id="fade"></div><div id="toast"></div>
@@ -301,7 +302,8 @@ body.mob #clBody{height:110px}
 <div id="authErr"></div>
 <button id="authGo">로그인</button><div id="guestLink" role="button" tabindex="0">게스트로 입장</div></form></div>
 <script>
-const W=2508, W0=1254, PX=5;
+let W=1254,mapScale=1;const W0=1254,PX=5;
+function setWorld(sc){sc=sc||1;mapScale=sc;W=W0*sc;LB.x=W/2-140;resize();camX=W/2;camY=W/2}
 const cv=document.getElementById('c'), hud=document.getElementById('hud');let ctx=cv.getContext('2d');
 const chatEl=document.getElementById('chat'), login=document.getElementById('login');
 const MAPS=['bg.jpg','map2.png'],bgs=MAPS.map(f=>{const i=new Image();i.src=f;return i});let bg=bgs[1],mapId=1;
@@ -383,11 +385,11 @@ function connect(){
   if(isGuest){isGuest=false;joined=false;obs=false;resetTitles();login.style.display='flex';authErr.textContent='연결이 끊어져 게스트 세션이 종료되었습니다. 다시 입장해 주세요.'}
   if(!kickedFlag)setTimeout(connect,1500)};
  ws.onmessage=e=>{const m=JSON.parse(e.data);
-  if(m.t==='hello'){myId=m.id;arena=m.arena;mapId=m.map||0;gameMode=m.mode||'ffa';bg=bgs[mapId];PRED=m.pred||{};pend.clear()}
+  if(m.t==='hello'){myId=m.id;arena=m.arena;mapId=m.map||0;setWorld(m.scale);gameMode=m.mode||'ffa';bg=bgs[mapId];PRED=m.pred||{};pend.clear()}
   else if(m.t==='mode'){gameMode=m.m}
   else if(m.t==='reap'){mySouls=m.s||[];mySoulQ=m.q||[];skIcons()}
   else if(m.t==='kicked'){kickedFlag=true;alert('관리자에 의해 퇴장되었습니다.')}
-  else if(m.t==='map'){arena=m.arena;mapId=m.id;bg=bgs[mapId];snapNext=true}
+  else if(m.t==='map'){arena=m.arena;mapId=m.id;bg=bgs[mapId];setWorld(m.scale);snapNext=true;if(kbIsOpen())mapScaleRender()}
   else if(m.t==='history'){clBody.innerHTML='';logs.length=0;for(const c of m.log)addLog(c.name,c.text,c.sys,c.age)}
   else if(m.t==='state'){
    phase=m.ph;roundLeft=m.left;foxes=m.ff||[];soulOrbs=m.sb||[];
@@ -399,7 +401,7 @@ function connect(){
     if(snapNext){o.x=p.x;o.y=p.y}
     const f0=o.face;
     if(p.su>0&&(p.su>(o.su||0)+60||!(o.su>0)))o.sMax=p.su;
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,tm:p.tm,ai:p.ai,ar:p.ar,skl:p.skl,so:p.so,sz:p.sz,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,pbs:p.pbs,pbc:p.pbc,pz:p.pz,pbk:p.pbk,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,sn:p.sn,rg:p.rg,ax:p.ax,bu:p.bu||0,bd:p.bd||0,smn:p.smn||0,smx:p.smx||0,buT:performance.now(),bs:p.bs,bm:p.bm,iq:p.iq,id:p.id});
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,tm:p.tm,ai:p.ai,ar:p.ar,skl:p.skl,so:p.so,sz:p.sz,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,pbs:p.pbs,pbc:p.pbc,pz:p.pz,pbk:p.pbk,psw:p.psw,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,sn:p.sn,rg:p.rg,ax:p.ax,bu:p.bu||0,bd:p.bd||0,smn:p.smn||0,smx:p.smx||0,buT:performance.now(),bs:p.bs,bm:p.bm,iq:p.iq,id:p.id});
     if(p.id===myId)o.face=f0;
    }
    snapNext=false;
@@ -414,10 +416,10 @@ function connect(){
    readyBtn.classList.toggle('on',!!(me&&me.r));
    if(myCls!==(me?me.c:'')){myCls=me?me.c:'';csRender();skIcons()}
     const fm=(me&&me.lf)||'';if(fm!==myForm){myForm=fm;skIcons()}
-   titleBtn.style.display=shopBtn.style.display=skinBtn.style.display=phase==='lobby'?'':'none';
+   titleBtn.style.display=(phase==='lobby'||myRole===2)?'':'none';shopBtn.style.display=skinBtn.style.display=phase==='lobby'?'':'none';
    aiBtn.style.display=modeBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'block':'none';aiRefresh();modeBtn.textContent='🎮 '+(gameMode==='team'?'팀전':gameMode==='boss'?'보스전':'개인전');mapBtn.style.display=(phase==='lobby'&&isAdmin&&!obs)?'':'none';mapBtn.textContent='🗺 맵 '+(mapId+1)+'/'+MAPS.length;classBtn.style.display=(phase==='lobby'||myRole===2||obs)?'':'none';logoutBtn.style.display=phase==='lobby'?'block':'none';
-   if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();ttClose();admClose();shopClose();skClose();gmClose()}
-   skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';
+   if(phase!=='lobby'){if(csIsOpen()&&myRole!==2&&!obs)csClose();if(myRole!==2)ttClose();admClose();shopClose();skClose();gmClose()}
+   skillbar.style.display=(SKB[myCls]&&myRole!==2)?'flex':'none';if(kbIsOpen())mapScaleRender();
    setBtn.style.display=joined?'block':'none';goldBar.style.display=(joined&&!obs)?'block':'none';winBar.style.display=(joined&&!obs&&!isGuest)?'block':'none';goldBar.classList.toggle('adm',isAdmin);
    if(obs){readyBtn.style.display=titleBtn.style.display=shopBtn.style.display=skinBtn.style.display=skillbar.style.display='none';shopClose();skClose();gmClose();classBtn.style.display='';logoutBtn.style.display='block'}
   }
@@ -565,7 +567,7 @@ setTimeout(()=>tx({t:'ping',c:performance.now()}),600);setInterval(()=>tx({t:'pi
 function atkInfo(){const o=others.get(myId);return o?{x:+o.x.toFixed(1),y:+o.y.toFixed(1),rt:Math.round(rtt)}:{rt:Math.round(rtt)}}
 function localCone(r,span,c,dur){const o=others.get(myId);if(!o||myRole===2||o.su>0||o.cm)return;
  fxs.push({type:'cone',by:myId,x:o.x,y:o.y,a:myAim,span,r,c,dur,t0:performance.now()});startSwing(o,myAim,span,dur)}
-function localAttack(){const o=others.get(myId);if(!o||myRole===2||o.su>0||o.cm)return;
+function localAttack(){const o=others.get(myId);if(!o||myRole===2||o.su>0||o.cm)return;if(myCls==='PlumBlossom'&&o.psw)return;
  if(myCls==='Gumiho'){localOrb(o);return}
   if(myCls==='Tower'){localCone(RADPX+36,100*Math.PI/180,'rgba(255,255,255,.6)',220);return}
   if(myCls==='SwordMaster'||myCls==='PlumBlossom'){startSwing(o,myAim,100*Math.PI/180,240);return}
@@ -687,7 +689,7 @@ const CHARS=[
   style:'검기와 오라를 두르는 근접 검사. 방금 쓴 공격을 다시 베어내는 세이브로 연계를 이어갑니다.',
   skills:[
    {icon:'🌀',name:'오라',key:'패시브',types:['magic','cc'],desc:'일반 공격 4번마다 다음 일반 공격이 180 마법 피해로 강화되고 적을 1 radpx 밀어냅니다.'},
-   {icon:'🌙',name:'검기',key:'Q · 12초',types:['magic'],desc:'반경 1.5 radpx 검기를 6 radpx까지 발사(첫 적중 시 소멸): 100 + 대상 현재 체력 15% 마법 피해.'},
+   {icon:'🌙',name:'검기',key:'Q · 12초',types:['magic'],desc:'반경 1.5 radpx 검기를 맵 끝까지 발사(첫 적중 시 소멸, 끝에서 사라짐): 100 + 대상 현재 체력 15% 마법 피해.'},
    {icon:'💾',name:'세이브',key:'E · 쿨타임 없음',types:['util'],desc:'직전의 일반 공격/검기를 지연 없이 즉시 현재 위치·방향으로 70% 피해로 재시전(검기는 화면 끝까지 모든 적을 관통). 오라 공격 재시전은 1 radpx 넉백과 함께 바라보는 방향으로 2 radpx 돌진. 재시전 후 다시 공격하기 전까지 사용 불가.'},
    {icon:'✨',name:'각성',key:'R · 25초',types:['buff'],desc:'10초간 오라 필요 공격 횟수 4→2, 세이브 재시전 피해 100%.'}]},
 {id:'Tower',ko:'타워',img:'tower.png',stats:{hp:2200,atk:100},rng:'근접',
@@ -735,10 +737,10 @@ const CHARS=[
 {id:'PlumBlossom',ko:'매화검',img:'MaeHwa_sword.png',stats:{hp:1000,atk:90},rng:'1 radpx (근접)',
    style:'내공을 쌓아 삼류에서 현경까지 경지를 오르는 검객. 단계가 오를수록 체력과 공격력이 복리로 폭증하고, 익힌 무공이 늘어납니다.',
    skills:[
-    {icon:'🌸',name:'내공 / 무공',key:'패시브',types:['buff'],desc:'경지(삼류→이류→일류→절정→초절정→화경→현경)는 단전 내공으로 결정. 일반 공격마다 내공 +1(단전·진기 동시 증가). 스킬은 진기만 소모(삼류 0 / 이류 1 / 일류 2 / 절정 4 / 초절정 8 / 화경·현경 16), 단전은 줄지 않음. 경지 상승 시 최대·현재 체력과 기본 공격력이 복리 성장(2%부터 단계마다 2배) 하고 진기가 단전과 같아짐. 재사용은 진기를 추가 소모.'},
-    {icon:'🧘',name:'내공심법',key:'Q (메뉴)',types:['buff','heal'],desc:'Q 후 숫자키로 익힌 심법 운공(이동·공격·피격 시 중단, 다시 Q로 종료). 1 육합공: 0.5초마다 내공+2 / 2 운기행공: 0.5초마다 내공+3·체력 20 / 3 소주천: 1초마다 +8 / 4 자하신공: 1초마다 +15, 종료 시 공속 +10%(운공 시간의 1/2) / 5 대주천: 2초마다 +50 / 6 자하신공 숙련: 1초마다 +30, 종료 시 공속 +20%(3/4) / 7 정기신 합일: 2초마다 잃은 체력 5% 회복, 5초마다 다음 일반 공격 +20%, 이동으로 안 끊김·공격으로만 중단되며 1초 뒤 자동 재개.'},
-    {icon:'🗡️',name:'무공',key:'E (0.3초 내 입력)',types:['phys','pierce','magic','cc','def'],desc:'E+1 내려베기: 0.1초 뒤 1.5 radpx 직선 물리 80%, 0.1초 띄움(쿨 4초) / E+2 찌르기: 1 radpx 관통 90%+출혈 2초(4초) / E+3 막기: 정면 1 radpx 공격 1회 무효화·투사체 제거(4초). 이류~ E+Space+1 매화검기: 4 radpx 마법 100%(8초) / +2 매화섬: 3×6 radpx 장판 1.5초 이속 -40%, 2초 내 E 재사용 시 3 radpx 관통 100%+출혈(8초) / +3 매화벽: 폭 2 radpx 벽 1초, HP 1000, 관통 피해 2배(8초).'},
-    {icon:'🌺',name:'이십사수매화검법',key:'R (일류~)',types:['magic','pierce','def'],desc:'R+1 매화난무: 정면 검기 4발(0.2초 간격)+무작위 8방향 검기 3회(0.3초 간격)(16초) / R+2 매화광풍: 4×6 radpx 장판 2초 이속 -50%, 2초 내 R 최대 2회 재사용: 4 radpx 관통 120%+출혈 3초, 마지막 찌르기 시 4 radpx 이동(적중 시 적 뒤로)(8초) / R+3 매화결계: 반경 1 radpx 벽 4초, HP 2000(8초). 절정~ 숙련: 난무 검기 속도 +20%·가짜 검기 8발 추가, 시퀀스 중 E로 커서 방향 전환 / 광풍 가짜 찌르기 2회·사거리 +1 / 결계 HP +1000, 플레이어를 따라 이동.'}]},
+    {icon:'🌸',name:'내공 / 무공',key:'패시브',types:['buff'],desc:'경지(삼류→이류→일류→절정→초절정→화경→현경)는 단전 내공으로 결정. 일반 공격마다 내공 +1(단전·진기 동시 증가). 스킬은 진기만 소모(삼류 0 / 이류 1 / 일류 2 / 절정 4 / 초절정 8 / 화경·현경 16), 단전은 줄지 않음. 경지 상승 시 최대·현재 체력과 기본 공격력이 복리 성장(2%부터 단계마다 2배) 하고 진기가 단전과 같아짐. 재사용은 진기를 추가 소모. 화경부터 [검기]: 모든 공격이 마법 피해로 변환.'},
+    {icon:'🧘',name:'내공심법',key:'Q (메뉴)',types:['buff','heal'],desc:'Q 후 숫자키로 익힌 심법 운공(이동·공격·피격 시 중단, 다시 Q로 종료). 1 육합공: 0.5초마다 내공+2 / 2 운기행공: 0.5초마다 내공+3·체력 20 / 3 소주천: 1초마다 +8 / 4 자하신공: 1초마다 +15, 종료 시 공속 +10%(운공 시간의 1/2) / 5 대주천: 2초마다 +50 / 6 자하신공 숙련: 1초마다 +30, 종료 시 공속 +20%(3/4) / 7 정기신 합일: 1초마다 내공 +30, 2초마다 잃은 체력 5% 회복, 5초마다 다음 일반 공격 +20%, 이동으로 안 끊김·공격으로만 중단되며 1초 뒤 자동 재개.'},
+    {icon:'🗡️',name:'무공',key:'E (0.3초 내 입력)',types:['phys','pierce','magic','cc','def'],desc:'E+1 내려베기: 0.1초 뒤 1.5 radpx 직선 물리 80%, 0.1초 띄움(쿨 4초) / E+2 찌르기: 1 radpx 관통 90%+출혈 2초(4초) / E+3 막기: 정면 1 radpx 공격 1회 무효화·투사체 제거(4초). 이류~ E+Space+1 매화검기: 4 radpx 마법 100%(8초) / +2 매화섬: 3×6 radpx 장판 1.5초 이속 -40%, 2초 내 E 재사용 시 3 radpx 관통 100%+출혈(8초) / +3 매화벽: 폭 2 radpx 벽 1초, HP 1000, 관통 피해 2배(8초). 현경 E+4 검아일체: 일반 공격 불가, 검이 마우스를 따라다님(스킬은 검 위치에서 시전). 적중 시 피해는 검 속도에 비례(정지 0 ~ 최대 속도 300), 적중하면 속도 초기화. Q로 종료.'},
+    {icon:'🌺',name:'이십사수매화검법',key:'R (일류~)',types:['magic','pierce','def'],desc:'R+1 매화난무: 정면 검기 4발(0.2초 간격)+무작위 8방향 검기 3회(0.3초 간격)(16초) / R+2 매화광풍: 4×6 radpx 장판 2초 이속 -50%, 2초 내 R 최대 2회 재사용: 4 radpx 관통 120%+출혈 3초, 마지막 찌르기 시 4 radpx 이동(적중 시 적 뒤로)(8초) / R+3 매화결계: 반경 1 radpx 벽 4초, HP 2000(8초). 절정~ 숙련: 난무 검기 속도 +20%·가짜 검기 8발 추가, 시퀀스 중 E로 커서 방향 전환 / 광풍 가짜 찌르기 2회·사거리 +1 / 결계 HP +1000, 플레이어를 따라 이동. 초절정~ 극성: 난무 속도 추가 +10%p·가짜 검기 16발·발사 방향 16개 / 광풍 가짜 찌르기가 실제 찌르기(동일 피해)로 바뀌고 8회로 증가 / 결계 HP +2000·반경 +1 radpx.'}]},
   ...new Array(5).fill(null)
 ];
 const csScreen=document.getElementById('csScreen'),csBox=document.getElementById('csBox');
@@ -906,6 +908,7 @@ function aiRefresh(force){if(!aiIsOpen())return;if(phase!=='lobby'){aiClose();re
  for(const [id,name,val,iq] of list){const row=document.createElement('div'),n=document.createElement('span'),sel=document.createElement('select'),qs=document.createElement('select'),d=document.createElement('button');row.className='r';n.textContent=name;aiOpts(sel);sel.value=val;aiIqOpts(qs);qs.value=iq;qs.style.cssText='flex:none;width:92px';const up=()=>tx({t:'aiset',id,cls:sel.value,iq:+qs.value});sel.onchange=up;qs.onchange=up;d.textContent='삭제';d.onclick=()=>tx({t:'aidel',id});row.append(n,sel,qs,d);aiListEl.appendChild(row)}}
 function aiOpen(){closeAllWins();aiScreen.style.display='flex';aiRefresh(true)}
 aiBtn.onclick=()=>{aiOpen();aiBtn.blur()};document.getElementById('aiAdd').onclick=()=>tx({t:'aiadd',cls:aiNew.value,iq:+aiIq.value});
+document.getElementById('aiClear').onclick=()=>{if(confirm('모든 AI 플레이어를 삭제할까요?'))tx({t:'aiclear'})};
 document.getElementById('aiClose').onclick=aiClose;aiScreen.onclick=e=>{if(e.target===aiScreen)aiClose()};
 // ---- key binding ui ----
 const setBtn=document.getElementById('setBtn'),kbScreen=document.getElementById('kbScreen'),kbList=document.getElementById('kbList'),kbMsg=document.getElementById('kbMsg'),hintEl=document.getElementById('hint');
@@ -919,7 +922,9 @@ function kbRender(){kbList.textContent='';const cnt={};for(const a in KB_DEF)cnt
  for(const a in KB_DEF){const r=document.createElement('div'),n=document.createElement('span'),b=document.createElement('button'),d=cnt[kb[a]]>1;if(d)dup=true;r.className='r';n.textContent=KB_NAME[a];b.textContent=kbCap===a?'키를 누르세요…':kbLabel(kb[a]);b.className=kbCap===a?'cap':d?'dup':'';b.onclick=()=>{kbCap=kbCap===a?null:a;kbRender()};r.append(n,b);kbList.appendChild(r)}
  if(MOB){const r=document.createElement('div'),n=document.createElement('span'),g=document.createElement('input');r.className='r';r.style.marginTop='14px';n.textContent='조이스틱 크기 '+Math.round(joyScale*100)+'%';g.type='range';g.min=60;g.max=160;g.step=10;g.value=Math.round(joyScale*100);g.style.cssText='width:55%';g.oninput=()=>{joySetScale(g.value/100);n.textContent='조이스틱 크기 '+Math.round(joyScale*100)+'%'};r.append(n,g);kbList.appendChild(r)}
  kbMsg.textContent=kbCap?'Esc: 취소':dup?'Duplicate Key Detected':'';kbMsg.className=!kbCap&&dup?'warn':''}
-function kbOpen(){closeAllWins();for(const k in keys)keys[k]=false;sendInput();cancelCharge();kbScreen.style.display='flex';kbRender()}
+const msRow=document.getElementById('mapScaleRow'),msBtns=document.getElementById('mapScaleBtns');
+let msKey='';function mapScaleRender(force){const on=isAdmin&&!obs&&joined;msRow.style.display=on?'flex':'none';if(!on){msKey='';return}const k=mapScale+'|'+phase;if(!force&&k===msKey)return;msKey=k;msBtns.textContent='';for(const v of [1,1.5,2]){const b=document.createElement('button');b.textContent=v+'x';b.className=v===mapScale?'on':'';b.disabled=phase!=='lobby';b.onclick=()=>tx({t:'mapscale',s:v});msBtns.appendChild(b)}}
+function kbOpen(){closeAllWins();for(const k in keys)keys[k]=false;sendInput();cancelCharge();kbScreen.style.display='flex';kbRender();mapScaleRender(true)}
 addEventListener('keydown',e=>{if(!kbCap)return;e.preventDefault();e.stopImmediatePropagation();
  if(e.code==='Escape'){kbCap=null;kbRender();return}
  kb[kbCap]=e.code;kbCap=null;kbSave();kbRender()},true);
@@ -1264,7 +1269,7 @@ function drawPlayerBody(o,isMe){
  ctx.drawImage(sp,8,12,7,3,x0+8*PX,yb+12*PX-lR*PX,7*PX,3*PX);}
  ctx.restore();
  if(o.cls==='Knight'||o.cls==='UnitInf')drawSword(o,h,lift);
- if(o.cls==='SwordMaster'||o.cls==='PlumBlossom')drawSMSword(o,h,lift);
+ if(o.cls==='PlumBlossom'&&o.psw)drawPbFreeSword(o);else if(o.cls==='SwordMaster'||o.cls==='PlumBlossom')drawSMSword(o,h,lift);
  if(o.cls==='Reaper')drawScythe(o,h,lift);
  if(o.cls==='Berserker')drawAxeW(o,h,lift);
  if(o.cls==='Gamer')drawGamerWeapon(o,h,lift);
@@ -1546,13 +1551,17 @@ const PBFX={
   ctx.strokeStyle='rgba(255,235,240,.85)';ctx.lineWidth=2;ctx.setLineDash([12,10]);ctx.lineDashOffset=n/30;ctx.beginPath();ctx.arc(0,0,f.r*.82,0,7);ctx.stroke();ctx.restore();
   for(let i=0;i<28;i++){const a=i/28*6.283+n/700,rr=f.r*(.92+.08*Math.sin(n/200+i));pbPetal(f.cx+Math.cos(a)*rr,f.cy-24+Math.sin(a)*rr*.8,a*2+n/300,5.5,fade)}}
 };
+function drawPbFreeSword(o){const [x,y,sp,ang]=o.psw,n=performance.now(),T=o.pswT||(o.pswT=[]);if(sp>60)o.pswA=ang;const a=o.pswA!==undefined?o.pswA:0,sc=Math.min(1,sp/1500);
+ T.push([x,y,n]);while(T.length&&n-T[0][2]>180)T.shift();
+ for(let i=0;i<T.length-1;i++){const q=T[i];ctx.save();ctx.globalAlpha=.4*(i/T.length)*sc;ctx.translate(q[0],q[1]-30);ctx.rotate(a+Math.PI/4);if(imOk(pbSwordImg))ctx.drawImage(pbSwordImg,0,0,15,15,-45,-45,90,90);ctx.restore()}
+ ctx.save();ctx.translate(x,y-30);ctx.strokeStyle='rgba(244,170,187,'+(.35+.5*sc)+')';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,30+10*sc,0,7);ctx.stroke();ctx.rotate(a+Math.PI/4);if(imOk(pbSwordImg))ctx.drawImage(pbSwordImg,0,0,15,15,-45,-45,90,90);ctx.restore()}
 function drawPbAura(o,h,lift){const n=performance.now(),pulse=1+.08*Math.sin(n/160);ctx.save();ctx.translate(o.x,o.y-4);ctx.scale(1,.8);ctx.strokeStyle='rgba(244,170,187,.9)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,34*pulse,0,7);ctx.stroke();ctx.restore();
  for(let i=0;i<5;i++){const a=n/500+i*1.2566,u=((n/900+i/5)%1);pbPetal(o.x+Math.cos(a)*(26+8*u),o.y-8-u*(h+10)+Math.sin(a)*8,a*2,4,1-u)}}
 const pbHud=document.getElementById('pbHud'),pbPad=document.getElementById('pbPad'),PB_WIN=MOB?1500:400,PB_MAX=[50,100,200,400,800,1600],PB_STG=['삼류','이류','일류','절정','초절정','화경','현경'],PB_COST=[0,1,2,4,8,16,16];
-const PB_QN=['','육합공','운기행공','소주천','자하신공','대주천','자하신공 숙련','정기신 합일'],PB_EN={E1:'내려베기',E2:'찌르기',E3:'막기',S1:'매화검기',S2:'매화섬',S3:'매화벽',R1:'매화난무',R2:'매화광풍',R3:'매화결계'};
-let pbPadKey='',pbS=null,pbT=0,pbCmdK='',pbCmdSp=false,pbCmdEnd=0,pbHtml='';
+const PB_QN=['','육합공','운기행공','소주천','자하신공','대주천','자하신공 숙련','정기신 합일'],PB_EN={E4:'검아일체',E1:'내려베기',E2:'찌르기',E3:'막기',S1:'매화검기',S2:'매화섬',S3:'매화벽',R1:'매화난무',R2:'매화광풍',R3:'매화결계'};
+let pbCurT=0,pbPadKey='',pbS=null,pbT=0,pbCmdK='',pbCmdSp=false,pbCmdEnd=0,pbHtml='';
 function pbSp(){const n=performance.now();if(n>pbCmdEnd||pbCmdK!=='E'||pbCmdSp)return false;pbCmdSp=true;pbCmdEnd=n+PB_WIN;tx({t:'pbk',sp:1,a:+myAim.toFixed(3)});return true}
-function pbNum(d){const n=performance.now();if(n>pbCmdEnd||d<1||(pbCmdK!=='Q'&&d>3))return false;tx(Object.assign({t:'pbk',n:d,a:+myAim.toFixed(3)},atkInfo()));pbCmdEnd=0;return true}
+function pbNum(d){const n=performance.now();if(n>pbCmdEnd||d<1||(pbCmdK!=='Q'&&d>(pbCmdK==='E'&&!pbCmdSp?4:3)))return false;tx(Object.assign({t:'pbk',n:d,a:+myAim.toFixed(3)},atkInfo()));pbCmdEnd=0;return true}
 function pbKey(e){if(performance.now()>pbCmdEnd)return false;
  if(e.code==='Space'){if(pbSp()){e.preventDefault();return true}return false}
  const m=/^(?:Digit|Numpad)([1-7])$/.exec(e.code);if(!m||!pbNum(+m[1]))return false;e.preventDefault();return true}
@@ -1564,6 +1573,7 @@ function updatePb(t){
  const S=pbS||{d:0,a:0,s:0,ch:0,cds:{},re:{},bn:0},st=S.s,el=t-pbT,cdr=id=>Math.max(0,(S.cds[id]||0)-el)/1000,fm=ms=>(Math.ceil(ms/100)/10).toFixed(1),L=[];
  L.push('<div class="pbh">🌸 매화검 · '+PB_STG[st]+'</div><div>단전 '+S.d+' · 진기 '+S.a+'</div>');
  if(st<6){const lo=st?PB_MAX[st-1]:0,hi=PB_MAX[st],pc=Math.max(0,Math.min(100,(S.d-lo)/(hi-lo)*100));L.push('<div class="pbb"><i style="width:'+pc.toFixed(0)+'%"></i></div><div class="hint">다음 경지까지 '+(hi+1-S.d)+'</div>')}
+ {const me=others.get(myId);if(me&&me.psw){L.push('<div class="on">⚔ 검아일체 · Q로 종료</div>');if(t-pbCurT>40){pbCurT=t;if(MOB)tx({t:'pbc',x:Math.round(me.x+Math.cos(myAim)*4.5*RADPX),y:Math.round(me.y+Math.sin(myAim)*4.5*RADPX*.8)});else tx({t:'pbc',x:Math.round(mWx),y:Math.round(mWy)})}}}
  if(S.ch)L.push('<div class="on">🧘 '+PB_QN[S.ch]+' 운공 중</div>');
  if(S.bn)L.push('<div class="on">⚔ 다음 공격 +20%</div>');
  if(S.re){if(S.re.e-el>0)L.push('<div class="on">E: 매화섬 재사용 '+fm(S.re.e-el)+'초</div>');if(S.re.r-el>0)L.push('<div class="on">R: 매화광풍 재사용 ('+S.re.rl+'회) '+fm(S.re.r-el)+'초</div>');if(S.re.f-el>0)L.push('<div class="on">E: 검기 방향 전환 '+fm(S.re.f-el)+'초</div>')}
@@ -1572,11 +1582,11 @@ function updatePb(t){
   L.push('<div class="pbh">['+K+(pbCmdSp?'+Space':'')+'] 숫자키 입력'+(K==='Q'?'':' · 진기 '+PB_COST[st])+'</div>');
   if(K==='Q')for(let i=1;i<=st+1;i++)L.push('<div class="'+(S.ch===i?'on':'')+'">'+i+'. '+PB_QN[i]+'</div>');
   else if(K==='R'){if(st<2)L.push('<div class="cd">일류 경지부터 사용 가능</div>');else for(let i=1;i<=3;i++)L.push(row(i,'R'+i))}
-  else{for(let i=1;i<=3;i++)L.push(row(i,(pbCmdSp?'S':'E')+i));if(!pbCmdSp&&st>=1)L.push('<div class="hint">Space → 칠매검</div>')}
+  else{for(let i=1;i<=3;i++)L.push(row(i,(pbCmdSp?'S':'E')+i));if(!pbCmdSp&&st>=6)L.push(row(4,'E4'));if(!pbCmdSp&&st>=1)L.push('<div class="hint">Space → 칠매검</div>')}
   L.push('<div class="pbb"><i style="width:'+Math.max(0,Math.min(100,left/(K==='Q'?3000:PB_WIN)*100)).toFixed(0)+'%"></i></div>')}
  else L.push('<div class="hint">Q 심법 · E 무공 · R 이십사수매화검</div>');
  const html=L.join('');if(html!==pbHtml){pbHtml=html;pbHud.innerHTML=html}
- if(MOB){const sh=left>0,pk=sh?pbCmdK+pbCmdSp+st:'';if(pk!==pbPadKey){pbPadKey=pk;pbPad.style.display=sh?'grid':'none';if(sh)for(const b of pbPad.children){b.style.display=b.dataset.sp?(pbCmdK==='E'&&!pbCmdSp?'':'none'):(+b.dataset.n<=(pbCmdK==='Q'?st+1:3)?'':'none')}}}}
+ if(MOB){const sh=left>0,pk=sh?pbCmdK+pbCmdSp+st:'';if(pk!==pbPadKey){pbPadKey=pk;pbPad.style.display=sh?'grid':'none';if(sh)for(const b of pbPad.children){b.style.display=b.dataset.sp?(pbCmdK==='E'&&!pbCmdSp?'':'none'):(+b.dataset.n<=(pbCmdK==='Q'?st+1:(pbCmdK==='E'&&!pbCmdSp&&st>=6?4:3))?'':'none')}}}}
 const PB_FX_OK=1;
 
 const celHud=document.getElementById('celHud');
