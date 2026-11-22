@@ -8,7 +8,9 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8' };
 
-const ARENAS = [{ CX: 1260, CY: 1280, RX: 820, RY: 670 }, { CX: 1260, CY: 1200, RX: 920, RY: 740 }];
+const ARENA_BASE = [{ CX: 630, CY: 640, RX: 410, RY: 335 }, { CX: 630, CY: 600, RX: 460, RY: 370 }];
+let mapScale = 1;
+const ARENAS = ARENA_BASE.map(a => ({ ...a }));
 let mapId = 1, { CX, CY, RX, RY } = ARENAS[1];
 const SPEED = 300, TICK = 30, MAX_PLAYERS = 50;
 
@@ -49,10 +51,17 @@ const BOSS_CAP = { dmg: 2, spd: 1.5 };
 const TEAM_NAME = { 1: 'Red', 2: 'Blue' };
 const tmOf = t => t ? (t.unit ? ((players.get(t.owner) || {}).team || 0) : (t.team || 0)) : 0;
 const sameTeam = (a, b) => gameMode !== 'ffa' && !!tmOf(a) && tmOf(a) === tmOf(b);
-function setMap(id) {
-  mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]);
+function pushMap() {
   for (const p of players.values()) { const c = clampArena({ x: p.x, y: p.y }); p.x = c.x; p.y = c.y; p.hist = []; }
-  broadcast({ t: 'map', id, arena: { CX, CY, RX, RY } });
+  broadcast({ t: 'map', id: mapId, scale: mapScale, arena: { CX, CY, RX, RY } });
+}
+function setMap(id) { mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]); pushMap(); }
+function setScale(sc) {
+  const r = sc / mapScale; mapScale = sc; MAP = 1254 * sc;
+  ARENA_BASE.forEach((a, i) => { for (const k in a) ARENAS[i][k] = a[k] * sc; });
+  ({ CX, CY, RX, RY } = ARENAS[mapId]);
+  for (const p of players.values()) { p.x *= r; p.y *= r; if (p.lx !== undefined) { p.lx *= r; p.ly *= r; } }
+  pushMap();
 }
 
 function addChat(e) {
@@ -173,7 +182,7 @@ function addWin(p) {
   winSave = winSave.then(() => db.set('wins', json)).catch(err => console.error('wins save failed:', err.message));
 }
 // ---- gold ----
-const WIN_GOLD = 5;
+const WIN_GOLD = 5, KILL_GOLD = 5;
 async function awardGold(p, n) {
   if (p.guest) { p.gold = (p.gold || 0) + n; send(p.ws, { t: 'gold', g: p.gold, d: n }); return; }
   try {
@@ -278,7 +287,7 @@ const CLASS_STATS = {
 const statsBase = p => p.cls === 'PlumBlossom' ? { hp: Math.round(1000 * pbMul(p)), dmg: 90 * pbMul(p), reduce: 0, atkCd: 800 } : p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : p.cls === 'Berserker' && !axeHeld(p) ? Object.assign({}, CLASS_STATS.Berserker, { dmg: 50 }) : CLASS_STATS[p.cls] || BASE;
 const statsOf = p => { const s = statsBase(p); return p.pw && p.pw !== 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
 const RADPX = 112.5;
-const MAP = 2508;
+let MAP = 1254;
 const ARROW = { speed: 800, range: 5 * RADPX, radius: 28 };
 const ATKR = 0.5 * RADPX;
 const ARCHER = {
@@ -415,7 +424,8 @@ function moveArrow(ar, step, time) {
 }
 function arrowHit(ar, t, now) {
   const inDir = ar.a + Math.PI;
-  const type = ar.type || (ar.orb ? 'magic' : 'phys');
+  const arO = players.get(ar.owner);
+  const type = arO && arO.cls === 'PlumBlossom' && arO.pbStage >= 5 ? 'magic' : ar.type || (ar.orb ? 'magic' : 'phys');
   if (type === 'phys' && t.cls === 'Shielder' && now < t.hornUntil && shieldBlocks(t, { dir: inDir })) { deflectArrow(ar, t); return true; }
   if (t.cls === 'PlumBlossom' && now < (t.pbBlockUntil || 0) && pbTryBlock(t, { dir: inDir }, now)) { ar.left = 0; return false; }
   dmgTo(t, ar.hpPct ? ar.dmg + Math.round(t.hp * ar.hpPct) : ar.dmg, now, { dir: inDir, kill: players.get(ar.owner), type });
@@ -472,7 +482,7 @@ function stepArrows(dt, now) {
 function resetCombat(p) {
   p.axes = p.cls === 'Berserker' ? [{ s: 0, x: 0, y: 0, a: 0, d: 0 }] : []; p.bRUntil = 0;
   p.pw = 1; p.bm = 0;
-  p.pbD = p.pbA = p.pbStage = 0; p.pbCd = {}; p.pbCmd = null; p.pbCh = null; p.pbResume = null; p.pbBonus = false; p.pbBn = 0; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = p.pbSlowUntil = 0; p.pbSlowMul = 1; p.pbKey = ''; pbClean(p.id);
+  p.pbD = p.pbA = p.pbStage = 0; p.pbCd = {}; p.pbCmd = null; p.pbCh = null; p.pbResume = null; p.pbBonus = false; p.pbBn = 0; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = p.pbSlowUntil = 0; p.pbSlowMul = 1; p.pbKey = ''; p.pbSw = null; pbClean(p.id);
   p.lf = ''; p.lPend = p.lUsed = false; p.beam = p.pure = p.sanct = null; p.libUntil = p.dmUntil = 0; p.dmList = [];
   p.mh = p.hp = statsOf(p).hp;
   p.atkReady = p.cdQ = p.cdE = p.cdR = 0;
@@ -500,6 +510,7 @@ function killPlayer(p) {
   if (was && phase === 'round' && p.cls) dropSoul(p.x, p.y, p.cls, 0, 1);
   p.hp = 0; p.role = 2; p.dx = p.dy = 0; p.moving = false; p.deathOrder = ++deathCounter;
   if (was) broadcast({ t: 'kill', k: k ? k.id : 0, kn: k ? k.name : '', kc: k ? k.cls : '', v: p.id, vn: p.name, vc: p.cls });
+  if (was && k && phase === 'round') { const kr = players.get(rootOf(k)); if (kr && kr !== p && !kr.ai && !kr.skel && !kr.obs && (kr.user || kr.guest) && !sameTeam(kr, p)) awardGold(kr, KILL_GOLD); }
 }
 const bRage = p => p.cls === 'Berserker' && p.role === 1 && p.hp > 0 && p.hp <= p.mh * 0.5;
 const berserkInc = (a, src, now) => a.cls !== 'Berserker' ? 0 : (bRage(a) ? 0.85 : 0) + (now < (a.bRUntil || 0) ? 0.3 : 0);
@@ -524,7 +535,8 @@ function dmgTo(t, amount, now, src) {
   let incA = 0;
   if (atk0 && !(src && src.fixed)) { if (atk0.pw && atk0.pw !== 1) incA += atk0.pw - 1; incA += berserkInc(atk0, src, now); }
   const amount0 = amount; amount = amount0 * (1 + incA);
-  const type = (src && src.type) || (src && src.by && (src.by.cls === 'Assassin' || src.by.gPierce) ? 'pierce' : 'phys');
+  let type = (src && src.type) || (src && src.by && (src.by.cls === 'Assassin' || src.by.gPierce) ? 'pierce' : 'phys');
+  if (atk0 && atk0.cls === 'PlumBlossom' && atk0.pbStage >= 5 && !(src && src.fixed)) type = 'magic';
   const pierce = type === 'pierce', magic = type === 'magic';
   if (!pierce && now < (t.invulnUntil || 0)) return;
   let cut = 0, blocked = false;
@@ -1242,7 +1254,8 @@ function smStrike(p, o, lag, now, aura, mult) {
 }
 function smCastQ(p, o, lag, now, mult, viaE) {
   const Q = SM.Q, spec = { a: p.aim, dmg: Math.round(Q.dmg * mult), hpPct: Q.pct * mult, spd: Q.spd, range: Q.range, radius: Q.radius, pierce: false, kind: 'smq', type: 'magic' };
-  if (viaE) Object.assign(spec, { pierce: true, noArena: true, range: offMapRange(o.x, o.y, p.aim, 1) });
+  Object.assign(spec, { noArena: true, range: offMapRange(o.x, o.y, p.aim, 1) });
+  if (viaE) spec.pierce = true;
   spawnArrow(p, o, lag, now, spec);
 }
 function swordmasterAttack(p, m, now) {
@@ -1903,13 +1916,14 @@ function stepBerserker(dt, now) {
       if (a.s === 1) {
         const step = Math.min(BERS.Q.spd * dt, BERS.Q.range - a.d);
         const nx = a.x + Math.cos(a.a) * step, ny = a.y + Math.sin(a.a) * step * 0.8, ex = (nx - CX) / RX, ey = (ny - CY) / RY;
-        let land = false;
+        let land = false, hitNow = false;
         if (ex * ex + ey * ey > 1) land = true; else { a.x = nx; a.y = ny; a.d += step; if (a.d >= BERS.Q.range - 0.01) land = true; }
         for (const t of targetsOf(p)) {
           if (a.hit.has(t.id) || Math.hypot(t.x - a.x, (t.y - a.y) / 0.8) > BERS.Q.hit + (t.hr || 0)) continue;
-          a.hit.add(t.id); any = true;
+          a.hit.add(t.id); any = true; hitNow = true;
           dmgTo(t, BERS.Q.dmg, now, { dir: a.a + Math.PI, kill: p, type: 'phys' });
         }
+        if (hitNow) land = true;
         if (land) { a.s = 2; broadcast({ t: 'arrowEnd', id: a.vid }); }
       } else if (a.s === 2 && Math.hypot(p.x - a.x, (p.y - a.y) / 0.8) <= BERS.Q.pick) {
         a.s = 0; p.cdE = Math.max(now, p.cdE - BERS.E.cut); send(p.ws, { t: 'cd', k: 'E', ms: Math.max(0, p.cdE - now) });
@@ -1923,7 +1937,7 @@ function stepBerserker(dt, now) {
 const PB = {
   g0: 0.02, max: [50, 100, 200, 400, 800, 1600], cost: [0, 1, 2, 4, 8, 16, 16], cmd: 300, slack: 100, menu: 3000,
   hw: 0.3 * RADPX, blk: { ms: 500, r: 1.1 * RADPX, span: 150 * RAD }, spd: 1200,
-  cd: { E1: 4000, E2: 4000, E3: 4000, S1: 8000, S2: 8000, S3: 8000, R1: 16000, R2: 8000, R3: 8000 },
+  cd: { E4: 1000, E1: 4000, E2: 4000, E3: 4000, S1: 8000, S2: 8000, S3: 8000, R1: 16000, R2: 8000, R3: 8000 },
   names: ['삼류', '이류', '일류', '절정', '초절정', '화경', '현경']
 };
 PB.mul = (() => { let m = 1; return [0, 1, 2, 3, 4, 5, 6].map(i => (m *= 1 + PB.g0 * Math.pow(2, i))); })();
@@ -1935,7 +1949,7 @@ const PB_Q = [null,
   { iv: 1000, en: 15, as: 0.1, frac: 0.5 },
   { iv: 2000, en: 50 },
   { iv: 1000, en: 30, as: 0.2, frac: 0.75 },
-  { iv: 2000, heal: 0.05, mobile: true }
+  { iv: 1000, en: 30, heal: 0.05, healEvery: 2, mobile: true }
 ];
 const pbWalls = [], pbZones = [], pbTimers = []; let pbSeq = 0;
 const pbLater = (p, ms, fn) => pbTimers.push({ at: Date.now() + ms, owner: p.id, fn });
@@ -2014,6 +2028,8 @@ function pbMeleeWall(t, amount, src, now) {
   const type = src.type || (att.cls === 'Assassin' || att.gPierce ? 'pierce' : 'phys');
   return pbAbsorb(att.id, src.x, src.y / 0.8, t.x, t.y / 0.8, amount, type, now);
 }
+const pbPos = p => p.pbSw ? { x: p.pbSw.x, y: p.pbSw.g * 0.8 } : { x: p.x, y: p.y };
+const pbOrigin = (p, m) => p.pbSw ? pbPos(p) : originOf(p, m);
 function pbTargetPt(m, p) {
   let cx = Number(m && m.cx), cy = Number(m && m.cy) + 30;
   if (!Number.isFinite(cx) || !Number.isFinite(cy)) { cx = p.x + Math.cos(p.aim) * 3 * RADPX; cy = p.y + Math.sin(p.aim) * 3 * RADPX * 0.8; }
@@ -2033,7 +2049,7 @@ function pbThrust(p, o, lag, now, len, mult, bleedMs) {
   return hits;
 }
 function plumAttack(p, m, now) {
-  if (now < p.atkReady) return;
+  if (now < p.atkReady || p.pbSw) return;
   pbStop(p, now, true);
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
@@ -2054,6 +2070,7 @@ function plumSkill(p, k, m, now) {
     if (p.pbRe.e2 && now < p.pbRe.e2.until) return pbReuseE2(p, m, now);
   }
   if (k === 'R' && p.pbRe.r2 && now < p.pbRe.r2.until) return pbReuseR2(p, m, now);
+  if (k === 'Q' && p.pbSw) { p.pbSw = null; p.pbCmd = null; broadcast({ t: 'fx', type: 'pbburst', x: p.x, y: p.y, r: 1.2 * RADPX, dur: 600 }); return; }
   if (k === 'Q' && p.pbCh) { pbStop(p, now, false); p.pbCmd = null; return; }
   const win = m && m.mob ? 1500 : PB.cmd + PB.slack;
   p.pbCmd = { k, sp: false, win, until: now + (k === 'Q' ? PB.menu : win) };
@@ -2063,28 +2080,32 @@ function plumKey(p, m) {
   if (p.cls !== 'PlumBlossom' || !c || now > c.until || p.role !== 1 || !canAct(p, now)) return;
   if (m.sp) { if (c.k === 'E' && !c.sp && p.pbStage >= 1) { c.sp = true; c.until = now + (c.win || PB.cmd + PB.slack); } return; }
   const n = Number(m.n) | 0;
-  if (n < 1 || n > 7 || (c.k !== 'Q' && n > 3) || (c.k === 'Q' && n > p.pbStage + 1)) return;
+  if (n < 1 || n > 7 || (c.k !== 'Q' && n > (c.k === 'E' && !c.sp ? 4 : 3)) || (c.k === 'Q' && n > p.pbStage + 1)) return;
   p.pbCmd = null;
   if (c.k === 'Q') pbStart(p, n, now);
   else pbCast(p, (c.k === 'R' ? 'R' : c.sp ? 'S' : 'E') + n, m, now);
 }
 function pbCast(p, id, m, now) {
-  const need = id[0] === 'E' ? 0 : id[0] === 'S' ? 1 : 2;
-  if (p.pbStage < need) return false;
+  const need = id === 'E4' ? 6 : id[0] === 'E' ? 0 : id[0] === 'S' ? 1 : 2;
+  if (p.pbStage < need || (id === 'E4' && p.pbSw)) return false;
   if (now < (p.pbCd[id] || 0)) { fxTxt(p.x, p.y - 40, '쿨타임', '#cfcfcf'); return false; }
   const c = PB.cost[p.pbStage];
   if (p.pbA < c) { fxTxt(p.x, p.y - 40, '내공 부족', '#9fd0ff'); return false; }
   p.pbA -= c; p.pbCd[id] = now + PB.cd[id];
-  const o = originOf(p, m), lag = lagOf(m), base = statsOf(p).dmg, mast = p.pbStage >= 3;
+  const o = pbOrigin(p, m), lag = p.pbSw ? 0 : lagOf(m), base = statsOf(p).dmg, mast = p.pbStage >= 3, ult = p.pbStage >= 4;
   const slashAt = (ms, fn) => pbLater(p, ms, fn);
-  if (id === 'E1') {
+  if (id === 'E4') {
+    pbStop(p, now, false);
+    p.pbSw = { x: p.x, g: p.y / 0.8, vx: 0, vg: 0, cx: p.x + Math.cos(p.aim) * 3 * RADPX, cg: p.y / 0.8 + Math.sin(p.aim) * 3 * RADPX, hit: {} };
+    broadcast({ t: 'fx', type: 'pbburst', x: p.x, y: p.y, r: 1.4 * RADPX, dur: 700 });
+  } else if (id === 'E1') {
     broadcast({ t: 'fx', type: 'ring', x: o.x, y: o.y, r: 0.5 * RADPX, c: '#F4AABB', dur: 300 });
     slashAt(100, () => {
-      const t0 = Date.now(), a = p.aim, L = 1.5 * RADPX, gx = p.x, gy = p.y / 0.8, ex = gx + Math.cos(a) * L, ey = gy + Math.sin(a) * L;
-      broadcast({ t: 'fx', type: 'pbline', x: p.x, y: p.y, a, len: L, w: PB.hw * 2, dur: 380, down: 1 });
+      const t0 = Date.now(), a = p.aim, L = 1.5 * RADPX, pp = pbPos(p), gx = pp.x, gy = pp.y / 0.8, ex = gx + Math.cos(a) * L, ey = gy + Math.sin(a) * L;
+      broadcast({ t: 'fx', type: 'pbline', x: pp.x, y: pp.y, a, len: L, w: PB.hw * 2, dur: 380, down: 1 });
       for (const t of targetsOf(p)) {
         if (segDist(t.x, t.y / 0.8, gx, gy, ex, ey) > PB.hw + (t.hr || 0)) continue;
-        dmgTo(t, Math.round(base * 0.8), t0, { x: p.x, y: p.y, by: p, type: 'phys' });
+        dmgTo(t, Math.round(base * 0.8), t0, { x: pp.x, y: pp.y, by: p, type: 'phys' });
         if (t.role === 1) t.stunUntil = Math.max(t.stunUntil || 0, t0 + 100);
       }
       checkRoundEnd();
@@ -2096,7 +2117,7 @@ function pbCast(p, id, m, now) {
     broadcast({ t: 'fx', type: 'pbfan', ow: p.id, x: o.x, y: o.y, a: p.aim, span: PB.blk.span, r: PB.blk.r, dur: PB.blk.ms });
   } else if (id === 'S1') {
     broadcast({ t: 'fx', type: 'ring', x: o.x, y: o.y, r: 0.5 * RADPX, c: '#F4AABB', dur: 300 });
-    slashAt(100, () => spawnArrow(p, { x: p.x, y: p.y }, 0, Date.now(), { a: p.aim, dmg: Math.round(base), spd: PB.spd, range: 4 * RADPX, radius: 0.45 * RADPX, kind: 'pbq', type: 'magic' }));
+    slashAt(100, () => spawnArrow(p, pbPos(p), 0, Date.now(), { a: p.aim, dmg: Math.round(base), spd: PB.spd, range: 4 * RADPX, radius: 0.45 * RADPX, kind: 'pbq', type: 'magic' }));
   } else if (id === 'S2') {
     pbZone(p, o, 3 * RADPX, 6 * RADPX, 1500, 0.6, now);
     p.pbRe.e2 = { until: now + 2000 };
@@ -2105,19 +2126,27 @@ function pbCast(p, id, m, now) {
     pbWalls.push({ id: wid, owner: p.id, kind: 'seg', x1: cx - nx, gy1: cgy - ny, x2: cx + nx, gy2: cgy + ny, hp: 1000, until: now + 1000 });
     broadcast({ t: 'fx', type: 'pbwall', id: wid, x1: cx - nx, y1: (cgy - ny) * 0.8, x2: cx + nx, y2: (cgy + ny) * 0.8, dur: 1000 });
   } else if (id === 'R1') {
-    pbFlurry(p, now, mast, base);
+    pbFlurry(p, now, mast, base, ult);
   } else if (id === 'R2') {
     pbZone(p, o, 4 * RADPX, 6 * RADPX, 2000, 0.5, now);
     p.pbRe.r2 = { until: now + 2000, left: 2, mast };
-    if (mast) for (const d of [500, 1000]) slashAt(d, () => {
-      let best = null, bd = Infinity;
-      for (const t of targetsOf(p)) { const dd = Math.hypot(t.x - p.x, (t.y - p.y) / 0.8); if (dd < bd) { bd = dd; best = t; } }
-      if (best) broadcast({ t: 'fx', type: 'pbline', x: p.x, y: p.y, a: Math.atan2((best.y - p.y) / 0.8, best.x - p.x), len: 5 * RADPX, w: PB.hw * 2, dur: 360, fake: 1 });
+    if (ult) for (let i = 1; i <= 8; i++) slashAt(i * 250, () => {
+      const pp = pbPos(p); let best = null, bd = Infinity;
+      for (const t of targetsOf(p)) { const dd = Math.hypot(t.x - pp.x, (t.y - pp.y) / 0.8); if (dd < bd) { bd = dd; best = t; } }
+      if (!best) return;
+      const ang = Math.atan2((best.y - pp.y) / 0.8, best.x - pp.x), keep = p.aim; p.aim = ang;
+      pbThrust(p, pp, 0, Date.now(), 5 * RADPX, 1.2, 3000);
+      p.aim = keep;
+    });
+    else if (mast) for (const d of [500, 1000]) slashAt(d, () => {
+      const pp = pbPos(p); let best = null, bd = Infinity;
+      for (const t of targetsOf(p)) { const dd = Math.hypot(t.x - pp.x, (t.y - pp.y) / 0.8); if (dd < bd) { bd = dd; best = t; } }
+      if (best) broadcast({ t: 'fx', type: 'pbline', x: pp.x, y: pp.y, a: Math.atan2((best.y - pp.y) / 0.8, best.x - pp.x), len: 5 * RADPX, w: PB.hw * 2, dur: 360, fake: 1 });
     });
   } else if (id === 'R3') {
-    const wid = ++pbSeq, hp = mast ? 3000 : 2000;
-    pbWalls.push({ id: wid, owner: p.id, kind: 'circ', x: o.x, gy: o.y / 0.8, r: RADPX, hp, until: now + 4000, follow: mast });
-    broadcast({ t: 'fx', type: 'pbbarrier', id: wid, ow: p.id, x: o.x, y: o.y, r: RADPX, follow: mast ? 1 : 0, dur: 4000 });
+    const wid = ++pbSeq, hp = 2000 + (mast ? 1000 : 0) + (ult ? 2000 : 0), br = (ult ? 2 : 1) * RADPX;
+    pbWalls.push({ id: wid, owner: p.id, kind: 'circ', x: o.x, gy: o.y / 0.8, r: br, hp, until: now + 4000, follow: mast });
+    broadcast({ t: 'fx', type: 'pbbarrier', id: wid, ow: p.id, x: o.x, y: o.y, r: br, follow: mast ? 1 : 0, dur: 4000 });
   }
   return true;
 }
@@ -2126,18 +2155,19 @@ function pbZone(p, o, w, len, ms, mul, now) {
   pbZones.push({ id, owner: p.id, gx: o.x, gy: o.y / 0.8, a: p.aim, len, w, mul, until: now + ms });
   broadcast({ t: 'fx', type: 'pbzone', x: o.x, y: o.y, a: p.aim, len, w, dur: ms });
 }
-function pbFlurry(p, now, mast, base) {
-  const spd = PB.spd * (mast ? 1.2 : 1), fly = p.pbFly = { ids: new Set(), end: now + 600 + 250, redir: null, done: false, mast };
+function pbFlurry(p, now, mast, base, ult) {
+  const spd = PB.spd * (ult ? 1.3 : mast ? 1.2 : 1), nDir = ult ? 16 : 8, fly = p.pbFly = { ids: new Set(), end: now + 600 + 250, redir: null, done: false, mast };
   const fire = (a, dmg, fake, track) => {
     if (p.role !== 1) return;
-    const id = spawnArrow(p, { x: p.x, y: p.y }, 0, Date.now(), { a, dmg, spd, range: 6 * RADPX, radius: 0.4 * RADPX, kind: 'pbq', type: 'magic', fake });
+    const id = spawnArrow(p, pbPos(p), 0, Date.now(), { a, dmg, spd, range: 6 * RADPX, radius: 0.4 * RADPX, kind: 'pbq', type: 'magic', fake });
     if (track && id) fly.ids.add(id);
   };
   for (let i = 0; i < 4; i++) pbLater(p, i * 200, () => fire(p.aim, Math.round(base * 0.8), false, false));
   for (let r = 0; r < 3; r++) pbLater(p, r * 300, () => {
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < nDir; i++) {
+      const pp = pbPos(p);
       let a = Math.random() * Math.PI * 2;
-      if (fly.redir) a = Math.atan2(fly.redir.gy - p.y / 0.8, fly.redir.x - p.x) + (Math.random() - 0.5) * 0.5;
+      if (fly.redir) a = Math.atan2(fly.redir.gy - pp.y / 0.8, fly.redir.x - pp.x) + (Math.random() - 0.5) * 0.5;
       fire(a, Math.round(base * 0.4), false, true);
       if (mast) fire(fly.redir ? a + (Math.random() - 0.5) * 0.3 : Math.random() * Math.PI * 2, 0, true, true);
     }
@@ -2160,13 +2190,13 @@ function pbRedirect(p, m, now) {
 function pbReuseE2(p, m, now) {
   if (p.pbA < PB.cost[p.pbStage]) return void fxTxt(p.x, p.y - 40, '내공 부족', '#9fd0ff');
   p.pbA -= PB.cost[p.pbStage]; p.pbRe.e2 = null;
-  pbThrust(p, originOf(p, m), lagOf(m), now, 3 * RADPX, 1.0, 2000);
+  pbThrust(p, pbOrigin(p, m), p.pbSw ? 0 : lagOf(m), now, 3 * RADPX, 1.0, 2000);
 }
 function pbReuseR2(p, m, now) {
   const R = p.pbRe.r2;
   if (p.pbA < PB.cost[p.pbStage]) return void fxTxt(p.x, p.y - 40, '내공 부족', '#9fd0ff');
   p.pbA -= PB.cost[p.pbStage]; R.left--;
-  const o = originOf(p, m), hits = pbThrust(p, o, lagOf(m), now, (4 + (R.mast ? 1 : 0)) * RADPX, 1.2, 3000);
+  const o = pbOrigin(p, m), hits = pbThrust(p, o, p.pbSw ? 0 : lagOf(m), now, (4 + (R.mast ? 1 : 0)) * RADPX, 1.2, 3000);
   if (R.left > 0) return;
   p.pbRe.r2 = null; pbStop(p, now, false);
   let dest, a = p.aim;
@@ -2177,7 +2207,8 @@ function pbReuseR2(p, m, now) {
   } else dest = { x: o.x + Math.cos(a) * 4 * RADPX, y: o.y + Math.sin(a) * 4 * RADPX * 0.8 };
   dest = clampArena(dest);
   broadcast({ t: 'fx', type: 'dash', x: p.x, y: p.y, x2: dest.x, y2: dest.y, c: 'rgba(244,170,187,.7)', dur: 380 });
-  p.x = dest.x; p.y = dest.y; send(p.ws, { t: 'warp', x: dest.x, y: dest.y });
+  if (p.pbSw) { p.pbSw.x = dest.x; p.pbSw.g = dest.y / 0.8; p.pbSw.vx = p.pbSw.vg = 0; }
+  else { p.x = dest.x; p.y = dest.y; send(p.ws, { t: 'warp', x: dest.x, y: dest.y }); }
   broadcast({ t: 'fx', type: 'pbburst', x: dest.x, y: dest.y, r: 1.1 * RADPX, dur: 600 });
 }
 function plumBot(p, foe, now) {
@@ -2194,6 +2225,28 @@ function pbSend(p, now) {
   const cds = {}; for (const k in p.pbCd) { const r = p.pbCd[k] - now; if (r > 0) cds[k] = Math.round(r); }
   const re = { e: p.pbRe.e2 && now < p.pbRe.e2.until ? Math.round(p.pbRe.e2.until - now) : 0, r: p.pbRe.r2 && now < p.pbRe.r2.until ? Math.round(p.pbRe.r2.until - now) : 0, rl: p.pbRe.r2 ? p.pbRe.r2.left : 0, f: p.pbFly && !p.pbFly.done && now < p.pbFly.end ? Math.round(p.pbFly.end - now) : 0 };
   send(p.ws, { t: 'pb', d: p.pbD, a: p.pbA, s: p.pbStage, ch: p.pbCh ? p.pbCh.t : 0, cmd: cmd ? cmd.k + (cmd.sp ? 's' : '') : '', cm: cmd ? Math.round(cmd.until - now) : 0, cds, re, bn: p.pbBonus ? 1 : 0 });
+}
+const PB_SW = { vmax: 1500, hitR: 0.5 * RADPX, dmg: 300, rehit: 300 };
+function pbSwordStep(p, dt, now) {
+  const S = p.pbSw, ex = S.cx - S.x, eg = S.cg - S.g, d = Math.hypot(ex, eg), k = Math.min(1, dt * 6);
+  const want = d > 1 ? Math.min(PB_SW.vmax, d * 7) : 0;
+  S.vx += ((d > 1 ? ex / d * want : 0) - S.vx) * k; S.vg += ((d > 1 ? eg / d * want : 0) - S.vg) * k;
+  const sp0 = Math.hypot(S.vx, S.vg);
+  S.x += S.vx * dt; S.g += S.vg * dt;
+  const nx = (S.x - CX) / RX, ny = (S.g * 0.8 - CY) / RY, nd = Math.hypot(nx, ny);
+  if (nd > 1) { S.x = CX + nx / nd * RX; S.g = (CY + ny / nd * RY) / 0.8; S.vx = S.vg = 0; }
+  const dmg = Math.round(PB_SW.dmg * Math.min(1, sp0 / PB_SW.vmax));
+  if (dmg < 1) return;
+  for (const t of targetsOf(p)) {
+    if ((S.hit[t.id] || 0) > now) continue;
+    if (Math.hypot(t.x - S.x, t.y / 0.8 - S.g) > PB_SW.hitR + (t.hr || 0) + 24) continue;
+    S.hit[t.id] = now + PB_SW.rehit;
+    dmgTo(t, dmg, now, { x: S.x, y: S.g * 0.8, by: p, type: 'magic', fixed: true });
+    S.vx = S.vg = 0;
+    broadcast({ t: 'fx', type: 'pbburst', x: S.x, y: S.g * 0.8, r: 0.7 * RADPX, dur: 450 });
+    checkRoundEnd();
+    break;
+  }
 }
 function stepPlum(dt, now) {
   for (let i = pbTimers.length - 1; i >= 0; i--) {
@@ -2216,13 +2269,14 @@ function stepPlum(dt, now) {
     const w = pbWalls[i], own = players.get(w.owner);
     if (now >= w.until || !own || own.role !== 1) { pbWalls.splice(i, 1); continue; }
     if (w.follow) {
-      const dx = own.x - w.x, dy = own.y / 0.8 - w.gy, d = Math.hypot(dx, dy), st = Math.min(d, 450 * dt);
+      const fp = pbPos(own), dx = fp.x - w.x, dy = fp.y / 0.8 - w.gy, d = Math.hypot(dx, dy), st = Math.min(d, 450 * dt);
       if (d > 0.01) { w.x += dx / d * st; w.gy += dy / d * st; }
     }
   }
   for (const p of players.values()) {
     if (p.cls !== 'PlumBlossom') continue;
-    if (p.role !== 1) { p.pbCh = null; p.pbResume = null; p.pbCmd = null; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = 0; continue; }
+    if (p.role !== 1) { p.pbCh = null; p.pbResume = null; p.pbCmd = null; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = 0; p.pbSw = null; continue; }
+    if (p.pbSw) pbSwordStep(p, dt, now);
     if (p.pbCmd && now > p.pbCmd.until) p.pbCmd = null;
     const ch = p.pbCh;
     if (ch) {
@@ -2233,7 +2287,8 @@ function stepPlum(dt, now) {
           ch.next += T.iv;
           if (T.en) pbGain(p, T.en);
           if (T.hp) heal(p, T.hp);
-          if (T.heal) heal(p, (p.mh - p.hp) * T.heal);
+          ch.n = (ch.n || 0) + 1;
+          if (T.heal && ch.n % (T.healEvery || 1) === 0) heal(p, (p.mh - p.hp) * T.heal);
         }
         if (ch.t === 7) { p.pbBn += dt * 1000; if (p.pbBn >= 5000) { p.pbBn -= 5000; p.pbBonus = true; } }
       }
@@ -2382,7 +2437,7 @@ wss.on('connection', (ws, req) => {
   const p = mkPlayer(id, ws);
   players.set(id, p);
   pruneChat();
-  send(ws, { t: 'hello', id, map: mapId, mode: gameMode, arena: { CX, CY, RX, RY }, pred: predCfg() });
+  send(ws, { t: 'hello', id, map: mapId, scale: mapScale, mode: gameMode, arena: { CX, CY, RX, RY }, pred: predCfg() });
   send(ws, { t: 'history', log: chatLog.map(c => ({ name: c.name, text: c.text, sys: c.sys ? 1 : 0, age: Date.now() - c.ts })) });
 
   ws.on('pong', () => { p.alive = true; });
@@ -2409,7 +2464,7 @@ wss.on('connection', (ws, req) => {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
-      if (phase === 'lobby' && CLASS_LIST.includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+      if ((phase === 'lobby' || p.role === 2 || p.obs) && CLASS_LIST.includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
     } else if (m.t === 'mode') {
       if (p.user === ADMIN_ID && phase === 'lobby' && (m.m === 'ffa' || m.m === 'team' || m.m === 'boss') && m.m !== gameMode) {
         if (gameMode === 'boss' || m.m === 'boss') for (const q of players.values()) q.team = 0;
@@ -2444,6 +2499,14 @@ wss.on('connection', (ws, req) => {
       else if (p.user === ADMIN_ID && q && q !== p && q.joined && !q.skel) { sysChat(q.name + ' was kicked.'); send(q.ws, { t: 'kicked' }); try { q.ws.close(); } catch (e) {} }
     } else if (m.t === 'map') {
       if (p.user === ADMIN_ID && phase === 'lobby' && Number.isInteger(m.id) && ARENAS[m.id] && m.id !== mapId) { setMap(m.id); sysChat(p.name + ' changed the map.'); }
+    } else if (m.t === 'mapscale') {
+      const sc = Number(m.s);
+      if (p.user === ADMIN_ID && phase === 'lobby' && [1, 1.5, 2].includes(sc) && sc !== mapScale) { setScale(sc); sysChat(p.name + ' set the map size to ' + sc + 'x.'); }
+    } else if (m.t === 'aiclear') {
+      if (p.user === ADMIN_ID) { const bs = [...players.values()].filter(q => q.ai); if (bs.length) { for (const q of bs) removeBot(q); sysChat(p.name + ' removed all AI players.'); } }
+    } else if (m.t === 'pbc') {
+      const S = p.pbSw, x = Number(m.x), y = Number(m.y);
+      if (S && Number.isFinite(x) && Number.isFinite(y)) { S.cx = x; S.cg = (y + 30) / 0.8; }
     } else if (m.t === 'tequip') {
       equipTitle(p, m.id === null ? null : m.id).catch(e => console.error('equip:', e.message));
     } else if (m.t === 'buy') {
@@ -2567,7 +2630,7 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0, pbs: p.cls === 'PlumBlossom' ? p.pbStage + 1 : 0, pbc: p.pbCh ? p.pbCh.t : 0, pz: p.role === 1 && now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 0, pbk: p.cls === 'PlumBlossom' && now < (p.pbBlockUntil || 0) ? 1 : 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0, pbs: p.cls === 'PlumBlossom' ? p.pbStage + 1 : 0, pbc: p.pbCh ? p.pbCh.t : 0, pz: p.role === 1 && now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 0, pbk: p.cls === 'PlumBlossom' && now < (p.pbBlockUntil || 0) ? 1 : 0, psw: p.pbSw ? [Math.round(p.pbSw.x), Math.round(p.pbSw.g * 0.8), Math.round(Math.hypot(p.pbSw.vx, p.pbSw.vg)), +Math.atan2(p.pbSw.vg * 0.8, p.pbSw.vx).toFixed(2)] : 0 };
     list.push(e);
     hidden.push(iv ? Object.assign({}, e, { x: Math.round(p.hideX * 10) / 10, y: Math.round(p.hideY * 10) / 10, a: 0, m: 0, cg: 0, bu: 0, bd: 0 }) : e);
   }
