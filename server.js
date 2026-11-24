@@ -65,8 +65,14 @@ const BATCH_T = new Set(['fx', 'arrow', 'arrowEnd', 'hit']);
 let evq = [], evTimer = null;
 function flushEv() {
   evTimer = null; if (!evq.length) return;
-  const m = JSON.stringify(evq.length === 1 ? evq[0] : { t: 'ev', l: evq }); evq = [];
-  for (const p of players.values()) if (p.ws && p.ws.readyState === 1 && (p.user || p.guest)) p.ws.send(m);
+  const q0 = evq, m = JSON.stringify(q0.length === 1 ? q0[0] : { t: 'ev', l: q0 }); evq = [];
+  const fz = pbFogZones(), now = Date.now();
+  for (const p of players.values()) {
+    if (!(p.ws && p.ws.readyState === 1 && (p.user || p.guest))) continue;
+    const bz = fz.length ? pbBlind(p, now, fz) : null;
+    if (bz && bz.length) { const l = q0.filter(e => pbEvVisible(e, bz)); if (l.length) p.ws.send(JSON.stringify(l.length === 1 ? l[0] : { t: 'ev', l })); }
+    else p.ws.send(m);
+  }
 }
 const broadcast = o => {
   outN++;
@@ -303,6 +309,55 @@ function setShopPrice(p, m) {
   db.set('shopprice', JSON.stringify(shopPrices)).catch(e => console.error('shopprice save failed:', e.message));
   for (const q of players.values()) if (q.joined && !q.obs) sendShop(q.ws);
   say(1, SKINS[id].name + ' 가격을 ' + n.toLocaleString() + ' 골드로 변경했습니다.');
+}
+// ---- class unlock ----
+const CLS_PRICE = { PlumBlossom: 200 };
+const clsFree = p => p.user === ADMIN_ID || p.obs;
+const clsOk = (p, c) => !CLS_PRICE[c] || clsFree(p) || (p.clsOwn || []).includes(c);
+const sendCinfo = p => send(p.ws, { t: 'cinfo', own: p.clsOwn || [], price: CLS_PRICE, free: clsFree(p) ? 1 : 0 });
+async function loadCls(id) {
+  try {
+    const raw = await db.get('cls:' + id); let own = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(own)) own = [];
+    return { own: own.filter(c => CLS_PRICE[c]), err: false };
+  } catch (e) { console.error('cls load failed:', e.message); return { own: [], err: true }; }
+}
+async function buyClass(p, cls, expect) {
+  const reply = (ok, msg) => send(p.ws, { t: 'cbuy', ok, msg, cls });
+  if ((!p.user && !p.guest) || p.obs) return;
+  if (p.buying) return reply(0, '처리 중입니다. 잠시만 기다려 주세요.');
+  if (typeof cls !== 'string' || !CLS_PRICE[cls]) return reply(0, '존재하지 않는 상품입니다.');
+  if (p.clsErr) return reply(0, '일시적인 오류입니다. 다시 로그인해 주세요.');
+  if (clsOk(p, cls)) { sendCinfo(p); return reply(0, '이미 해금한 클래스입니다.'); }
+  const price = CLS_PRICE[cls];
+  if (expect !== price) { sendCinfo(p); return reply(0, '가격이 변경되었습니다. 다시 확인해 주세요.'); }
+  const nm = (cls === 'PlumBlossom' ? '매화검' : cls);
+  p.buying = true; let charged = false;
+  if (p.guest) {
+    if ((p.gold || 0) < price) { p.buying = false; return reply(0, '골드가 부족합니다.'); }
+    p.gold -= price; p.clsOwn = (p.clsOwn || []).concat(cls); p.buying = false;
+    send(p.ws, { t: 'gold', g: p.gold }); sendCinfo(p);
+    return reply(1, nm + ' 클래스 해금 완료!');
+  }
+  try {
+    const v = Number(await db.incrby('gold:' + p.user, -price));
+    if (!Number.isFinite(v)) throw new Error('bad balance');
+    if (v < 0) {
+      const back = Number(await db.incrby('gold:' + p.user, price));
+      if (Number.isFinite(back)) { p.gold = back; send(p.ws, { t: 'gold', g: back }); }
+      return reply(0, '골드가 부족합니다.');
+    }
+    charged = true;
+    const own = (p.clsOwn || []).concat(cls);
+    await db.set('cls:' + p.user, JSON.stringify(own));
+    p.clsOwn = own; p.gold = v;
+    send(p.ws, { t: 'gold', g: v }); sendCinfo(p);
+    reply(1, nm + ' 클래스 해금 완료!');
+  } catch (e) {
+    console.error('class buy failed:', e.message);
+    if (charged) { try { const back = Number(await db.incrby('gold:' + p.user, price)); if (Number.isFinite(back)) { p.gold = back; send(p.ws, { t: 'gold', g: back }); } } catch (e2) { console.error('refund failed:', e2.message); } }
+    reply(0, '구매 중 오류가 발생했습니다.');
+  } finally { p.buying = false; }
 }
 // ---- combat ----
 const RAD = Math.PI / 180;
@@ -1810,7 +1865,8 @@ async function loginOk(p, rec, token) {
   if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }
   send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token, admin: rec.id === ADMIN_ID ? 1 : 0 });
   const sk = await loadSkins(rec.id); p.skins = sk.own; p.eqs = sk.eqs; p.skinsErr = sk.err;
-  sendTinfo(p); send(p.ws, { t: 'gold', g: p.gold }); sendSinfo(p); sendShop(p.ws); sendWins(p);
+  const cl = await loadCls(rec.id); p.clsOwn = cl.own; p.clsErr = cl.err;
+  sendTinfo(p); send(p.ws, { t: 'gold', g: p.gold }); sendSinfo(p); sendCinfo(p); sendShop(p.ws); sendWins(p);
   const all = {};
   for (const q of players.values()) if (q.joined && q !== p) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
   send(p.ws, { t: 'ttls', m: all });
@@ -1832,10 +1888,10 @@ async function guestLogin(p, m) {
   if (p.user || p.guest || p.joined) return;
   if (joinedList().filter(q => !q.skel).length >= MAX_PLAYERS) { send(p.ws, { t: 'full' }); try { p.ws.close(); } catch (e) {} return; }
   p.guest = true; p.user = null; p.name = nick;
-  p.titles = []; p.eq = null; p.gold = 0; p.skins = []; p.eqs = {}; p.skinsErr = false;
+  p.titles = []; p.eq = null; p.gold = 0; p.skins = []; p.eqs = {}; p.skinsErr = false; p.clsOwn = []; p.clsErr = false;
   p.joined = true; if (phase === 'round') p.role = 2;
   send(p.ws, { t: 'auth', ok: 1, name: nick, token: '', admin: 0, guest: 1 });
-  sendTinfo(p); send(p.ws, { t: 'gold', g: 0 }); sendSinfo(p); sendShop(p.ws); sendWins(p);
+  sendTinfo(p); send(p.ws, { t: 'gold', g: 0 }); sendSinfo(p); sendCinfo(p); sendShop(p.ws); sendWins(p);
   const all = {};
   for (const q of players.values()) if (q.joined && q !== p) { const tt = titleOf(q); if (tt) all[q.id] = tt; }
   send(p.ws, { t: 'ttls', m: all });
@@ -1988,21 +2044,21 @@ function stepBerserker(dt, now) {
 }
 // ---- Plum Blossom ----
 const PB = {
-  g0: 0.02, max: [50, 100, 200, 400, 800, 1600], cost: [0, 1, 2, 4, 8, 16, 16], cmd: 300, slack: 100, menu: 3000,
+  g0: 0.02, max: [50, 100, 200, 400, 800, 1600], cost: [0, 2.5, 5, 10, 20, 40, 40], cmd: 300, slack: 100, menu: 3000,
   hw: 0.3 * RADPX, blk: { ms: 500, r: 1.1 * RADPX, span: 150 * RAD }, spd: 1200,
-  cd: { E4: 1000, E1: 4000, E2: 4000, E3: 4000, S1: 8000, S2: 8000, S3: 8000, R1: 16000, R2: 8000, R3: 8000 },
+  cd: { E4: 4000, E1: 4000, E2: 4000, E3: 4000, S1: 4000, S2: 4000, S3: 4000, R1: 4000, R2: 4000, R3: 4000 },
   names: ['삼류', '이류', '일류', '절정', '초절정', '화경', '현경']
 };
 PB.mul = (() => { let m = 1; return [0, 1, 2, 3, 4, 5, 6].map(i => (m *= 1 + PB.g0 * Math.pow(2, i))); })();
 const pbMul = p => PB.mul[p.pbStage | 0];
 const PB_Q = [null,
-  { iv: 500, en: 2 },
-  { iv: 500, en: 3, hp: 20 },
-  { iv: 1000, en: 8 },
-  { iv: 1000, en: 15, as: 0.1, frac: 0.5 },
-  { iv: 2000, en: 50 },
-  { iv: 1000, en: 30, as: 0.2, frac: 0.75 },
-  { iv: 1000, en: 30, heal: 0.05, healEvery: 2, mobile: true }
+  { iv: 500, en: 3 },
+  { iv: 500, en: 4.5, hp: 40 },
+  { iv: 1000, en: 12 },
+  { iv: 1000, en: 22.5, as: 0.1, frac: 0.5 },
+  { iv: 2000, en: 75 },
+  { iv: 1000, en: 45, as: 0.2, frac: 0.75 },
+  { iv: 1000, en: 45, heal: 0.05, healEvery: 2, mobile: true }
 ];
 const pbWalls = [], pbZones = [], pbTimers = []; let pbSeq = 0;
 const pbLater = (p, ms, fn) => pbTimers.push({ at: Date.now() + ms, owner: p.id, fn });
@@ -2119,10 +2175,10 @@ function plumAttack(p, m, now) {
 function plumSkill(p, k, m, now) {
   if (p.role !== 1) return;
   if (k === 'E') {
-    if (pbRedirect(p, m, now)) return;
     if (p.pbRe.e2 && now < p.pbRe.e2.until) return pbReuseE2(p, m, now);
   }
   if (k === 'R' && p.pbRe.r2 && now < p.pbRe.r2.until) return pbReuseR2(p, m, now);
+  if (k === 'R' && pbRedirect(p, m, now)) return;
   if (k === 'Q' && p.pbSw) { p.pbSw = null; p.pbCmd = null; broadcast({ t: 'fx', type: 'pbburst', x: p.x, y: p.y, r: 1.2 * RADPX, dur: 600 }); return; }
   if (k === 'Q' && p.pbCh) { pbStop(p, now, false); p.pbCmd = null; return; }
   const win = m && m.mob ? 1500 : PB.cmd + PB.slack;
@@ -2158,7 +2214,7 @@ function pbCast(p, id, m, now) {
       broadcast({ t: 'fx', type: 'pbline', x: pp.x, y: pp.y, a, len: L, w: PB.hw * 2, dur: 380, down: 1 });
       for (const t of targetsOf(p)) {
         if (segDist(t.x, t.y / 0.8, gx, gy, ex, ey) > PB.hw + (t.hr || 0)) continue;
-        dmgTo(t, Math.round(base * 0.8), t0, { x: pp.x, y: pp.y, by: p, type: 'phys' });
+        dmgTo(t, Math.round(base), t0, { x: pp.x, y: pp.y, by: p, type: 'phys' });
         if (t.role === 1) t.stunUntil = Math.max(t.stunUntil || 0, t0 + 100);
       }
       checkRoundEnd();
@@ -2170,7 +2226,7 @@ function pbCast(p, id, m, now) {
     broadcast({ t: 'fx', type: 'pbfan', ow: p.id, x: o.x, y: o.y, a: p.aim, span: PB.blk.span, r: PB.blk.r, dur: PB.blk.ms });
   } else if (id === 'S1') {
     broadcast({ t: 'fx', type: 'ring', x: o.x, y: o.y, r: 0.5 * RADPX, c: '#F4AABB', dur: 300 });
-    slashAt(100, () => spawnArrow(p, pbPos(p), 0, Date.now(), { a: p.aim, dmg: Math.round(base), spd: PB.spd, range: 4 * RADPX, radius: 0.45 * RADPX, kind: 'pbq', type: 'magic' }));
+    slashAt(100, () => spawnArrow(p, pbPos(p), 0, Date.now(), { a: p.aim, dmg: Math.round(base), spd: PB.spd, range: 5 * RADPX, radius: 0.45 * RADPX, kind: 'pbq', type: 'magic' }));
   } else if (id === 'S2') {
     pbZone(p, o, 3 * RADPX, 6 * RADPX, 1500, 0.6, now);
     p.pbRe.e2 = { until: now + 2000 };
@@ -2181,19 +2237,17 @@ function pbCast(p, id, m, now) {
   } else if (id === 'R1') {
     pbFlurry(p, now, mast, base, ult);
   } else if (id === 'R2') {
-    pbZone(p, o, 4 * RADPX, 6 * RADPX, 2000, 0.5, now);
+    pbZone(p, o, 4 * RADPX, 6 * RADPX, 2000, 0.8, now, true);
     p.pbRe.r2 = { until: now + 2000, left: 2, mast };
     if (ult) for (let i = 1; i <= 8; i++) slashAt(i * 250, () => {
-      const pp = pbPos(p); let best = null, bd = Infinity;
-      for (const t of targetsOf(p)) { const dd = Math.hypot(t.x - pp.x, (t.y - pp.y) / 0.8); if (dd < bd) { bd = dd; best = t; } }
+      const pp = pbPos(p), best = pbRandFoe(p, pp, 5 * RADPX);
       if (!best) return;
       const ang = Math.atan2((best.y - pp.y) / 0.8, best.x - pp.x), keep = p.aim; p.aim = ang;
       pbThrust(p, pp, 0, Date.now(), 5 * RADPX, 1.2, 3000);
       p.aim = keep;
     });
     else if (mast) for (const d of [500, 1000]) slashAt(d, () => {
-      const pp = pbPos(p); let best = null, bd = Infinity;
-      for (const t of targetsOf(p)) { const dd = Math.hypot(t.x - pp.x, (t.y - pp.y) / 0.8); if (dd < bd) { bd = dd; best = t; } }
+      const pp = pbPos(p), best = pbRandFoe(p, pp, 5 * RADPX);
       if (best) broadcast({ t: 'fx', type: 'pbline', x: pp.x, y: pp.y, a: Math.atan2((best.y - pp.y) / 0.8, best.x - pp.x), len: 5 * RADPX, w: PB.hw * 2, dur: 360, fake: 1 });
     });
   } else if (id === 'R3') {
@@ -2203,10 +2257,37 @@ function pbCast(p, id, m, now) {
   }
   return true;
 }
-function pbZone(p, o, w, len, ms, mul, now) {
+function pbZone(p, o, w, len, ms, mul, now, fog) {
   const id = ++pbSeq;
-  pbZones.push({ id, owner: p.id, gx: o.x, gy: o.y / 0.8, a: p.aim, len, w, mul, until: now + ms });
+  pbZones.push({ id, owner: p.id, gx: o.x, gy: o.y / 0.8, a: p.aim, c: Math.cos(p.aim), s: Math.sin(p.aim), len, w, mul, fog: !!fog, until: now + ms });
   broadcast({ t: 'fx', type: 'pbzone', x: o.x, y: o.y, a: p.aim, len, w, dur: ms });
+}
+const pbFogZones = () => { const now = Date.now(); return pbZones.filter(z => z.fog && now < z.until); };
+function pbInZ(z, x, y, tol) {
+  const dx = x - z.gx, dy = y / 0.8 - z.gy, u = dx * z.c + dy * z.s, v = -dx * z.s + dy * z.c;
+  return u >= -tol && u <= z.len + tol && Math.abs(v) <= z.w / 2 + tol;
+}
+function pbBlind(q, now, fz) {
+  if (!q.joined || q.role !== 1 || q.obs || phase !== 'round') return null;
+  const r = [];
+  for (const z of fz) {
+    const own = players.get(z.owner); if (!own || own === q || own.role !== 1 || sameTeam(own, q) || rootOf(q) === rootOf(own)) continue;
+    if (pbInZ(z, q.x, q.y, 0)) r.push(z);
+  }
+  return r;
+}
+function pbEvVisible(e, bz) {
+  let x, y;
+  if (typeof e.x === 'number' && typeof e.y === 'number') { x = e.x; y = e.y; }
+  else if (typeof e.x1 === 'number') { x = e.x1; y = e.y1; }
+  else if (e.t === 'hit') { const t = players.get(e.id) || units.get(e.id); if (!t) return true; x = t.x; y = t.y; }
+  else if (e.t === 'arrowEnd' && typeof e.ex === 'number') { x = e.ex; y = e.ey; }
+  else return true;
+  return bz.some(z => pbInZ(z, x, y, 40));
+}
+function pbRandFoe(p, pp, range) {
+  const c = targetsOf(p).filter(t => t.role === 1 && Date.now() >= (t.invisUntil || 0) && Math.hypot(t.x - pp.x, (t.y - pp.y) / 0.8) <= range + (t.hr || 0));
+  return c.length ? c[Math.floor(Math.random() * c.length)] : null;
 }
 function pbFlurry(p, now, mast, base, ult) {
   const spd = PB.spd * (ult ? 1.3 : mast ? 1.2 : 1), nDir = ult ? 16 : 8, fly = p.pbFly = { ids: new Set(), end: now + 600 + 250, redir: null, done: false, mast };
@@ -2272,11 +2353,11 @@ function plumBot(p, foe, now) {
 }
 function pbSend(p, now) {
   const cmd = p.pbCmd && now < p.pbCmd.until ? p.pbCmd : null;
-  const key = [p.pbD, p.pbA, p.pbStage, p.pbCh ? p.pbCh.t : 0, cmd ? cmd.k + (cmd.sp ? 's' : '') + cmd.until : '', p.pbBonus ? 1 : 0, Object.values(p.pbCd).join(','), p.pbRe.e2 ? p.pbRe.e2.until : 0, p.pbRe.r2 ? p.pbRe.r2.until + ':' + p.pbRe.r2.left : 0, p.pbFly && !p.pbFly.done ? p.pbFly.end : 0].join('|');
+  const key = [p.pbD, p.pbA, p.pbStage, p.pbCh ? p.pbCh.t : 0, cmd ? cmd.k + (cmd.sp ? 's' : '') + cmd.until : '', p.pbBonus ? 1 : 0, Object.values(p.pbCd).join(','), p.pbRe.e2 ? p.pbRe.e2.until : 0, p.pbRe.r2 ? p.pbRe.r2.until + ':' + p.pbRe.r2.left : 0, p.pbFly && p.pbFly.mast && !p.pbFly.done ? p.pbFly.end : 0].join('|');
   if (key === p.pbKey) return;
   p.pbKey = key;
   const cds = {}; for (const k in p.pbCd) { const r = p.pbCd[k] - now; if (r > 0) cds[k] = Math.round(r); }
-  const re = { e: p.pbRe.e2 && now < p.pbRe.e2.until ? Math.round(p.pbRe.e2.until - now) : 0, r: p.pbRe.r2 && now < p.pbRe.r2.until ? Math.round(p.pbRe.r2.until - now) : 0, rl: p.pbRe.r2 ? p.pbRe.r2.left : 0, f: p.pbFly && !p.pbFly.done && now < p.pbFly.end ? Math.round(p.pbFly.end - now) : 0 };
+  const re = { e: p.pbRe.e2 && now < p.pbRe.e2.until ? Math.round(p.pbRe.e2.until - now) : 0, r: p.pbRe.r2 && now < p.pbRe.r2.until ? Math.round(p.pbRe.r2.until - now) : 0, rl: p.pbRe.r2 ? p.pbRe.r2.left : 0, f: p.pbFly && p.pbFly.mast && !p.pbFly.done && now < p.pbFly.end ? Math.round(p.pbFly.end - now) : 0 };
   send(p.ws, { t: 'pb', d: p.pbD, a: p.pbA, s: p.pbStage, ch: p.pbCh ? p.pbCh.t : 0, cmd: cmd ? cmd.k + (cmd.sp ? 's' : '') : '', cm: cmd ? Math.round(cmd.until - now) : 0, cds, re, bn: p.pbBonus ? 1 : 0 });
 }
 const PB_SW = { vmax: 1500, hitR: 0.5 * RADPX, dmg: 300, rehit: 300 };
@@ -2525,7 +2606,10 @@ wss.on('connection', (ws, req) => {
       const now = Date.now(), text = clean(m.text, 60);
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
-      if ((phase === 'lobby' || p.role === 2 || p.obs) && CLASS_LIST.includes(m.cls)) { p.cls = m.cls; resetCombat(p); }
+      if ((phase === 'lobby' || p.role === 2 || p.obs) && CLASS_LIST.includes(m.cls)) {
+        if (!clsOk(p, m.cls)) { send(ws, { t: 'cbuy', ok: 0, msg: '잠긴 클래스입니다. 클래스 선택창에서 해금해 주세요.', cls: m.cls }); sendCinfo(p); }
+        else { p.cls = m.cls; resetCombat(p); }
+      }
     } else if (m.t === 'mode') {
       if (p.user === ADMIN_ID && phase === 'lobby' && (m.m === 'ffa' || m.m === 'team' || m.m === 'boss') && m.m !== gameMode) {
         if (gameMode === 'boss' || m.m === 'boss') for (const q of players.values()) q.team = 0;
@@ -2572,6 +2656,8 @@ wss.on('connection', (ws, req) => {
       equipTitle(p, m.id === null ? null : m.id).catch(e => console.error('equip:', e.message));
     } else if (m.t === 'buy') {
       buySkin(p, m.id, m.price).catch(e => { console.error('buy:', e.message); send(ws, { t: 'buy', ok: 0, msg: '구매 중 오류가 발생했습니다.' }); });
+    } else if (m.t === 'cbuy') {
+      buyClass(p, m.cls, m.price).catch(e => { console.error('cbuy:', e.message); send(ws, { t: 'cbuy', ok: 0, msg: '구매 중 오류가 발생했습니다.' }); });
     } else if (m.t === 'skequip') {
       equipSkin(p, m.id).catch(e => console.error('skequip:', e.message));
     } else if (m.t === 'shopprice') {
@@ -2719,11 +2805,18 @@ setInterval(() => {
   for (const p of players.values()) if (p.joined) for (const f of p.fires) ff.push({ id: f.id, o: p.id, x: Math.round(f.x), y: Math.round(f.y) });
   const sb = [...soulOrbs.values()].map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), c: s.cls, o: s.o }));
   const head = { t: 'state', ph: phase, left: phase === 'round' ? Math.max(0, ROUND_MS - (now - roundStart)) : 0, ff, sb };
-  if (!list.some(e => e.iv)) { const msg = JSON.stringify(Object.assign(head, { p: list })); for (const q of players.values()) if (q.ws && (q.user || q.guest)) sendState(q.ws, msg); return; }
+  const fz = pbFogZones();
+  if (!fz.length && !list.some(e => e.iv)) { const msg = JSON.stringify(Object.assign(head, { p: list })); for (const q of players.values()) if (q.ws && (q.user || q.guest)) sendState(q.ws, msg); return; }
   const common = JSON.stringify(Object.assign({}, head, { p: hidden }));
   for (const q of players.values()) {
     if (!q.ws || q.ws.readyState !== 1 || !(q.user || q.guest)) continue;
-    if (q.joined && now < q.invisUntil) sendState(q.ws, JSON.stringify(Object.assign({}, head, { p: hidden.map((e, i) => list[i].id === q.id ? list[i] : e) })));
+    const self = q.joined && now < q.invisUntil, bz = fz.length ? pbBlind(q, now, fz) : null;
+    if (bz && bz.length) {
+      const inZ = (x, y) => bz.some(z => pbInZ(z, x, y, 30));
+      let pl = self ? hidden.map((e, i) => list[i].id === q.id ? list[i] : e) : hidden;
+      pl = pl.filter(e => (e.id === q.id && !e.ut) || e.ow === q.id || e.so === q.id || inZ(e.x, e.y));
+      sendState(q.ws, JSON.stringify(Object.assign({}, head, { p: pl, ff: ff.filter(f => f.o === q.id || inZ(f.x, f.y)), sb: sb.filter(b => inZ(b.x, b.y)), fg: bz.map(z => [Math.round(z.gx), Math.round(z.gy * 0.8), +z.a.toFixed(3), z.len, z.w]) })));
+    } else if (self) sendState(q.ws, JSON.stringify(Object.assign({}, head, { p: hidden.map((e, i) => list[i].id === q.id ? list[i] : e) })));
     else sendState(q.ws, common);
   }
   } catch (e) { tickErr(e); }
