@@ -6,10 +6,9 @@ const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC = path.join(__dirname, 'public');
-const MAP_COLLISION_DATA = require(path.join(PUBLIC, 'map-collision.js'));
 const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8' };
 
-const ARENA_BASE = [{ CX: 630, CY: 640, RX: 410, RY: 335 }, { CX: 630, CY: 600, RX: 460, RY: 370 }, { CX: 627, CY: 418, RX: 600, RY: 390 }];
+const ARENA_BASE = [{ CX: 630, CY: 640, RX: 410, RY: 335 }, { CX: 630, CY: 600, RX: 460, RY: 370 }];
 let mapScale = 1;
 const ARENAS = ARENA_BASE.map(a => ({ ...a }));
 let mapId = 1, { CX, CY, RX, RY } = ARENAS[1];
@@ -56,14 +55,7 @@ const wss = new WebSocketServer({ server, maxPayload: 1024, perMessageDeflate: f
 const players = new Map();
 // ---- training dummies ----
 const dummies = [-101, -102, -103].map(id => ({ id, unit: true, dummy: true, owner: -1, role: 1, joined: true, hist: [], hr: 26, x: 0, y: 0, hp: 1e5, mh: 1e5, cls: '', team: 0, sum: 0, last: 0, lastT: 0, stunUntil: 0, charmUntil: 0, slowUntil: 0, kbUntil: 0 }));
-function placeDummies() {
-  if (mapId === 2) {
-    const spots = [[730, 512], [755, 512], [780, 512]];
-    spots.forEach((v, i) => { const d = dummies[i]; d.x = v[0] * 1254 / 1536 * mapScale; d.y = v[1] * 836 / 1024 * mapScale; d.stunUntil = d.slowUntil = d.kbUntil = 0; });
-    return;
-  }
-  [-0.42, 0, 0.42].forEach((f, i) => { const d = dummies[i]; d.x = CX + f * RX; d.y = CY - 0.38 * RY; d.stunUntil = d.slowUntil = d.kbUntil = 0; });
-}
+function placeDummies() { [-0.42, 0, 0.42].forEach((f, i) => { const d = dummies[i]; d.x = CX + f * RX; d.y = CY - 0.38 * RY; d.stunUntil = d.slowUntil = d.kbUntil = 0; }); }
 function dummyHit(t, d, now) { if (now - t.lastT > 3000) t.sum = 0; t.sum += d; t.last = d; t.lastT = now; }
 const inPlay = p => !!p && p.joined && (p.role === 1 || (p.role === 0 && phase !== 'round'));
 const PRACT = () => phase === 'round' || phase === 'lobby';
@@ -110,14 +102,13 @@ const TEAM_NAME = { 1: 'Red', 2: 'Blue' };
 const tmOf = t => t ? (t.unit ? ((players.get(t.owner) || {}).team || 0) : (t.team || 0)) : 0;
 const sameTeam = (a, b) => gameMode !== 'ffa' && !!tmOf(a) && tmOf(a) === tmOf(b);
 function pushMap() {
-  navGrids.clear(); navReach.clear();
-  for (const p of players.values()) { const c = mapId === 2 ? findMapPosition({ x: p.x, y: p.y }, Math.max(18, p.hr || 0)) : clampArena({ x: p.x, y: p.y }); p.x = c.x; p.y = c.y; p.hist = []; p.navPath = null; p.navUntil = 0; }
+  for (const p of players.values()) { const c = clampArena({ x: p.x, y: p.y }); p.x = c.x; p.y = c.y; p.hist = []; }
   broadcast({ t: 'map', id: mapId, scale: mapScale, arena: { CX, CY, RX, RY } });
 }
 const saveMapCfg = () => db.set('mapcfg', JSON.stringify({ id: mapId, scale: mapScale, rt: ROUND_MS })).catch(e => console.error('mapcfg save failed:', e.message));
-function setMap(id) { mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]); MAP = 1254 * mapScale; MAP_H = (id === 2 ? 836 : 1254) * mapScale; pushMap(); saveMapCfg(); }
+function setMap(id) { mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]); pushMap(); saveMapCfg(); }
 function setScale(sc) {
-  const r = sc / mapScale; mapScale = sc; MAP = 1254 * sc; MAP_H = (mapId === 2 ? 836 : 1254) * sc;
+  const r = sc / mapScale; mapScale = sc; MAP = 1254 * sc;
   ARENA_BASE.forEach((a, i) => { for (const k in a) ARENAS[i][k] = a[k] * sc; });
   ({ CX, CY, RX, RY } = ARENAS[mapId]);
   for (const p of players.values()) { p.x *= r; p.y *= r; if (p.lx !== undefined) { p.lx *= r; p.ly *= r; } }
@@ -181,8 +172,7 @@ function startRound() {
     let a = rot + i * 2 * Math.PI / order.length;
     if (gameMode !== 'ffa') { const side = order.filter(q => q.team === p.team); a = (p.team === 1 ? Math.PI : 0) + (side.indexOf(p) - (side.length - 1) / 2) * 0.45; }
     p.lx = p.x; p.ly = p.y;
-    const spawn = findMapPosition({ x: CX + Math.cos(a) * RX * 0.92, y: CY + Math.sin(a) * RY * 0.92 }, Math.max(18, p.hr || 0));
-    p.x = spawn.x; p.y = spawn.y;
+    p.x = CX + Math.cos(a) * RX * 0.92; p.y = CY + Math.sin(a) * RY * 0.92;
     p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0; p.hist = [];
     resetCombat(p);
     if (bossMult && p.id === bossId) { p.pw = Math.min(bossMult, BOSS_CAP.dmg); p.bm = Math.min(bossMult, BOSS_CAP.spd); p.mh = p.hp = Math.round(p.mh * (parts.length - 1) * 2); }
@@ -397,7 +387,7 @@ const CLASS_STATS = {
 const statsBase = p => p.cls === 'PlumBlossom' ? { hp: Math.round(1000 * pbMul(p)), dmg: 90 * pbMul(p), reduce: 0, atkCd: 800 } : p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : p.cls === 'Berserker' && !axeHeld(p) ? Object.assign({}, CLASS_STATS.Berserker, { dmg: 50 }) : CLASS_STATS[p.cls] || BASE;
 const statsOf = p => { const s = statsBase(p); return p.pw && p.pw !== 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
 const RADPX = 112.5;
-let MAP = 1254, MAP_H = 1254;
+let MAP = 1254;
 const ARROW = { speed: 800, range: 5 * RADPX, radius: 28 };
 const ATKR = 0.5 * RADPX;
 const ARCHER = {
@@ -506,7 +496,7 @@ function offMapRange(x, y, a, sc) {
   for (let d = 0; d < MAP * 2; d += 12) {
     const tx = x + Math.cos(a) * (d + 28), ty = y + Math.sin(a) * (d + 28) * 0.8 - 30;
     const cs = [[0, 1], [L, 1], [0, -1], [L, -1]].map(([l, sd]) => [tx - ux * l + nx * sd * half, ty - uy * l + ny * sd * half]);
-    if (cs.every(c => c[0] < 0) || cs.every(c => c[0] > MAP) || cs.every(c => c[1] < 0) || cs.every(c => c[1] > MAP_H)) return d;
+    if (cs.every(c => c[0] < 0) || cs.every(c => c[0] > MAP) || cs.every(c => c[1] < 0) || cs.every(c => c[1] > MAP)) return d;
   }
   return MAP * 2;
 }
@@ -794,234 +784,7 @@ function archerSkill(p, k, m, now) {
   }
 }
 // ---- Gumiho ----
-const clampArena = (pt, radius = 18) => { if (mapId === 2) return { x: Math.max(radius, Math.min(MAP - radius, pt.x)), y: Math.max(radius, Math.min(MAP_H - radius, pt.y)) }; const nx = (pt.x - CX) / RX, ny = (pt.y - CY) / RY, d = Math.hypot(nx, ny); return d > 0.97 ? { x: CX + nx / d * 0.97 * RX, y: CY + ny / d * 0.97 * RY } : { x: pt.x, y: pt.y }; };
-
-const mapPolyMeta = list => (list || []).map(o => {
-  const points = o.points, xs = points.map(p => p[0]), ys = points.map(p => p[1]);
-  return { kind: o.kind, points, minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
-});
-const MAP_COLLISION_POLYS = mapPolyMeta(MAP_COLLISION_DATA.polygons);
-const MAP_WALKWAYS = mapPolyMeta((MAP_COLLISION_DATA.walkways || []).map(points => ({ points })));
-const MAP_PASSAGES = mapPolyMeta((MAP_COLLISION_DATA.passages || []).map(o => ({ points: o.points, kinds: o.kinds })));
-MAP_PASSAGES.forEach((p, i) => { p.kinds = (MAP_COLLISION_DATA.passages[i] && MAP_COLLISION_DATA.passages[i].kinds) || []; });
-function pointInMapPoly(x, y, pts) {
-  let inside = false;
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-    const a = pts[j], b = pts[i];
-    if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / ((b[1] - a[1]) || 1e-9) + a[0]) inside = !inside;
-  }
-  return inside;
-}
-function mapOnWalkway(x, y) {
-  for (const w of MAP_WALKWAYS) if (x >= w.minX && x <= w.maxX && y >= w.minY && y <= w.maxY && pointInMapPoly(x, y, w.points)) return true;
-  return false;
-}
-function mapInPassage(x, y, kind) {
-  for (const p of MAP_PASSAGES) if (p.kinds.includes(kind) && x >= p.minX && x <= p.maxX && y >= p.minY && y <= p.maxY && pointInMapPoly(x, y, p.points)) return true;
-  return false;
-}
-function mapPointBlocked(x, y, radius = 18) {
-  if (mapId !== 2) return false;
-  const sx = x / mapScale * MAP_COLLISION_DATA.width / 1254;
-  const sy = y / mapScale * MAP_COLLISION_DATA.height / 836;
-  const sr = radius / mapScale * MAP_COLLISION_DATA.width / 1254;
-  const sr2 = sr * sr, walkway = mapOnWalkway(sx, sy);
-  for (const poly of MAP_COLLISION_POLYS) {
-    if ((poly.kind === 'water' && walkway) || mapInPassage(sx, sy, poly.kind)) continue;
-    if (sx < poly.minX - sr || sx > poly.maxX + sr || sy < poly.minY - sr || sy > poly.maxY + sr) continue;
-    let inside = false, near = false;
-    const pts = poly.points;
-    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-      const a = pts[j], b = pts[i];
-      if ((a[1] > sy) !== (b[1] > sy) && sx < (b[0] - a[0]) * (sy - a[1]) / ((b[1] - a[1]) || 1e-9) + a[0]) inside = !inside;
-      const vx = b[0] - a[0], vy = b[1] - a[1], l2 = vx * vx + vy * vy;
-      const t = l2 ? Math.max(0, Math.min(1, ((sx - a[0]) * vx + (sy - a[1]) * vy) / l2)) : 0;
-      const dx = sx - (a[0] + vx * t), dy = sy - (a[1] + vy * t);
-      if (dx * dx + dy * dy <= sr2) near = true;
-    }
-    if (inside || near) return true;
-  }
-  return false;
-}
-function findMapPosition(pt, radius = 18) {
-  const base = clampArena(pt, radius);
-  if (mapId !== 2) return base;
-  const valid = c => !mapPointBlocked(c.x, c.y, radius) && mapReachableFromHub(c.x, c.y, radius);
-  if (valid(base)) return base;
-  for (let r = 20; r <= 520; r += 20) {
-    for (let i = 0; i < 24; i++) {
-      const a = i * Math.PI / 12, c = clampArena({ x: base.x + Math.cos(a) * r, y: base.y + Math.sin(a) * r }, radius);
-      if (valid(c)) return c;
-    }
-  }
-  return { x: 768 * 1254 / 1536 * mapScale, y: 512 * 836 / 1024 * mapScale };
-}
-function moveMapEntity(p, dx, dy) {
-  if (mapId !== 2) {
-    const c = clampArena({ x: p.x + dx, y: p.y + dy });
-    p.x = c.x; p.y = c.y; return;
-  }
-  const radius = Math.max(18, p.hr || 0);
-  let x = p.x, y = p.y;
-  const test = (tx, ty) => {
-    const c = clampArena({ x: tx, y: ty }, radius);
-    return mapPointBlocked(c.x, c.y, radius) ? null : c;
-  };
-  const axis = (delta, horizontal) => {
-    const tx = x + (horizontal ? delta : 0), ty = y + (horizontal ? 0 : delta);
-    const full = test(tx, ty);
-    if (full) { x = full.x; y = full.y; return; }
-    let lo = 0, hi = 1, best = { x, y };
-    for (let n = 0; n < 9; n++) {
-      const mid = (lo + hi) * 0.5;
-      const c = test(x + (horizontal ? delta * mid : 0), y + (horizontal ? 0 : delta * mid));
-      if (c) { lo = mid; best = c; } else hi = mid;
-    }
-    x = best.x; y = best.y;
-  };
-  const stepSize = Math.max(4, radius * 0.5);
-  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / stepSize));
-  const sx = dx / steps, sy = dy / steps;
-  for (let i = 0; i < steps; i++) {
-    if (sx) axis(sx, true);
-    if (sy) axis(sy, false);
-  }
-  p.x = x; p.y = y;
-}
-
-const NAV_CELL = 24;
-const navGrids = new Map(), navReach = new Map();
-let navCols = 0, navRows = 0;
-function buildNavGrid(radius = 18) {
-  if (mapId !== 2) return null;
-  const key = mapScale + ':' + radius;
-  if (navGrids.has(key)) return navGrids.get(key);
-  navCols = Math.floor(1254 / NAV_CELL); navRows = Math.floor(836 / NAV_CELL);
-  const grid = new Uint8Array(navCols * navRows);
-  for (let y = 0; y < navRows; y++) for (let x = 0; x < navCols; x++) {
-    const wx = (x + 0.5) * NAV_CELL * mapScale, wy = (y + 0.5) * NAV_CELL * mapScale;
-    grid[y * navCols + x] = wx < radius || wx > 1254 - radius || wy < radius || wy > 836 - radius || mapPointBlocked(wx, wy, radius) ? 0 : 1;
-  }
-  navGrids.set(key, grid);
-  return grid;
-}
-function nearestNavNode(x, y, grid) {
-  let ix = Math.max(0, Math.min(navCols - 1, Math.floor(x / NAV_CELL)));
-  let iy = Math.max(0, Math.min(navRows - 1, Math.floor(y / NAV_CELL)));
-  if (grid[iy * navCols + ix]) return iy * navCols + ix;
-  for (let r = 1; r <= 5; r++) {
-    let best = -1, bd = Infinity;
-    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-      const nx = ix + dx, ny = iy + dy;
-      if (nx < 0 || ny < 0 || nx >= navCols || ny >= navRows) continue;
-      const id = ny * navCols + nx;
-      if (!grid[id]) continue;
-      const d = dx * dx + dy * dy;
-      if (d < bd) { bd = d; best = id; }
-    }
-    if (best >= 0) return best;
-  }
-  return -1;
-}
-function mapReachableFromHub(x, y, radius = 18) {
-  const key = mapScale + ':' + radius;
-  let seen = navReach.get(key);
-  const grid = buildNavGrid(radius);
-  if (!seen) {
-    seen = new Uint8Array(grid.length);
-    const start = nearestNavNode(768 * 1254 / 1536, 512 * 836 / 1024, grid);
-    if (start >= 0) {
-      const queue = new Uint32Array(grid.length); let head = 0, tail = 0;
-      queue[tail++] = start; seen[start] = 1;
-      while (head < tail) {
-        const cur = queue[head++], cx = cur % navCols, cy = (cur / navCols) | 0;
-        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
-          if (!ox && !oy) continue;
-          const nx = cx + ox, ny = cy + oy;
-          if (nx < 0 || ny < 0 || nx >= navCols || ny >= navRows) continue;
-          const ni = ny * navCols + nx;
-          if (!grid[ni] || seen[ni]) continue;
-          if (ox && oy && (!grid[cy * navCols + nx] || !grid[ny * navCols + cx])) continue;
-          seen[ni] = 1; queue[tail++] = ni;
-        }
-      }
-    }
-    navReach.set(key, seen);
-  }
-  const ix = Math.max(0, Math.min(navCols - 1, Math.floor(x / mapScale / NAV_CELL)));
-  const iy = Math.max(0, Math.min(navRows - 1, Math.floor(y / mapScale / NAV_CELL)));
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-    const nx = ix + dx, ny = iy + dy;
-    if (nx < 0 || ny < 0 || nx >= navCols || ny >= navRows) continue;
-    if (seen[ny * navCols + nx]) return true;
-  }
-  return false;
-}
-function navHeapPush(heap, node, score) {
-  let i = heap.length; heap.push({ node, score });
-  while (i) { const parent = (i - 1) >> 1; if (heap[parent].score <= score) break; heap[i] = heap[parent]; i = parent; }
-  heap[i] = { node, score };
-}
-function navHeapPop(heap) {
-  const top = heap[0], last = heap.pop();
-  if (heap.length) {
-    let i = 0;
-    while (true) {
-      let c = i * 2 + 1; if (c >= heap.length) break;
-      if (c + 1 < heap.length && heap[c + 1].score < heap[c].score) c++;
-      if (heap[c].score >= last.score) break;
-      heap[i] = heap[c]; i = c;
-    }
-    heap[i] = last;
-  }
-  return top;
-}
-function mapPathDirection(p, foe, now) {
-  if (mapId !== 2) return null;
-  if (p.navUntil > now && p.navTarget === foe.id && p.navPath && Math.hypot(foe.x - p.navGoalX, foe.y - p.navGoalY) < 110 * mapScale) {
-    while (p.navAt < p.navPath.length - 1 && Math.hypot(p.x - p.navPath[p.navAt].x, p.y - p.navPath[p.navAt].y) < NAV_CELL * 0.8 * mapScale) p.navAt++;
-    const w = p.navPath[p.navAt];
-    if (w) { const dx = w.x - p.x, dy = (w.y - p.y) / 0.8, d = Math.hypot(dx, dy); if (d > 2) return { x: dx / d, y: dy / d }; }
-  }
-  const grid = buildNavGrid(Math.max(18, p.hr || 0)), start = nearestNavNode(p.x / mapScale, p.y / mapScale, grid), goal = nearestNavNode(foe.x / mapScale, foe.y / mapScale, grid);
-  if (start < 0 || goal < 0 || start === goal) return null;
-  const size = navCols * navRows, g = new Float32Array(size); g.fill(Infinity);
-  const prev = new Int32Array(size); prev.fill(-1);
-  const closed = new Uint8Array(size), heap = [];
-  const sx = start % navCols, sy = (start / navCols) | 0, gx = goal % navCols, gy = (goal / navCols) | 0;
-  const heuristic = (x, y) => Math.hypot(gx - x, gy - y);
-  g[start] = 0; navHeapPush(heap, start, heuristic(sx, sy));
-  let found = false, steps = 0;
-  while (heap.length && steps++ < navCols * navRows) {
-    const cur = navHeapPop(heap).node;
-    if (closed[cur]) continue;
-    if (cur === goal) { found = true; break; }
-    closed[cur] = 1;
-    const x = cur % navCols, y = (cur / navCols) | 0;
-    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
-      if (!ox && !oy) continue;
-      const nx = x + ox, ny = y + oy;
-      if (nx < 0 || ny < 0 || nx >= navCols || ny >= navRows) continue;
-      const ni = ny * navCols + nx;
-      if (!grid[ni] || closed[ni]) continue;
-      if (ox && oy && (!grid[y * navCols + nx] || !grid[ny * navCols + x])) continue;
-      const ng = g[cur] + (ox && oy ? 1.4142 : 1);
-      if (ng >= g[ni]) continue;
-      g[ni] = ng; prev[ni] = cur; navHeapPush(heap, ni, ng + heuristic(nx, ny));
-    }
-  }
-  if (!found) { p.navPath = null; p.navUntil = now + 350; return null; }
-  const ids = []; for (let at = goal; at !== start && at >= 0; at = prev[at]) ids.push(at);
-  ids.reverse();
-  p.navPath = ids.map(id => ({ x: ((id % navCols) + 0.5) * NAV_CELL * mapScale, y: (((id / navCols) | 0) + 0.5) * NAV_CELL * mapScale }));
-  p.navAt = 0; p.navUntil = now + 650; p.navTarget = foe.id; p.navGoalX = foe.x; p.navGoalY = foe.y;
-  const w = p.navPath[0]; if (!w) return null;
-  const dx = w.x - p.x, dy = (w.y - p.y) / 0.8, d = Math.hypot(dx, dy);
-  return d > 2 ? { x: dx / d, y: dy / d } : null;
-}
-
-
+const clampArena = pt => { const nx = (pt.x - CX) / RX, ny = (pt.y - CY) / RY, d = Math.hypot(nx, ny); return d > 0.97 ? { x: CX + nx / d * 0.97 * RX, y: CY + ny / d * 0.97 * RY } : { x: pt.x, y: pt.y }; };
 let fireSeq = 0;
 function spawnFoxfire(g, pos) {
   const c = clampArena(pos);
@@ -1293,7 +1056,7 @@ function stepBombs(now) {
 function mapRayLen(x, y, a) {
   for (let d = 0; d < MAP * 2; d += 12) {
     const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.8;
-    if (px < 0 || px > MAP || py < 0 || py > MAP_H) return d;
+    if (px < 0 || px > MAP || py < 0 || py > MAP) return d;
   }
   return MAP * 2;
 }
@@ -2199,9 +1962,8 @@ async function handleAuth(p, m, ip) {
 // ---- player factory ----
 function mkPlayer(id, ws) {
   const a = Math.random() * Math.PI * 2, r = Math.random() * 0.5;
-  const pos = findMapPosition({ x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r }, 18);
   return { id, ws, name: 'Player' + id, hue: Math.floor(Math.random() * 360),
-    x: pos.x, y: pos.y, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
+    x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
     joined: false, cls: '', ready: false, role: 0, inRound: false, lx: 0, ly: 0, deathOrder: 0,
     hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, fires: [], qNext: false, pull: null, charmUntil: 0, charmBy: 0, burnUntil: 0, burnNext: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
 }
@@ -2803,10 +2565,7 @@ function botTick(now) {
     const vx = foe.x - p.x, vy = (foe.y - p.y) / 0.8, d = fd || 1, R = BOT_RANGE[p.cls] || 95;
     let mx = 0, my = 0;
     if (iq > 0) {
-      if (d > R * 0.85) {
-        const route = mapId === 2 ? mapPathDirection(p, foe, now) : null;
-        mx = route ? route.x : vx / d; my = route ? route.y : vy / d;
-      }
+      if (d > R * 0.85) { mx = vx / d; my = vy / d; }
       else if (R > 200 && iq >= 3 && d < R * 0.45) { mx = -vx / d; my = -vy / d; }
       else if (iq >= 4) { if (now > (p.botSg || 0)) { p.botSg = now + 900 + Math.random() * 900; p.botDir = Math.random() < 0.5 ? -1 : 1; } mx = -vy / d * (p.botDir || 1); my = vx / d * (p.botDir || 1); }
       if (iq >= 7) for (const ar of arrows.values()) {
@@ -2858,7 +2617,7 @@ wss.on('connection', (ws, req) => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     if (!m || typeof m !== 'object') return;
     if (m.rt !== undefined) m.rt = Math.min(Math.max(0, Number(m.rt) || 0), (p.rtt || 80) + 40);
-    for (const k of ['x', 'y', 'cx', 'cy']) if (m[k] !== undefined) { const v = Number(m[k]); m[k] = Number.isFinite(v) ? Math.max(-300, Math.min(k === 'y' || k === 'cy' ? MAP_H + 300 : MAP + 300, v)) : undefined; }
+    for (const k of ['x', 'y', 'cx', 'cy']) if (m[k] !== undefined) { const v = Number(m[k]); m[k] = Number.isFinite(v) ? Math.max(-300, Math.min(MAP + 300, v)) : undefined; }
     if (m.t === 'signup' || m.t === 'login' || m.t === 'resume' || m.t === 'guest') {
       handleAuth(p, m, ip).catch(err => { console.error('auth error:', err.message); authFail(p, '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'); });
       return;
@@ -2999,8 +2758,7 @@ setInterval(() => {
       if (!inPlay(p)) p.dash = null;
       else {
         const px = p.x, py = p.y, f = Math.min(1, (now - D.t0) / D.ms);
-        const tx = D.sx + (D.ex - D.sx) * f, ty = D.sy + (D.ey - D.sy) * f;
-        moveMapEntity(p, tx - p.x, ty - p.y);
+        p.x = D.sx + (D.ex - D.sx) * f; p.y = D.sy + (D.ey - D.sy) * f;
         if (dashHits(p, D, px, py, now)) needEnd = true;
         if (f >= 1) p.dash = null;
       }
@@ -3037,12 +2795,16 @@ setInterval(() => {
     if (p.cls === 'Financier' && p.role === 1 && phase === 'round') stepFinancier(p, now);
     if (p.bleedUntil) stepBleed(p, now);
     if (now < p.kbUntil && inPlay(p)) {
-      moveMapEntity(p, p.kbx * dt, p.kby * dt * 0.8);
+      p.x += p.kbx * dt; p.y += p.kby * dt * 0.8;
+      const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
+      if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
     }
     if (dx || dy) {
       const l = Math.hypot(dx, dy); dx /= l; dy /= l;
       const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1) * (p.bm || 1);
-      moveMapEntity(p, dx * spd * dt, dy * spd * dt * 0.8);
+      p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
+      const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
+      if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
     }
     p.moving = !!(dx || dy);
     p.hist.push({ t: now, x: p.x, y: p.y });
