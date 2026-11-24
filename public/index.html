@@ -303,13 +303,58 @@ body.mob #clBody{height:110px}
 <div id="authHint">아이디: 영문 소문자·숫자·_ 4~16자<br>비밀번호: 6자 이상 · 닉네임: 2~14자</div>
 <div id="authErr"></div>
 <button id="authGo">로그인</button><div id="guestLink" role="button" tabindex="0">게스트로 입장</div></form></div>
+<script src="map-collision.js"></script>
 <script>
 const PROTO_V=2;let glowOff=false,slowN=0,fastN=0;const GL=n=>glowOff?0:n;
-let W=1254,mapScale=1;const W0=1254,PX=5;
-function setWorld(sc){sc=sc||1;mapScale=sc;W=W0*sc;LB.x=W/2-140;resize();camX=W/2;camY=W/2}
+let W=1254,H=1254,mapScale=1,mapId=1;const W0=1254,H_SQUARE=1254,H_WULIN=836,PX=5;
+function setWorld(sc){sc=sc||1;mapScale=sc;W=W0*sc;H=(mapId===2?H_WULIN:H_SQUARE)*sc;LB.x=W/2-140;resize();camX=W/2;camY=H/2}
 const cv=document.getElementById('c'), hud=document.getElementById('hud');let ctx=cv.getContext('2d');
 const chatEl=document.getElementById('chat'), login=document.getElementById('login');
-const MAPS=['bg.jpg','map2.png'],bgs=MAPS.map(f=>{const i=new Image();i.src=f;return i});let bg=bgs[1],mapId=1;
+const MAPS=['bg.jpg','map2.png','wulin-map.png'],bgs=MAPS.map(f=>{const i=new Image();i.src=f;return i});let bg=bgs[mapId];
+
+const CLIENT_MAP_POLYS=(window.MAP_COLLISION_DATA?.polygons||[]).map(o=>{const pts=o.points,xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);return{kind:o.kind,points:pts,minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)}});
+const CLIENT_MAP_WALKS=(window.MAP_COLLISION_DATA?.walkways||[]).map(points=>({points,minX:Math.min(...points.map(p=>p[0])),maxX:Math.max(...points.map(p=>p[0])),minY:Math.min(...points.map(p=>p[1])),maxY:Math.max(...points.map(p=>p[1]))}));
+const CLIENT_MAP_PASSAGES=(window.MAP_COLLISION_DATA?.passages||[]).map(o=>({points:o.points,kinds:o.kinds||[],minX:Math.min(...o.points.map(p=>p[0])),maxX:Math.max(...o.points.map(p=>p[0])),minY:Math.min(...o.points.map(p=>p[1])),maxY:Math.max(...o.points.map(p=>p[1]))}));
+function clientPointInPoly(x,y,pts){let inside=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const a=pts[j],b=pts[i];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/((b[1]-a[1])||1e-9)+a[0])inside=!inside}return inside}
+function clientPassage(x,y,kind){return CLIENT_MAP_PASSAGES.some(p=>p.kinds.includes(kind)&&x>=p.minX&&x<=p.maxX&&y>=p.minY&&y<=p.maxY&&clientPointInPoly(x,y,p.points))}
+function clientMapBlocked(x,y,radius=18){
+ if(mapId!==2||!window.MAP_COLLISION_DATA)return false;
+ const data=window.MAP_COLLISION_DATA,sx=x/mapScale*data.width/1254,sy=y/mapScale*data.height/836,sr=radius/mapScale*data.width/1254,sr2=sr*sr;
+ const walkway=CLIENT_MAP_WALKS.some(w=>sx>=w.minX&&sx<=w.maxX&&sy>=w.minY&&sy<=w.maxY&&clientPointInPoly(sx,sy,w.points));
+ for(const poly of CLIENT_MAP_POLYS){
+  if((poly.kind==='water'&&walkway)||clientPassage(sx,sy,poly.kind))continue;
+  if(sx<poly.minX-sr||sx>poly.maxX+sr||sy<poly.minY-sr||sy>poly.maxY+sr)continue;
+  const pts=poly.points;let inside=false,near=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+   const a=pts[j],b=pts[i];
+   if((a[1]>sy)!==(b[1]>sy)&&sx<(b[0]-a[0])*(sy-a[1])/((b[1]-a[1])||1e-9)+a[0])inside=!inside;
+   const vx=b[0]-a[0],vy=b[1]-a[1],l2=vx*vx+vy*vy,t=l2?Math.max(0,Math.min(1,((sx-a[0])*vx+(sy-a[1])*vy)/l2)):0,dx=sx-(a[0]+vx*t),dy=sy-(a[1]+vy*t);
+   if(dx*dx+dy*dy<=sr2)near=true;
+  }
+  if(inside||near)return true;
+ }
+ return false;
+}
+function clientMoveEntity(o,dx,dy){
+ if(mapId!==2||!arena){
+  o.x+=dx;o.y+=dy;
+  if(arena){const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=Math.hypot(nx,ny);if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}}
+  return;
+ }
+ const r=o.cls==='Tower'?36:18;let x=o.x,y=o.y;
+ const test=(tx,ty)=>{const c={x:Math.max(r,Math.min(W-r,tx)),y:Math.max(r,Math.min(H-r,ty))};return clientMapBlocked(c.x,c.y,r)?null:c};
+ const axis=(delta,horizontal)=>{
+  const tx=x+(horizontal?delta:0),ty=y+(horizontal?0:delta),full=test(tx,ty);
+  if(full){x=full.x;y=full.y;return}
+  let lo=0,hi=1,best={x,y};
+  for(let n=0;n<9;n++){const mid=(lo+hi)/2,c=test(x+(horizontal?delta*mid:0),y+(horizontal?0:delta*mid));if(c){lo=mid;best=c}else hi=mid}
+  x=best.x;y=best.y;
+ };
+ const stepSize=Math.max(4,r*.5),steps=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))/stepSize)),sx=dx/steps,sy=dy/steps;
+ for(let i=0;i<steps;i++){if(sx)axis(sx,true);if(sy)axis(sy,false)}
+ o.x=x;o.y=y;
+}
+
 const spImg=new Image(); spImg.src='player.png';
 const swordImg=new Image();swordImg.src='sword.png';
 const towerImg=new Image(),tInfImg=new Image(),tArcImg=new Image(),cbImg=new Image();towerImg.src='tower.png';tInfImg.src='towerinfantry.png';const stkImg=new Image();stkImg.src='stock.png';tArcImg.src='towerarcher.png';cbImg.src='cannonball.png';
@@ -339,7 +384,7 @@ let vw,vh,scale,ox,oy,dpr;
 const ZOOM_MAX=2.5;let zoom=1;
 try{const z=parseFloat(localStorage.getItem('mpvp_zoom'));if(z>=1&&z<=ZOOM_MAX)zoom=z}catch(e){}
 function resize(){dpr=devicePixelRatio||1;vw=innerWidth;vh=innerHeight;cv.width=vw*dpr;cv.height=vh*dpr;
- scale=Math.min(vw,vh)/W0*dpr*zoom;ox=(cv.width-W*scale)/2;oy=(cv.height-W*scale)/2}
+ scale=Math.min(vw/W0,vh/(mapId===2?H_WULIN:H_SQUARE))*dpr*zoom;ox=(cv.width-W*scale)/2;oy=(cv.height-H*scale)/2}
 addEventListener('resize',resize);resize();
 cv.addEventListener('wheel',e=>{e.preventDefault();
  zoom=Math.max(1,Math.min(ZOOM_MAX,zoom*(e.deltaY<0?1.08:1/1.08)));if(zoom<1.02)zoom=1;
@@ -522,7 +567,7 @@ function toast(msg){const el=document.getElementById('toast');el.textContent=msg
 let rtt=60,lastSent='',atkLocal=0,myAim=0,mWx=0,mWy=0,mouseOn=false,aimSent=0,aimSentT=0;
 const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700,Lucifer:900,Gambler:600,SwordMaster:400,Tower:2000,Financier:900,Gamer:700,Celestial:800,Reaper:700,Berserker:900,PlumBlossom:800},arrowsC=[];
 const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b)),lerpAng=(a,b,t)=>a+angDiff(b,a)*t;
-let mcx=0,mcy=0,camX=W/2,camY=W/2;
+let mcx=0,mcy=0,camX=W/2,camY=H/2;
 addEventListener('mousemove',e=>{mcx=e.clientX;mcy=e.clientY;mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale;mouseOn=true});
 function updateAim(o){
  if(MOB)mobTarget(o);
@@ -1669,7 +1714,7 @@ function updatePb(t){
  if(MOB){const sh=left>0,pk=sh?pbCmdK+pbCmdSp+st:'';if(pk!==pbPadKey){pbPadKey=pk;pbPad.style.display=sh?'grid':'none';if(sh)for(const b of pbPad.children){b.style.display=b.dataset.sp?(pbCmdK==='E'&&!pbCmdSp?'':'none'):(+b.dataset.n<=(pbCmdK==='Q'?st+1:(pbCmdK==='E'&&!pbCmdSp&&st>=6?4:3))?'':'none')}}}}
 const PB_FX_OK=1;
 let pbFog=null;
-function drawPbFog(){if(!pbFog||!pbFog.length)return;ctx.save();ctx.fillStyle='rgba(14,6,18,.94)';ctx.beginPath();ctx.rect(0,0,W,W);
+function drawPbFog(){if(!pbFog||!pbFog.length)return;ctx.save();ctx.fillStyle='rgba(14,6,18,.94)';ctx.beginPath();ctx.rect(0,0,W,H);
  for(const [gx,sy,a,len,w] of pbFog){const c=Math.cos(a),s=Math.sin(a);let first=1;for(const [u,v] of [[0,-w/2],[len,-w/2],[len,w/2],[0,w/2]]){const x=gx+u*c-v*s,y=sy+(u*s+v*c)*.8;if(first){ctx.moveTo(x,y);first=0}else ctx.lineTo(x,y)}ctx.closePath()}
  ctx.fill('evenodd');ctx.restore()}
 
@@ -1714,12 +1759,12 @@ function frame(t){requestAnimationFrame(frame);
 function draw(t){
  const dt=Math.min((t-last)/1000,.05);last=t;
  ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.shadowBlur=0;ctx.setLineDash([]);ctx.fillStyle='#8fc4f5';ctx.fillRect(0,0,cv.width,cv.height);
-  {const me=others.get(myId),fx=me&&myRole!==2?me.x:W/2,fy=me&&myRole!==2?me.y-30:W/2,sw=W*scale,sh=W*scale,kc=Math.min(1,dt*10);
+  {const me=others.get(myId),fx=me&&myRole!==2?me.x:W/2,fy=me&&myRole!==2?me.y-30:H/2,sw=W*scale,sh=H*scale,kc=Math.min(1,dt*10);
   camX+=(fx-camX)*kc;camY+=(fy-camY)*kc;
   ox=sw>cv.width+1?Math.max(cv.width-sw,Math.min(0,cv.width/2-camX*scale)):(cv.width-sw)/2;
   oy=sh>cv.height+1?Math.max(cv.height-sh,Math.min(0,cv.height/2-camY*scale)):(cv.height-sh)/2;
   mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale}
- ctx.setTransform(scale,0,0,scale,ox,oy);if(imOk(bg))ctx.drawImage(bg,0,0,W,W);ctx.imageSmoothingEnabled=false;drawLB();
+ ctx.setTransform(scale,0,0,scale,ox,oy);ctx.imageSmoothingEnabled=false;if(imOk(bg))ctx.drawImage(bg,0,0,W,H);drawLB();
  const k=1-Math.exp(-dt*18),list=[];
  for(const [id,o] of others){
   if(id===myId&&arena&&myRole!==2){
@@ -1731,17 +1776,15 @@ function draw(t){
    if(Math.abs(Math.cos(myAim))>.2)o.face=Math.cos(myAim)>0?1:-1;
    if(o.moving){
     const l=Math.hypot(dx,dy),spd=300*(o.gd?1.15:1)*(o.sl?.7:1)*(o.pz||1)*(o.hn?.85:1)*(o.cls==='Assassin'&&o.iv?1.15:1)*(o.lb?1.2:1)*(o.fs?1.2:1)*(o.bm||1);
-    o.x+=dx/l*spd*dt;o.y+=dy/l*spd*dt*0.8;
-    const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=Math.hypot(nx,ny);
-    if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}
+    clientMoveEntity(o,dx/l*spd*dt,dy/l*spd*dt*0.8);
    }
 
    if(o.tx!==undefined){
     const err=Math.hypot(o.tx-o.x,o.ty-o.y);
     const c=(t<snapUntil||forced||(!o.moving&&!o.sm))?(o.ds?1-Math.exp(-dt*45):k):(err>80?k*0.3:0);
-    o.x+=(o.tx-o.x)*c;o.y+=(o.ty-o.y)*c;
+    clientMoveEntity(o,(o.tx-o.x)*c,(o.ty-o.y)*c);
    }
-  }else if(o.tx!==undefined){o.x+=(o.tx-o.x)*k;o.y+=(o.ty-o.y)*k}
+  }else if(o.tx!==undefined){clientMoveEntity(o,(o.tx-o.x)*k,(o.ty-o.y)*k)}
   o.chg=o.cls!=='Archer'&&o.cls!=='Reaper'?-1:id===myId?(chargeT0?Math.min(1,(t-chargeT0)/(o.cls==='Reaper'?RCH_MS:chMax(o))):-1):(o.cg>0?Math.min(1,o.cg/CHARGE_MS):-1);
   if(id===myId&&chargeT0&&myRole===2)chargeT0=0;
   o.tt=titleMap.get(id)||null;
