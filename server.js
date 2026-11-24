@@ -53,13 +53,19 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server, maxPayload: 1024, perMessageDeflate: false });
 const players = new Map();
+// ---- training dummies ----
+const dummies = [-101, -102, -103].map(id => ({ id, unit: true, dummy: true, owner: -1, role: 1, joined: true, hist: [], hr: 26, x: 0, y: 0, hp: 1e5, mh: 1e5, cls: '', team: 0, sum: 0, last: 0, lastT: 0, stunUntil: 0, charmUntil: 0, slowUntil: 0, kbUntil: 0 }));
+function placeDummies() { [-0.42, 0, 0.42].forEach((f, i) => { const d = dummies[i]; d.x = CX + f * RX; d.y = CY - 0.38 * RY; d.stunUntil = d.slowUntil = d.kbUntil = 0; }); }
+function dummyHit(t, d, now) { if (now - t.lastT > 3000) t.sum = 0; t.sum += d; t.last = d; t.lastT = now; }
+const inPlay = p => !!p && p.joined && (p.role === 1 || (p.role === 0 && phase !== 'round'));
+const PRACT = () => phase === 'round' || phase === 'lobby';
 let nextId = 1;
 
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
 let outN = 0, curSk = null;
 const send = (ws, o) => { if (o && o.t === 'cd') outN++; return ws && ws.readyState === 1 && ws.send(JSON.stringify(o)); };
 let curTint = null;
-const STATE_BUF = 64 * 1024;
+const STATE_BUF = 64 * 1024, EV_BUF = 256 * 1024, KILL_BUF = 4 * 1024 * 1024;
 const sendState = (ws, msg) => { if (ws.readyState === 1 && ws.bufferedAmount < STATE_BUF) ws.send(msg); };
 const BATCH_T = new Set(['fx', 'arrow', 'arrowEnd', 'hit']);
 let evq = [], evTimer = null;
@@ -70,6 +76,7 @@ function flushEv() {
   for (const p of players.values()) {
     if (!(p.ws && p.ws.readyState === 1 && (p.user || p.guest))) continue;
     const bz = fz.length ? pbBlind(p, now, fz) : null;
+    if (p.ws.bufferedAmount > EV_BUF) { if (p.ws.bufferedAmount > KILL_BUF) { try { p.ws.terminate(); } catch (e) {} } continue; }
     if (bz && bz.length) { const l = q0.filter(e => pbEvVisible(e, bz)); if (l.length) p.ws.send(JSON.stringify(l.length === 1 ? l[0] : { t: 'ev', l })); }
     else p.ws.send(m);
   }
@@ -79,11 +86,11 @@ const broadcast = o => {
   if (curSk && (o.t === 'fx' || o.t === 'arrow')) { o.sp = curSk.p; o.sq = curSk.q; }
   if (curTint && (o.t === 'fx' || o.t === 'arrow') && !o.tint) o.tint = curTint;
   if (BATCH_T.has(o.t)) { evq.push(o); if (!evTimer) evTimer = setImmediate(flushEv); return; }
-  const m = JSON.stringify(o); for (const p of players.values()) if (p.ws && p.ws.readyState === 1) p.ws.send(m);
+  const m = JSON.stringify(o); for (const p of players.values()) if (p.ws && p.ws.readyState === 1 && p.ws.bufferedAmount < EV_BUF * 2) p.ws.send(m);
 };
 
 const CHAT_TTL = 10 * 60 * 1000;
-const ROUND_MS = 4 * 60 * 1000;
+let ROUND_MS = 4 * 60 * 1000;
 const chatLog = [];
 let phase = 'lobby', roundStart = 0, deathCounter = 0;
 
@@ -98,7 +105,7 @@ function pushMap() {
   for (const p of players.values()) { const c = clampArena({ x: p.x, y: p.y }); p.x = c.x; p.y = c.y; p.hist = []; }
   broadcast({ t: 'map', id: mapId, scale: mapScale, arena: { CX, CY, RX, RY } });
 }
-const saveMapCfg = () => db.set('mapcfg', JSON.stringify({ id: mapId, scale: mapScale })).catch(e => console.error('mapcfg save failed:', e.message));
+const saveMapCfg = () => db.set('mapcfg', JSON.stringify({ id: mapId, scale: mapScale, rt: ROUND_MS })).catch(e => console.error('mapcfg save failed:', e.message));
 function setMap(id) { mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]); pushMap(); saveMapCfg(); }
 function setScale(sc) {
   const r = sc / mapScale; mapScale = sc; MAP = 1254 * sc;
@@ -158,7 +165,7 @@ function startRound() {
       return sysChat('Round cancelled: both teams need at least one player.');
     }
   }
-  phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); soulOrbs.clear(); balls.length = 0;
+  phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); soulOrbs.clear(); balls.length = 0; planets.length = 0; galaxies.length = 0; pbZones.length = 0; pbWalls.length = 0; pbTimers.length = 0;
   const order = parts.slice(); for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
   const rot = Math.random() * Math.PI * 2;
   order.forEach((p, i) => {
@@ -168,7 +175,7 @@ function startRound() {
     p.x = CX + Math.cos(a) * RX * 0.92; p.y = CY + Math.sin(a) * RY * 0.92;
     p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0; p.hist = [];
     resetCombat(p);
-    if (bossMult && p.id === bossId) { p.pw = Math.min(bossMult, BOSS_CAP.dmg); p.bm = Math.min(bossMult, BOSS_CAP.spd); p.mh = p.hp = Math.round(p.mh * bossMult); }
+    if (bossMult && p.id === bossId) { p.pw = Math.min(bossMult, BOSS_CAP.dmg); p.bm = Math.min(bossMult, BOSS_CAP.spd); p.mh = p.hp = Math.round(p.mh * (parts.length - 1) * 2); }
   });
   joinedList().forEach(p => { if (!p.inRound) p.role = 2; });
   broadcast({ t: 'tp' });
@@ -311,7 +318,7 @@ function setShopPrice(p, m) {
   say(1, SKINS[id].name + ' 가격을 ' + n.toLocaleString() + ' 골드로 변경했습니다.');
 }
 // ---- class unlock ----
-const CLS_PRICE = { PlumBlossom: 200 };
+const CLS_PRICE = { PlumBlossom: 100 };
 const clsFree = p => p.user === ADMIN_ID || p.obs;
 const clsOk = (p, c) => !CLS_PRICE[c] || clsFree(p) || (p.clsOwn || []).includes(c);
 const sendCinfo = p => send(p.ws, { t: 'cinfo', own: p.clsOwn || [], price: CLS_PRICE, free: clsFree(p) ? 1 : 0 });
@@ -499,12 +506,14 @@ function moveArrow(ar, step, time) {
   const found = [];
   if (ar.fake) { ar.x = nx; ar.gy = ngy; ar.left -= step; return []; }
   const arOw = players.get(ar.owner), arRoot = arOw ? rootOf(arOw) : ar.owner;
-  if (phase === 'round') for (const t of [...players.values(), ...units.values()]) {
-    if (t.id === ar.owner || t.owner === ar.owner || !(t.unit || t.joined) || t.role !== 1 || ar.hitIds.has(t.id) || sameTeam(arOw, t) || rootOf(t) === arRoot) continue;
+  const chk = t => {
+    if (t.id === ar.owner || t.owner === ar.owner || !(t.unit || t.joined) || t.role !== 1 || ar.hitIds.has(t.id) || sameTeam(arOw, t) || rootOf(t) === arRoot) return;
     const tp = posAt(t, time);
-    if (segDist(tp.x, tp.y / 0.8, ar.x, ar.gy, nx, ngy) > ar.radius + (t.hr || 0)) continue;
+    if (segDist(tp.x, tp.y / 0.8, ar.x, ar.gy, nx, ngy) > ar.radius + (t.hr || 0)) return;
     found.push({ t, d: Math.hypot(tp.x - ar.x, tp.y / 0.8 - ar.gy) });
-  }
+  };
+  if (phase === 'round') { for (const t of players.values()) chk(t); for (const t of units.values()) chk(t); }
+  else if (arOw && arOw.joined) for (const t of dummies) chk(t);
   found.sort((a, b) => a.d - b.d);
   if (ar.pierce) {
     for (const f of found) ar.hitIds.add(f.t.id);
@@ -645,6 +654,7 @@ function dmgTo(t, amount, now, src) {
   if (now < t.markUntil) incT += ASSASSIN.Q.mark;
   if (now < t.dmUntil) { const mo = players.get(t.dmBy); incT += mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp; }
   let d = (src && src.fixed) ? Math.round(amount0) : (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount0 * (1 + incA + incT) * (1 - Math.min(cut, 0.95))));
+  if (t.dummy) { dummyHit(t, d, now); broadcast({ t: 'hit', id: t.id, dmg: d, bl: blocked ? 1 : 0 }); return; }
   t.hp -= d;
   if (t.cls === 'PlumBlossom' && t.pbCh && d > 0 && t.pbCh.t !== 7) pbStop(t, now, false);
   if (t.cls === 'Celestial' && t.role === 1 && d > 0) { t.dim = Math.min(CEL.cap, (t.dim || 0) + d * CEL.store); if (t.hp > 0) t.hp = Math.min(t.mh, t.hp + d * CEL.heal); }
@@ -668,7 +678,14 @@ function dropSoul(x, y, cls, owner, pw) {
 }
 const units = new Map(); let unitSeq = 0; const balls = [], planets = [], galaxies = [];
 const rootOf = t => { const o = t.unit ? players.get(t.owner) : t; return o ? (o.skel || o.id) : t.owner; };
-const targetsOf = p => phase !== 'round' ? [] : [...players.values(), ...units.values()].filter(t => t !== p && (t.unit ? t.owner !== p.id : (t.joined && t.role === 1)) && !sameTeam(p, t) && rootOf(t) !== rootOf(p));
+const targetsOf = p => {
+  const r = [];
+  if (phase !== 'round') { if (p.joined && !p.obs) for (const d of dummies) r.push(d); return r; }
+  const rp = rootOf(p);
+  for (const t of players.values()) if (t !== p && t.joined && t.role === 1 && !sameTeam(p, t) && rootOf(t) !== rp) r.push(t);
+  for (const t of units.values()) if (t.owner !== p.id && !sameTeam(p, t) && rootOf(t) !== rp) r.push(t);
+  return r;
+};
 function inConeAt(ox, oy, aim, tx, ty, range, span, ext = 0) {
   const dx = tx - ox, dy = (ty - oy) / 0.8, d = Math.hypot(dx, dy);
   if (d > range + 10 + ext) return false;
@@ -775,15 +792,15 @@ function spawnFoxfire(g, pos) {
   while (g.fires.length > GUMIHO.fire.max) g.fires.shift();
 }
 function orbLand(ar, hitT, now) {
-  if (!ar.orb || phase !== 'round') return;
+  if (!ar.orb || !PRACT()) return;
   const g = players.get(ar.owner);
-  if (!g || g.cls !== 'Gumiho' || g.role !== 1) return;
+  if (!g || g.cls !== 'Gumiho' || !inPlay(g)) return;
   if (ar.boom) {
     const at = hitT ? { x: hitT.x, y: hitT.y } : { x: ar.x, y: ar.gy * 0.8 }, rad = ar.boom * GUMIHO.E.rad;
     broadcast({ t: 'fx', type: 'ring', x: at.x, y: at.y, r: rad, c: '#7fe9ff', dur: 700 });
     for (const t of targetsOf(g)) if (t !== hitT && Math.hypot(t.x - at.x, (t.y - at.y) / 0.8) <= rad) dmgTo(t, ar.dmg, now, { x: at.x, y: at.y, kill: g, type: 'magic' });
     checkRoundEnd();
-    if (phase !== 'round') return;
+    if (!PRACT()) return;
   }
   if (!hitT || Math.random() >= GUMIHO.fire.chance) return;
   spawnFoxfire(g, { x: hitT.x, y: hitT.y });
@@ -991,8 +1008,8 @@ function lucTransform(p, form, now) {
 }
 function lucHit(ar, t, now) {
   const p = players.get(ar.owner);
-  if (p && p.cls === 'Gamer' && p.role === 1) { if (ar.luc === 'E') applyBurn(t, p, LUC.E.burnMs, now); return; }
-  if (!p || p.cls !== 'Lucifer' || p.role !== 1) return;
+  if (p && p.cls === 'Gamer' && inPlay(p)) { if (ar.luc === 'E') applyBurn(t, p, LUC.E.burnMs, now); return; }
+  if (!p || p.cls !== 'Lucifer' || !inPlay(p)) return;
   const cut = ms => { if (!p.lUsed) { p.cdR = Math.max(now, p.cdR - ms); send(p.ws, { t: 'cd', k: 'R', ms: p.cdR - now }); } };
   if (ar.luc === 'Q' || ar.luc === 'E') {
     cut(LUC.G.skillCut);
@@ -1019,7 +1036,7 @@ function stepBombs(now) {
   let any = false;
   for (const b of bombs.values()) {
     const own = players.get(b.owner);
-    if (!own || own.role !== 1 || phase !== 'round') { endBomb(b); continue; }
+    if (!own || !inPlay(own) || !PRACT()) { endBomb(b); continue; }
     const d = Math.min(b.len, LUC.bomb.spd * (now - b.t0) / 1000), px = b.x + Math.cos(b.a) * d, pgy = b.gy + Math.sin(b.a) * d;
     if (sanctBlocked(b.owner, b.x + Math.cos(b.a) * b.d, b.gy + Math.sin(b.a) * b.d, px, pgy, now)) { endBomb(b); continue; }
     b.d = d;
@@ -1047,7 +1064,7 @@ function stepSanct(now) {
   for (const o of players.values()) {
     const S = o.sanct;
     if (!S) continue;
-    if (now >= S.until || o.role !== 1) { o.sanct = null; continue; }
+    if (now >= S.until || !inPlay(o)) { o.sanct = null; continue; }
     for (const t of targetsOf(o)) {
       const dx = t.x - S.x, dy = (t.y - S.y) / 0.8, d = Math.hypot(dx, dy), R = S.r + 18;
       if (d >= R) continue;
@@ -1060,7 +1077,7 @@ function stepLucifer(p, now) {
   let end = false;
   const B = p.beam;
   if (B) {
-    if (p.role !== 1) p.beam = null;
+    if (!inPlay(p)) p.beam = null;
     else {
       const c = Math.cos(B.a), s = Math.sin(B.a);
       const inB = q => { const dx = q.x - B.x, dy = (q.y - B.y) / 0.8, al = dx * c + dy * s, pp = -dx * s + dy * c; return al >= 0 && al <= B.len && Math.abs(pp) <= LUC.beam.half; };
@@ -1074,7 +1091,7 @@ function stepLucifer(p, now) {
   }
   const P = p.pure;
   if (P) {
-    if (p.role !== 1) p.pure = null;
+    if (!inPlay(p)) p.pure = null;
     else {
       while (P.next < P.until && now >= P.next) {
         const r = P.next - P.t0 < LUC.pure.delay ? LUC.pure.r0 : LUC.pure.r1;
@@ -1235,7 +1252,7 @@ const gdist = (a, b) => Math.hypot(a.x - b.x, (a.y - b.y) / 0.8);
 function stepUnits(dt, now) {
   for (const u of units.values()) {
     const own = players.get(u.owner);
-    if (phase !== 'round' || !own || own.role !== 1) { units.delete(u.id); continue; }
+    if (!PRACT() || !own || !inPlay(own)) { units.delete(u.id); continue; }
     const D = u.ut === 'i' ? TOWER.INF : TOWER.ARC;
     let dx = 0, dy = 0, mul = 1;
     if (now >= u.stunUntil) {
@@ -1299,7 +1316,7 @@ function stepBalls(now) {
     balls.splice(i, 1);
     const own = players.get(b.owner);
     curTint = b.tint || null; broadcast({ t: 'fx', type: 'ring', x: b.x, y: b.y, r: TOWER.Q.radius, c: '#ff9a3c', dur: 450 }); curTint = null;
-    if (!own || phase !== 'round') continue;
+    if (!own || !PRACT()) continue;
     for (const t of targetsOf(own)) if (Math.hypot(t.x - b.x, (t.y - b.y) / 0.8) <= TOWER.Q.radius + (t.hr || 0)) dmgTo(t, TOWER.Q.dmg, now, { x: b.x, y: b.y, by: own, type: 'phys' });
     checkRoundEnd();
   }
@@ -1446,14 +1463,14 @@ function gamblerSkill(p, k, m, now) {
     sendRv(p);
     fxTxt(p.x, p.y, '🔄 밀수', '#ffd66b');
   } else if (k === 'E') {
-    if (phase !== 'round') return;
+    if (!PRACT()) return;
     cd(G.E.cd);
     if (p.myTurn) return rouletteShot(p, true, now);
     const live = fireChamber(p, now);
     if (live) { fxTxt(p.x, p.y, '💥 실탄!', '#ff6b6b'); dmgTo(p, G.E.self, now, { type: 'pierce' }); }
     else { fxTxt(p.x, p.y, '🍀 공포탄! 실탄 ' + G.E.buffDmg, '#9dffb0'); p.gbUntil = now + G.E.buffMs; }
   } else {
-    if (phase !== 'round') return;
+    if (!PRACT()) return;
     cd(G.R.cd);
     p.cdE = 0; send(p.ws, { t: 'cd', k: 'E', ms: 0 });
     p.myTurn = true;
@@ -1511,7 +1528,7 @@ function stepCelestial(dt, now) {
     broadcast({ t: 'fx', type: 'ring', x: b.x, y: b.y, r: CEL.Q.r, c: '#b69cff', dur: 400 });
     curTint = null;
     const own = players.get(b.owner);
-    if (!own || own.role !== 1 || phase !== 'round') continue;
+    if (!own || !inPlay(own) || !PRACT()) continue;
     let total = 0;
     for (const t of targetsOf(own)) {
       if (Math.hypot(t.x - b.x, (t.y - b.y) / 0.8) > CEL.Q.r + (t.hr || 0)) continue;
@@ -1524,7 +1541,7 @@ function stepCelestial(dt, now) {
   }
   for (let i = galaxies.length - 1; i >= 0; i--) {
     const g = galaxies[i], own = players.get(g.owner), R = CEL.R;
-    if (!own || own.role !== 1 || phase !== 'round') { galaxies.splice(i, 1); continue; }
+    if (!own || !inPlay(own) || !PRACT()) { galaxies.splice(i, 1); continue; }
     if (now < g.start) continue;
     const live = targetsOf(own).filter(t => Math.hypot(t.x - g.x, (t.y - g.y) / 0.8) <= R.r + (t.hr || 0));
     for (const t of live) {
@@ -1703,6 +1720,7 @@ async function upstash(...cmd) {
   return j.result;
 }
 const mem = new Map();
+setInterval(() => { const n = Date.now(); for (const [k, e] of mem) if (e.exp && e.exp < n) mem.delete(k); }, 60000).unref();
 const memGet = k => { const e = mem.get(k); if (!e) return null; if (e.exp && e.exp < Date.now()) { mem.delete(k); return null; } return e; };
 const db = (UP_URL && UP_TOKEN) ? {
   get: k => upstash('GET', KEY + k),
@@ -1738,7 +1756,7 @@ const db = (UP_URL && UP_TOKEN) ? {
   } catch (e) { console.error('wins (per-user) load failed:', e.message); }
 })();
 (async () => {
-  try { const r = await db.get('mapcfg'), o = r ? JSON.parse(r) : null; if (o) { if ([1, 1.5, 2].includes(o.scale) && o.scale !== mapScale) setScale(o.scale); if (ARENAS[o.id] && o.id !== mapId) setMap(o.id); } } catch (e) { console.error('mapcfg load failed:', e.message); }
+  try { const r = await db.get('mapcfg'), o = r ? JSON.parse(r) : null; if (o) { if (Number.isFinite(o.rt) && o.rt >= 10000 && o.rt <= 3600000) ROUND_MS = o.rt; if ([1, 1.5, 2].includes(o.scale) && o.scale !== mapScale) setScale(o.scale); if (ARENAS[o.id] && o.id !== mapId) setMap(o.id); } } catch (e) { console.error('mapcfg load failed:', e.message); }
 })();
 (async () => { try { const r = await db.get('shopprice'); const o = r ? JSON.parse(r) : {}; for (const id of Object.keys(o)) if (SKINS[id] && Number.isInteger(o[id]) && o[id] >= 0) shopPrices[id] = o[id]; } catch (e) { console.error('shopprice load failed:', e.message); } })();
 console.log((UP_URL && UP_TOKEN) ? 'Accounts: Upstash Redis' : 'WARNING: UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set - accounts live in memory and are LOST on restart');
@@ -1951,7 +1969,7 @@ function mkPlayer(id, ws) {
 }
 // ---- Berserker ----
 const BERS = {
-  Q: { cd: 1000, range: 4 * RADPX, spd: 900, hit: 45, dmg: 250, pick: 0.6 * RADPX },
+  Q: { cd: 5000, range: 4 * RADPX, spd: 900, hit: 45, dmg: 250, pick: 0.6 * RADPX },
   E: { cd: 15000, r: 1.5 * RADPX, dmg: 100, stun: 1000, cut: 1000 },
   R: { cd: 25000, ms: 10000 }
 };
@@ -1967,10 +1985,15 @@ function berserkerSkill(p, k, m, now) {
   const cd = ms => { p['cd' + k] = now + ms; send(p.ws, { t: 'cd', k, ms }); };
   if (!p.axes || !p.axes.length) return;
   if (k === 'Q') {
-    const ax = p.axes.find(a => a.s === 0); if (!ax) return;
+    const ax = p.axes.find(a => a.s === 0);
+    if (!ax) {
+      const out = p.axes.filter(a => a.s !== 0); if (!out.length) return;
+      for (const a of out) { if (a.s === 1) broadcast({ t: 'arrowEnd', id: a.vid }); a.s = 0; p.cdE = Math.max(now, p.cdE - BERS.E.cut); fxTxt(p.x, p.y - 30, '🪓 회수', '#ffb27a'); }
+      send(p.ws, { t: 'cd', k: 'E', ms: Math.max(0, p.cdE - now) }); cd(0); return;
+    }
     ax.s = 1; ax.x = p.x; ax.y = p.y; ax.a = p.aim; ax.d = 0; ax.hit = new Set(); ax.vid = ++arrowSeq;
     broadcast({ t: 'arrow', id: ax.vid, by: p.id, x: p.x, y: p.y, a: p.aim, spd: BERS.Q.spd, range: BERS.Q.range, adv: 0, sc: 1, kd: 'axe', bm: 0 });
-    cd(now < p.bRUntil ? 0 : BERS.Q.cd);
+    cd(now < p.bRUntil && p.axes.some(a => a.s === 0) ? 0 : BERS.Q.cd);
   } else if (k === 'E') {
     cd(BERS.E.cd);
     for (const ax of p.axes) {
@@ -2019,7 +2042,7 @@ function stepBerserker(dt, now) {
   for (const p of players.values()) {
     if (p.cls !== 'Berserker' || !p.axes) continue;
     if (p.bRUntil && now >= p.bRUntil) { p.bRUntil = 0; if (p.axes.length > 1) { const keep = p.axes.find(a => a.s === 0) || p.axes.find(a => a.s === 2) || p.axes[0]; for (const a of p.axes) if (a !== keep && a.s === 1) broadcast({ t: 'arrowEnd', id: a.vid }); p.axes = [keep]; } }
-    if (p.role !== 1 || phase !== 'round') continue;
+    if (!inPlay(p) || !PRACT()) continue;
     let any = false;
     for (const a of p.axes) {
       if (a.s === 1) {
@@ -2173,7 +2196,7 @@ function plumAttack(p, m, now) {
   checkRoundEnd();
 }
 function plumSkill(p, k, m, now) {
-  if (p.role !== 1) return;
+  if (!inPlay(p)) return;
   if (k === 'E') {
     if (p.pbRe.e2 && now < p.pbRe.e2.until) return pbReuseE2(p, m, now);
   }
@@ -2186,7 +2209,7 @@ function plumSkill(p, k, m, now) {
 }
 function plumKey(p, m) {
   const now = Date.now(), c = p.pbCmd;
-  if (p.cls !== 'PlumBlossom' || !c || now > c.until || p.role !== 1 || !canAct(p, now)) return;
+  if (p.cls !== 'PlumBlossom' || !c || now > c.until || !inPlay(p) || !canAct(p, now)) return;
   if (m.sp) { if (c.k === 'E' && !c.sp && p.pbStage >= 1) { c.sp = true; c.until = now + (c.win || PB.cmd + PB.slack); } return; }
   const n = Number(m.n) | 0;
   if (n < 1 || n > 7 || (c.k !== 'Q' && n > (c.k === 'E' && !c.sp ? 4 : 3)) || (c.k === 'Q' && n > p.pbStage + 1)) return;
@@ -2292,7 +2315,7 @@ function pbRandFoe(p, pp, range) {
 function pbFlurry(p, now, mast, base, ult) {
   const spd = PB.spd * (ult ? 1.3 : mast ? 1.2 : 1), nDir = ult ? 16 : 8, fly = p.pbFly = { ids: new Set(), end: now + 600 + 250, redir: null, done: false, mast };
   const fire = (a, dmg, fake, track) => {
-    if (p.role !== 1) return;
+    if (!inPlay(p)) return;
     const id = spawnArrow(p, pbPos(p), 0, Date.now(), { a, dmg, spd, range: 6 * RADPX, radius: 0.4 * RADPX, kind: 'pbq', type: 'magic', fake });
     if (track && id) fly.ids.add(id);
   };
@@ -2387,11 +2410,11 @@ function stepPlum(dt, now) {
     const T = pbTimers[i]; if (now < T.at) continue;
     pbTimers.splice(i, 1);
     const o = players.get(T.owner);
-    if (o && o.role === 1) { try { T.fn(); } catch (e) { console.error('pb timer:', e.message); } }
+    if (o && inPlay(o)) { try { T.fn(); } catch (e) { console.error('pb timer:', e.message); } }
   }
   for (let i = pbZones.length - 1; i >= 0; i--) {
     const z = pbZones[i], own = players.get(z.owner);
-    if (now >= z.until || !own || own.role !== 1) { pbZones.splice(i, 1); continue; }
+    if (now >= z.until || !own || !inPlay(own)) { pbZones.splice(i, 1); continue; }
     const c = Math.cos(z.a), s = Math.sin(z.a);
     for (const t of targetsOf(own)) {
       const dx = t.x - z.gx, dy = t.y / 0.8 - z.gy, u = dx * c + dy * s, v = -dx * s + dy * c;
@@ -2401,7 +2424,7 @@ function stepPlum(dt, now) {
   }
   for (let i = pbWalls.length - 1; i >= 0; i--) {
     const w = pbWalls[i], own = players.get(w.owner);
-    if (now >= w.until || !own || own.role !== 1) { pbWalls.splice(i, 1); continue; }
+    if (now >= w.until || !own || !inPlay(own)) { pbWalls.splice(i, 1); continue; }
     if (w.follow) {
       const fp = pbPos(own), dx = fp.x - w.x, dy = fp.y / 0.8 - w.gy, d = Math.hypot(dx, dy), st = Math.min(d, 450 * dt);
       if (d > 0.01) { w.x += dx / d * st; w.gy += dy / d * st; }
@@ -2409,7 +2432,7 @@ function stepPlum(dt, now) {
   }
   for (const p of players.values()) {
     if (p.cls !== 'PlumBlossom') continue;
-    if (p.role !== 1) { p.pbCh = null; p.pbResume = null; p.pbCmd = null; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = 0; p.pbSw = null; continue; }
+    if (!inPlay(p)) { p.pbCh = null; p.pbResume = null; p.pbCmd = null; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = 0; p.pbSw = null; continue; }
     if (p.pbSw) pbSwordStep(p, dt, now);
     if (p.pbCmd && now > p.pbCmd.until) p.pbCmd = null;
     const ch = p.pbCh;
@@ -2432,7 +2455,7 @@ function stepPlum(dt, now) {
 }
 
 // ---- Reaper ----
-const REAPER = { chargeMs: 1500, rMax: 1.5 * RADPX, rMin: 0.2, dmg: [50, 270], soul: [0.05, 0.20], maxSouls: 5, collect: 0.7 * RADPX, atkPw: 0.7, R: { cd: 25000 } };
+const REAPER = { chargeMs: 1500, rMax: 1.5 * RADPX, rMin: 0.2, dmg: [50, 270], soul: [0.05, 0.30], maxSouls: 5, collect: 0.7 * RADPX, atkPw: 0.7, R: { cd: 25000 } };
 const sendReap = p => send(p.ws, { t: 'reap', s: (p.souls || []).map(x => x.c), q: (p.souls || []).map(x => x.pw >= 1 ? 1 : 0) });
 function stepSouls() {
   if (!soulOrbs.size || phase !== 'round') return;
@@ -2573,7 +2596,7 @@ wss.on('connection', (ws, req) => {
   players.set(id, p);
   const authTimer = setTimeout(() => { if (!(p.user || p.guest)) { try { ws.close(); } catch (e) {} } }, AUTH_TIMEOUT);
   pruneChat();
-  send(ws, { t: 'hello', v: PROTO, id, map: mapId, scale: mapScale, mode: gameMode, arena: { CX, CY, RX, RY }, pred: predCfg() });
+  send(ws, { t: 'hello', v: PROTO, id, map: mapId, scale: mapScale, rt: ROUND_MS, mode: gameMode, arena: { CX, CY, RX, RY }, pred: predCfg() });
   send(ws, { t: 'history', log: chatLog.map(c => ({ name: c.name, text: c.text, sys: c.sys ? 1 : 0, age: Date.now() - c.ts })) });
 
   ws.on('pong', () => { p.alive = true; p.missed = 0; if (p.pingAt) { const r = Date.now() - p.pingAt; p.rtt = p.rtt ? p.rtt * 0.7 + r * 0.3 : r; } });
@@ -2647,6 +2670,13 @@ wss.on('connection', (ws, req) => {
     } else if (m.t === 'mapscale') {
       const sc = Number(m.s);
       if (p.user === ADMIN_ID && phase === 'lobby' && [1, 1.5, 2].includes(sc) && sc !== mapScale) { setScale(sc); sysChat(p.name + ' set the map size to ' + sc + 'x.'); }
+    } else if (m.t === 'roundtime') {
+      const mn = Math.floor(Number(m.min)), sc = Math.floor(Number(m.sec));
+      if (p.user === ADMIN_ID && phase === 'lobby' && Number.isFinite(mn) && Number.isFinite(sc) && mn >= 0 && mn <= 60 && sc >= 0 && sc <= 59) {
+        const ms = (mn * 60 + sc) * 1000;
+        if (ms >= 10000 && ms <= 3600000) { ROUND_MS = ms; saveMapCfg(); broadcast({ t: 'rtime', ms }); sysChat(p.name + ' set the game time to ' + mn + 'm ' + sc + 's.'); }
+        else send(ws, { t: 'rtime', ms: ROUND_MS, err: 1 });
+      } else send(ws, { t: 'rtime', ms: ROUND_MS, err: 1 });
     } else if (m.t === 'aiclear') {
       if (p.user === ADMIN_ID) { const bs = [...players.values()].filter(q => q.ai); if (bs.length) { for (const q of bs) removeBot(q); sysChat(p.name + ' removed all AI players.'); } }
     } else if (m.t === 'pbc') {
@@ -2703,6 +2733,7 @@ function autoClearAi() {
   for (const q of players.values()) { if (q.ai) bots.push(q); else if ((q.user || q.guest) && !q.obs && !q.skel && q.ws && q.ws.readyState === 1) humans++; }
   if (!humans && bots.length) { for (const q of bots) removeBot(q); console.log('No human players left: removed ' + bots.length + ' AI player(s).'); }
 }
+const SLIM_KEYS = ['m', 'r', 'ai', 'ar', 'skl', 'so', 'su', 'gd', 'sl', 'hs', 'iv', 'hn', 'ta', 'kb', 'ds', 'mk', 'as', 'cm', 'bn', 'qn', 'lb', 'dm', 'cg', 'rl', 'mt', 'gb', 'fs', 'sa', 'smn', 'smx', 'sk', 'tr', 'ins', 'dp', 'gm', 'sn', 'iq', 'bs', 'bm', 'rg', 'ax', 'bu', 'bd'];
 setInterval(() => {
   const now = Date.now(), dt = Math.min((now - last) / 1000, 0.1); last = now;
   let needEnd = false;
@@ -2715,7 +2746,7 @@ setInterval(() => {
     if (p.role === 2 || now < p.stunUntil || now < p.charmUntil) { dx = dy = 0; p.chargeStart = 0; }
     if (p.dash) {
       const D = p.dash;
-      if (p.role !== 1) p.dash = null;
+      if (!inPlay(p)) p.dash = null;
       else {
         const px = p.x, py = p.y, f = Math.min(1, (now - D.t0) / D.ms);
         p.x = D.sx + (D.ex - D.sx) * f; p.y = D.sy + (D.ey - D.sy) * f;
@@ -2754,7 +2785,7 @@ setInterval(() => {
     }
     if (p.cls === 'Financier' && p.role === 1 && phase === 'round') stepFinancier(p, now);
     if (p.bleedUntil) stepBleed(p, now);
-    if (now < p.kbUntil && p.role === 1) {
+    if (now < p.kbUntil && inPlay(p)) {
       p.x += p.kbx * dt; p.y += p.kby * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
@@ -2775,7 +2806,7 @@ setInterval(() => {
   stepSanct(now);
   stepArrows(dt, now);
   stepBombs(now);
-  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now); stepSouls(); stepBerserker(dt, now); stepPlum(dt, now);
+  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now); stepSouls(); stepBerserker(dt, now); stepPlum(dt, now); placeDummies();
   } catch (e) { tickErr(e); }
   try {
   const list = [], hidden = [];
@@ -2791,6 +2822,7 @@ setInterval(() => {
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
       rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0 };
+    for (const k of SLIM_KEYS) if (e[k] === 0) delete e[k];
     if (p.cls === 'PlumBlossom') { e.pbs = p.pbStage + 1; if (p.pbCh) e.pbc = p.pbCh.t; if (now < (p.pbBlockUntil || 0)) e.pbk = 1; if (p.pbSw) e.psw = [Math.round(p.pbSw.x), Math.round(p.pbSw.g * 0.8), Math.round(Math.hypot(p.pbSw.vx, p.pbSw.vg)), +Math.atan2(p.pbSw.vg * 0.8, p.pbSw.vx).toFixed(2)]; }
     if (p.role === 1 && now < (p.pbSlowUntil || 0)) e.pz = p.pbSlowMul;
     list.push(e);
@@ -2805,6 +2837,7 @@ setInterval(() => {
   for (const p of players.values()) if (p.joined) for (const f of p.fires) ff.push({ id: f.id, o: p.id, x: Math.round(f.x), y: Math.round(f.y) });
   const sb = [...soulOrbs.values()].map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), c: s.cls, o: s.o }));
   const head = { t: 'state', ph: phase, left: phase === 'round' ? Math.max(0, ROUND_MS - (now - roundStart)) : 0, ff, sb };
+  if (phase !== 'round') head.dmy = dummies.map(d => { const live = now - d.lastT < 3000; return [d.id, Math.round(d.x), Math.round(d.y), live ? d.sum : 0, d.last, live ? 1 : 0]; });
   const fz = pbFogZones();
   if (!fz.length && !list.some(e => e.iv)) { const msg = JSON.stringify(Object.assign(head, { p: list })); for (const q of players.values()) if (q.ws && (q.user || q.guest)) sendState(q.ws, msg); return; }
   const common = JSON.stringify(Object.assign({}, head, { p: hidden }));
