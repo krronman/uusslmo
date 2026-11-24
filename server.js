@@ -1165,7 +1165,7 @@ function luciferSkill(p, k, m, now) {
 }
 // ---- Financier ----
 const FIN = {
-  passive: { ms: 5000, mul: 1.03 },
+  passive: { ms: 5000, mul: 1.04, hpMul: 1.03 },
   Q: { cd: 500, cost: 100, pick: 48 },
   E: { cd: 15000, min: 100, cost: 100, ms: 2000 },
   R: { cd: 25000, ms: 10000, drain: 70, hpMul: 1.2, heal: 1200, atkMul: 1.15 }
@@ -1179,7 +1179,7 @@ function stepIns(p, now) {
   }
 }
 function stepFinancier(p, now) {
-  for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.mul; p.hp *= FIN.passive.mul; p.fMul *= FIN.passive.mul; p.fDmg = 90 * p.fMul; }
+  for (let i = 0; i < 4 && now >= p.finNext; i++) { p.finNext += FIN.passive.ms; p.mh *= FIN.passive.hpMul; p.hp *= FIN.passive.hpMul; p.fMul *= FIN.passive.mul; p.fDmg = 90 * p.fMul; }
   stepIns(p, now);
   if (p.depUntil) {
     while (p.depNext <= p.depUntil && now >= p.depNext) { const h0 = p.hp; p.hp = Math.max(1, p.hp - FIN.R.drain); if (p.insUntil) p.insAcc += h0 - p.hp; p.depNext += 1000; }
@@ -2059,6 +2059,7 @@ function stepBerserker(dt, now) {
         if (land) { a.s = 2; broadcast({ t: 'arrowEnd', id: a.vid }); }
       } else if (a.s === 2 && Math.hypot(p.x - a.x, (p.y - a.y) / 0.8) <= BERS.Q.pick) {
         a.s = 0; p.cdE = Math.max(now, p.cdE - BERS.E.cut); send(p.ws, { t: 'cd', k: 'E', ms: Math.max(0, p.cdE - now) });
+        p.cdQ = 0; send(p.ws, { t: 'cd', k: 'Q', ms: 0 });
         fxTxt(p.x, p.y - 30, '🪓 회수', '#ffb27a');
       }
     }
@@ -2188,11 +2189,12 @@ function plumAttack(p, m, now) {
   let mult = 1; if (p.pbBonus) { mult = 1.2; p.pbBonus = false; }
   const dmg = Math.round(st.dmg * mult);
   broadcast({ t: 'fx', type: 'smslash', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, aura: 0, echo: 0, pb: 1, dur: 280 });
+  let hit = false;
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
-    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'phys' });
+    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) { dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'phys' }); hit = true; }
   }
-  pbGain(p, 1);
+  if (hit) pbGain(p, 5 * Math.pow(2, p.pbStage));
   checkRoundEnd();
 }
 function plumSkill(p, k, m, now) {
@@ -2319,14 +2321,14 @@ function pbFlurry(p, now, mast, base, ult) {
     const id = spawnArrow(p, pbPos(p), 0, Date.now(), { a, dmg, spd, range: 6 * RADPX, radius: 0.4 * RADPX, kind: 'pbq', type: 'magic', fake });
     if (track && id) fly.ids.add(id);
   };
-  for (let i = 0; i < 4; i++) pbLater(p, i * 200, () => fire(p.aim, Math.round(base * 0.8), false, false));
+  for (let i = 0; i < 8; i++) pbLater(p, i * 200, () => fire(p.aim, Math.round(base * 0.8), false, false));
   for (let r = 0; r < 3; r++) pbLater(p, r * 300, () => {
     for (let i = 0; i < nDir; i++) {
       const pp = pbPos(p);
       let a = Math.random() * Math.PI * 2;
       if (fly.redir) a = Math.atan2(fly.redir.gy - pp.y / 0.8, fly.redir.x - pp.x) + (Math.random() - 0.5) * 0.5;
       fire(a, Math.round(base * 0.4), false, true);
-      if (mast) fire(fly.redir ? a + (Math.random() - 0.5) * 0.3 : Math.random() * Math.PI * 2, 0, true, true);
+      if (mast) fire(fly.redir ? a + (Math.random() - 0.5) * 0.3 : Math.random() * Math.PI * 2, Math.round(base * 0.5), false, true);
     }
   });
 }
@@ -2428,6 +2430,13 @@ function stepPlum(dt, now) {
     if (w.follow) {
       const fp = pbPos(own), dx = fp.x - w.x, dy = fp.y / 0.8 - w.gy, d = Math.hypot(dx, dy), st = Math.min(d, 450 * dt);
       if (d > 0.01) { w.x += dx / d * st; w.gy += dy / d * st; }
+    }
+    if (w.kind === 'circ') for (const q of players.values()) {
+      if (q.id === w.owner || !inPlay(q)) continue;
+      const dx = q.x - w.x, dy = q.y / 0.8 - w.gy, d = Math.hypot(dx, dy);
+      if (d >= w.r) continue;
+      const ux = d > 0.01 ? dx / d : 1, uy = d > 0.01 ? dy / d : 0;
+      q.x = w.x + ux * (w.r + 1); q.y = (w.gy + uy * (w.r + 1)) * 0.8;
     }
   }
   for (const p of players.values()) {
