@@ -399,7 +399,8 @@ function setShopPrice(p, m) {
 // ---- class unlock ----
 const CLS_PRICE = { PlumBlossom: 100 };
 const clsFree = p => p.user === ADMIN_ID || p.obs;
-const clsOk = (p, c) => !CLS_PRICE[c] || clsFree(p) || (p.clsOwn || []).includes(c);
+const ADMIN_ONLY = new Set(['AzureDragon']);
+const clsOk = (p, c) => ADMIN_ONLY.has(c) ? p.user === ADMIN_ID : (!CLS_PRICE[c] || clsFree(p) || (p.clsOwn || []).includes(c));
 const sendCinfo = p => send(p.ws, { t: 'cinfo', own: p.clsOwn || [], price: CLS_PRICE, free: clsFree(p) ? 1 : 0 });
 async function loadCls(id) {
   try {
@@ -461,7 +462,8 @@ const CLASS_STATS = {
   Celestial: { hp: 1500, dmg: 100, reduce: 0, atkCd: 800 },
   Reaper: { hp: 1200, dmg: 50, reduce: 0, atkCd: 700 },
   Berserker: { hp: 1200, dmg: 170, reduce: 0, atkCd: 900 },
-  PlumBlossom: { hp: 1000, dmg: 90, reduce: 0, atkCd: 800 }
+  PlumBlossom: { hp: 1000, dmg: 90, reduce: 0, atkCd: 800 },
+  AzureDragon: { hp: 1200, dmg: 100, reduce: 0, atkCd: 800 }
 };
 const statsBase = p => p.cls === 'PlumBlossom' ? { hp: Math.round(1000 * pbMul(p)), dmg: 90 * pbMul(p), reduce: 0, atkCd: 800 } : p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : p.cls === 'Berserker' && !axeHeld(p) ? Object.assign({}, CLASS_STATS.Berserker, { dmg: 50 }) : CLASS_STATS[p.cls] || BASE;
 const statsOf = p => { const s = statsBase(p); return p.pw && p.pw !== 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
@@ -664,6 +666,7 @@ function resetCombat(p) {
   p.axes = p.cls === 'Berserker' ? [{ s: 0, x: 0, y: 0, a: 0, d: 0 }] : []; p.bRUntil = 0;
   p.pw = 1; p.bm = 0;
   p.pbD = p.pbA = p.pbStage = 0; p.pbCd = {}; p.pbCmd = null; p.pbCh = null; p.pbResume = null; p.pbBonus = false; p.pbBn = 0; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = p.pbSlowUntil = 0; p.pbSlowMul = 1; p.pbKey = ''; p.pbSw = null; pbClean(p.id);
+  p.azUntil = 0;
   p.lf = ''; p.lPend = p.lUsed = false; p.beam = p.pure = p.sanct = null; p.libUntil = p.dmUntil = 0; p.dmList = [];
   p.mh = p.hp = statsOf(p).hp;
   p.atkReady = p.cdQ = p.cdE = p.cdR = 0;
@@ -750,7 +753,7 @@ function dmgTo(t, amount, now, src) {
 }
 const soulOrbs = new Map(); let soulSeq = 0;
 function dropSoul(x, y, cls, owner, pw) {
-  if (phase !== 'round' || !cls) return;
+  if (phase !== 'round' || !cls || ADMIN_ONLY.has(cls)) return;
   if (soulOrbs.size >= 40) soulOrbs.delete(soulOrbs.keys().next().value);
   const c = clampArena({ x, y });
   soulOrbs.set(++soulSeq, { id: soulSeq, x: c.x, y: c.y, cls, o: owner, pw });
@@ -855,6 +858,7 @@ function runSkill(p, k, m) {
   else if (p.cls === 'Reaper') reaperSkill(p, k, m, now);
   else if (p.cls === 'Berserker') berserkerSkill(p, k, m, now);
   else if (p.cls === 'PlumBlossom') plumSkill(p, k, m, now);
+  else if (p.cls === 'AzureDragon') azureSkill(p, k, m, now);
 }
 function archerSkill(p, k, m, now) {
   const S = ARCHER[k], o = originOf(p, m), lag = lagOf(m);
@@ -2629,11 +2633,18 @@ function reaperSkill(p, k, m, now) {
     broadcast({ t: 'fx', type: 'ring', x: p.x, y: p.y, r: 1.6 * RADPX, c: '#8a5cff', dur: 800 });
   }
 }
+// ---- Azure Dragon ----
+const AZ = { R: { cd: 25000, ms: 10000 } };
+function azureSkill(p, k, m, now) {
+  if (k !== 'R' || !(p.user === ADMIN_ID || p.ai)) return;
+  p.azUntil = now + AZ.R.ms;
+  p.cdR = now + AZ.R.cd; send(p.ws, { t: 'cd', k: 'R', ms: AZ.R.cd });
+}
 // ---- AI players ----
-const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper', 'Berserker', 'PlumBlossom'];
-const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 130, Berserker: 95, PlumBlossom: 95 };
+const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper', 'Berserker', 'PlumBlossom', 'AzureDragon'];
+const BOT_RANGE = { Knight: 95, Archer: 520, Shielder: 95, Assassin: 90, Gumiho: 340, Lucifer: 340, Gambler: 420, SwordMaster: 95, Tower: 100, Financier: 95, Gamer: 95, Celestial: 95, Reaper: 130, Berserker: 95, PlumBlossom: 95, AzureDragon: 95 };
 const nextBotNo = () => { const used = new Set([...players.values()].filter(q => q.ai).map(q => q.name)); let n = 1; while (used.has('AI ' + n)) n++; return n; };
-const randClass = cur => { const l = CLASS_LIST.filter(c => c !== cur); return l[Math.floor(Math.random() * l.length)]; };
+const randClass = cur => { const l = CLASS_LIST.filter(c => c !== cur && !ADMIN_ONLY.has(c)); return l[Math.floor(Math.random() * l.length)]; };
 function addBot(cls, iq) {
   if (players.size >= MAX_PLAYERS) return null;
   const id = nextId++, p = mkPlayer(id, null);
@@ -2744,7 +2755,7 @@ wss.on('connection', (ws, req) => {
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
       if ((phase === 'lobby' || p.role === 2 || p.obs) && CLASS_LIST.includes(m.cls)) {
-        if (!clsOk(p, m.cls)) { send(ws, { t: 'cbuy', ok: 0, msg: '잠긴 클래스입니다. 클래스 선택창에서 해금해 주세요.', cls: m.cls }); sendCinfo(p); }
+        if (!clsOk(p, m.cls)) { send(ws, { t: 'cbuy', ok: 0, msg: ADMIN_ONLY.has(m.cls) ? '추가 예정' : '잠긴 클래스입니다. 클래스 선택창에서 해금해 주세요.', cls: m.cls }); sendCinfo(p); }
         else { p.cls = m.cls; resetCombat(p); }
       }
     } else if (m.t === 'mode') {
@@ -2847,7 +2858,7 @@ function autoClearAi() {
   for (const q of players.values()) { if (q.ai) bots.push(q); else if ((q.user || q.guest) && !q.obs && !q.skel && q.ws && q.ws.readyState === 1) humans++; }
   if (!humans && bots.length) { for (const q of bots) removeBot(q); console.log('No human players left: removed ' + bots.length + ' AI player(s).'); }
 }
-const SLIM_KEYS = ['m', 'r', 'ai', 'ar', 'skl', 'so', 'su', 'gd', 'sl', 'hs', 'iv', 'hn', 'ta', 'kb', 'ds', 'mk', 'as', 'cm', 'bn', 'qn', 'lb', 'dm', 'cg', 'rl', 'mt', 'gb', 'fs', 'sa', 'smn', 'smx', 'sk', 'tr', 'ins', 'dp', 'gm', 'sn', 'iq', 'bs', 'bm', 'rg', 'ax', 'bu', 'bd'];
+const SLIM_KEYS = ['m', 'r', 'ai', 'ar', 'skl', 'so', 'su', 'gd', 'sl', 'hs', 'iv', 'hn', 'ta', 'kb', 'ds', 'mk', 'as', 'cm', 'bn', 'qn', 'lb', 'dm', 'cg', 'rl', 'mt', 'gb', 'fs', 'sa', 'smn', 'smx', 'sk', 'tr', 'ins', 'dp', 'gm', 'sn', 'iq', 'bs', 'bm', 'rg', 'ax', 'bu', 'bd', 'az'];
 setInterval(() => {
   const now = Date.now(), dt = Math.min((now - last) / 1000, 0.1); last = now;
   let needEnd = false;
@@ -2937,7 +2948,7 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0, az: p.cls === 'AzureDragon' && now < (p.azUntil || 0) ? 1 : 0 };
     for (const k of SLIM_KEYS) if (e[k] === 0) delete e[k];
     if (p.cls === 'PlumBlossom') { e.pbs = p.pbStage + 1; if (p.pbCh) e.pbc = p.pbCh.t; if (now < (p.pbBlockUntil || 0)) e.pbk = 1; if (p.pbSw) e.psw = [Math.round(p.pbSw.x), Math.round(p.pbSw.g * 0.8), Math.round(Math.hypot(p.pbSw.vx, p.pbSw.vg)), +Math.atan2(p.pbSw.vg * 0.8, p.pbSw.vx).toFixed(2)]; }
     if (p.role === 1 && now < (p.pbSlowUntil || 0)) e.pz = p.pbSlowMul;
