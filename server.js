@@ -6,12 +6,91 @@ const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.js': 'text/javascript', '.css': 'text/css', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 
-const ARENA_BASE = [{ CX: 630, CY: 640, RX: 410, RY: 335 }, { CX: 630, CY: 600, RX: 460, RY: 370 }];
+const ARENA_BASE = [{ CX: 630, CY: 640, RX: 410, RY: 335 }, { CX: 630, CY: 600, RX: 460, RY: 370 }, { CX: 768, CY: 512, RX: 768, RY: 512 }];
 let mapScale = 1;
 const ARENAS = ARENA_BASE.map(a => ({ ...a }));
 let mapId = 1, { CX, CY, RX, RY } = ARENAS[1];
+// ---- map 3 collision ----
+const MAPDIM = [[1254, 1254], [1254, 1254], [1536, 1024]];
+let COL = null, Q = null, SEEN = null, PAR = null, bfsStamp = 0;
+try {
+  const j = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'map3_col.json'), 'utf8')), g = new Uint8Array(j.w * j.h);
+  let k = 0, v = 0; for (const n of j.rle) { if (v) g.fill(1, k, k + n); k += n; v ^= 1; }
+  const near = new Int32Array(g.length).fill(-1), q = new Int32Array(g.length); let qh = 0, qt = 0;
+  for (let i = 0; i < g.length; i++) if (g[i]) { near[i] = i; q[qt++] = i; }
+  while (qh < qt) {
+    const i = q[qh++], x = i % j.w, y = (i / j.w) | 0;
+    for (let d = 0; d < 4; d++) { const nx = x + [1, -1, 0, 0][d], ny = y + [0, 0, 1, -1][d]; if (nx < 0 || ny < 0 || nx >= j.w || ny >= j.h) continue; const ni = ny * j.w + nx; if (near[ni] < 0) { near[ni] = near[i]; q[qt++] = ni; } }
+  }
+  COL = { w: j.w, h: j.h, c: j.c, g, near }; Q = new Int32Array(g.length); SEEN = new Uint32Array(g.length); PAR = new Int32Array(g.length);
+} catch (e) { console.error('map3 collision load failed:', e.message); }
+const solidMap = () => mapId === 2 && !!COL;
+const ndist = (nx, ny) => mapId === 2 ? Math.max(Math.abs(nx), Math.abs(ny)) : Math.hypot(nx, ny);
+function walkAt(x, y) {
+  if (!solidMap()) return true;
+  const c = COL.c * mapScale, i = Math.floor(x / c), j = Math.floor(y / c);
+  return i >= 0 && j >= 0 && i < COL.w && j < COL.h && COL.g[j * COL.w + i] === 1;
+}
+function snapWalk(x, y) {
+  if (walkAt(x, y)) return { x, y };
+  const c = COL.c * mapScale, i = Math.min(COL.w - 1, Math.max(0, Math.floor(x / c))), j = Math.min(COL.h - 1, Math.max(0, Math.floor(y / c))), n = COL.near[j * COL.w + i];
+  return n < 0 ? { x, y } : { x: ((n % COL.w) + 0.5) * c, y: (((n / COL.w) | 0) + 0.5) * c };
+}
+function slideTo(x0, y0, x1, y1) {
+  if (!solidMap()) return { x: x1, y: y1 };
+  if (!walkAt(x0, y0)) { const s0 = snapWalk(x0, y0); x0 = s0.x; y0 = s0.y; }
+  const dx = x1 - x0, dy = y1 - y0, n = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 4));
+  let x = x0, y = y0;
+  for (let s = 1; s <= n; s++) {
+    const tx = x0 + dx * s / n, ty = y0 + dy * s / n;
+    if (walkAt(tx, ty)) { x = tx; y = ty; } else if (walkAt(tx, y)) x = tx; else if (walkAt(x, ty)) y = ty; else break;
+  }
+  return { x, y };
+}
+function losClear(x0, y0, x1, y1) {
+  const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 6);
+  for (let s = 1; s < n; s++) if (!walkAt(x0 + (x1 - x0) * s / n, y0 + (y1 - y0) * s / n)) return false;
+  return true;
+}
+const BDX = [1, -1, 0, 0, 1, 1, -1, -1], BDY = [0, 0, 1, -1, 1, -1, 1, -1];
+function pathDirTo(o, tx, ty) {
+  const w = COL.w, h = COL.h, c = COL.c * mapScale;
+  const cellOf = (x, y) => { const i = Math.min(w - 1, Math.max(0, Math.floor(x / c))), j = Math.min(h - 1, Math.max(0, Math.floor(y / c))), k = j * w + i; return COL.g[k] ? k : COL.near[k]; };
+  const s = cellOf(o.x, o.y), g = cellOf(tx, ty);
+  if (s < 0 || g < 0 || s === g) return null;
+  const st = ++bfsStamp; let qh = 0, qt = 0, found = false; Q[qt++] = g; SEEN[g] = st; PAR[g] = -1;
+  while (qh < qt && !found) {
+    const k = Q[qh++], x = k % w, y = (k / w) | 0;
+    for (let d = 0; d < 8; d++) {
+      const nx = x + BDX[d], ny = y + BDY[d]; if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const nk = ny * w + nx; if (!COL.g[nk] || SEEN[nk] === st) continue;
+      if (d > 3 && (!COL.g[y * w + nx] || !COL.g[ny * w + x])) continue;
+      SEEN[nk] = st; PAR[nk] = k; Q[qt++] = nk; if (nk === s) { found = true; break; }
+    }
+  }
+  if (!found) return null;
+  let k = PAR[s], best = k;
+  for (let i = 0; i < 6 && k >= 0; i++) { const wx = ((k % w) + 0.5) * c, wy = (((k / w) | 0) + 0.5) * c; if (!losClear(o.x, o.y, wx, wy)) break; best = k; k = PAR[k]; }
+  if (best < 0) return null;
+  const wx = ((best % w) + 0.5) * c, wy = (((best / w) | 0) + 0.5) * c, vx = wx - o.x, vy = (wy - o.y) / 0.8, l = Math.hypot(vx, vy) || 1;
+  return { x: vx / l, y: vy / l };
+}
+function steer(o, t, ux, uy, now) {
+  if (!solidMap()) return { x: ux, y: uy };
+  if (losClear(o.x, o.y, t.x, t.y)) { o.pdT = 0; return { x: ux, y: uy }; }
+  if (now < (o.pdT || 0)) return { x: o.pdx, y: o.pdy };
+  const d = pathDirTo(o, t.x, t.y);
+  o.pdT = now + 150; o.pdx = d ? d.x : ux; o.pdy = d ? d.y : uy;
+  return { x: o.pdx, y: o.pdy };
+}
+function ringPos(a, r) {
+  if (!solidMap()) return { x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r };
+  const sc = mapScale; return snapWalk((770 + Math.cos(a) * 290 * r) * sc, (655 + Math.sin(a) * 105 * r) * sc);
+}
+function applyDims() { MAP = MAPDIM[mapId][0] * mapScale; MAPH = MAPDIM[mapId][1] * mapScale; }
+
 const SPEED = 300, TICK = 30, MAX_PLAYERS = 50, MAX_SOCKETS = 200, MAX_PER_IP = 8, AUTH_TIMEOUT = Number(process.env.AUTH_TIMEOUT_MS) || 20000, RATE_PER_S = 100, RATE_BURST = 200, PROTO = 2;
 const TRUST_PROXY = process.env.TRUST_PROXY !== '0';
 const ipConns = new Map();
@@ -55,7 +134,7 @@ const wss = new WebSocketServer({ server, maxPayload: 1024, perMessageDeflate: f
 const players = new Map();
 // ---- training dummies ----
 const dummies = [-101, -102, -103].map(id => ({ id, unit: true, dummy: true, owner: -1, role: 1, joined: true, hist: [], hr: 26, x: 0, y: 0, hp: 1e5, mh: 1e5, cls: '', team: 0, sum: 0, last: 0, lastT: 0, stunUntil: 0, charmUntil: 0, slowUntil: 0, kbUntil: 0 }));
-function placeDummies() { [-0.42, 0, 0.42].forEach((f, i) => { const d = dummies[i]; d.x = CX + f * RX; d.y = CY - 0.38 * RY; d.stunUntil = d.slowUntil = d.kbUntil = 0; }); }
+function placeDummies() { [-0.42, 0, 0.42].forEach((f, i) => { const d = dummies[i]; if (solidMap()) { const q = snapWalk((690 + i * 100) * mapScale, 560 * mapScale); d.x = q.x; d.y = q.y; } else { d.x = CX + f * RX; d.y = CY - 0.38 * RY; } d.stunUntil = d.slowUntil = d.kbUntil = 0; }); }
 function dummyHit(t, d, now) { if (now - t.lastT > 3000) t.sum = 0; t.sum += d; t.last = d; t.lastT = now; }
 const inPlay = p => !!p && p.joined && (p.role === 1 || (p.role === 0 && phase !== 'round'));
 const PRACT = () => phase === 'round' || phase === 'lobby';
@@ -106,9 +185,9 @@ function pushMap() {
   broadcast({ t: 'map', id: mapId, scale: mapScale, arena: { CX, CY, RX, RY } });
 }
 const saveMapCfg = () => db.set('mapcfg', JSON.stringify({ id: mapId, scale: mapScale, rt: ROUND_MS })).catch(e => console.error('mapcfg save failed:', e.message));
-function setMap(id) { mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]); pushMap(); saveMapCfg(); }
+function setMap(id) { mapId = id; ({ CX, CY, RX, RY } = ARENAS[id]); applyDims(); pushMap(); saveMapCfg(); }
 function setScale(sc) {
-  const r = sc / mapScale; mapScale = sc; MAP = 1254 * sc;
+  const r = sc / mapScale; mapScale = sc; applyDims();
   ARENA_BASE.forEach((a, i) => { for (const k in a) ARENAS[i][k] = a[k] * sc; });
   ({ CX, CY, RX, RY } = ARENAS[mapId]);
   for (const p of players.values()) { p.x *= r; p.y *= r; if (p.lx !== undefined) { p.lx *= r; p.ly *= r; } }
@@ -172,7 +251,7 @@ function startRound() {
     let a = rot + i * 2 * Math.PI / order.length;
     if (gameMode !== 'ffa') { const side = order.filter(q => q.team === p.team); a = (p.team === 1 ? Math.PI : 0) + (side.indexOf(p) - (side.length - 1) / 2) * 0.45; }
     p.lx = p.x; p.ly = p.y;
-    p.x = CX + Math.cos(a) * RX * 0.92; p.y = CY + Math.sin(a) * RY * 0.92;
+    { const sp = ringPos(a, 0.92); p.x = sp.x; p.y = sp.y; }
     p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0; p.hist = [];
     resetCombat(p);
     if (bossMult && p.id === bossId) { p.pw = Math.min(bossMult, BOSS_CAP.dmg); p.bm = Math.min(bossMult, BOSS_CAP.spd); p.mh = p.hp = Math.round(p.mh * (parts.length - 1) * 2); }
@@ -387,7 +466,7 @@ const CLASS_STATS = {
 const statsBase = p => p.cls === 'PlumBlossom' ? { hp: Math.round(1000 * pbMul(p)), dmg: 90 * pbMul(p), reduce: 0, atkCd: 800 } : p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : p.cls === 'Berserker' && !axeHeld(p) ? Object.assign({}, CLASS_STATS.Berserker, { dmg: 50 }) : CLASS_STATS[p.cls] || BASE;
 const statsOf = p => { const s = statsBase(p); return p.pw && p.pw !== 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
 const RADPX = 112.5;
-let MAP = 1254;
+let MAP = 1254, MAPH = 1254;
 const ARROW = { speed: 800, range: 5 * RADPX, radius: 28 };
 const ATKR = 0.5 * RADPX;
 const ARCHER = {
@@ -496,7 +575,7 @@ function offMapRange(x, y, a, sc) {
   for (let d = 0; d < MAP * 2; d += 12) {
     const tx = x + Math.cos(a) * (d + 28), ty = y + Math.sin(a) * (d + 28) * 0.8 - 30;
     const cs = [[0, 1], [L, 1], [0, -1], [L, -1]].map(([l, sd]) => [tx - ux * l + nx * sd * half, ty - uy * l + ny * sd * half]);
-    if (cs.every(c => c[0] < 0) || cs.every(c => c[0] > MAP) || cs.every(c => c[1] < 0) || cs.every(c => c[1] > MAP)) return d;
+    if (cs.every(c => c[0] < 0) || cs.every(c => c[0] > MAP) || cs.every(c => c[1] < 0) || cs.every(c => c[1] > MAPH)) return d;
   }
   return MAP * 2;
 }
@@ -576,7 +655,7 @@ function stepArrows(dt, now) {
     if (deflected) continue;
     if (!ar.pierce && hits.length) { endArrow(ar, hits[0]); orbLand(ar, hits[0], now); continue; }
     const ex = (ar.x - CX) / RX, ey = (ar.gy * 0.8 - CY) / RY;
-    if (ar.left <= 0 || (!ar.noArena && ex * ex + ey * ey > 1.15)) { endArrow(ar); orbLand(ar, null, now); }
+    if (ar.left <= 0 || (!ar.noArena && ndist(ex, ey) > (mapId === 2 ? 1 : 1.0724))) { endArrow(ar); orbLand(ar, null, now); }
   }
   if (any) checkRoundEnd();
 }
@@ -784,7 +863,12 @@ function archerSkill(p, k, m, now) {
   }
 }
 // ---- Gumiho ----
-const clampArena = pt => { const nx = (pt.x - CX) / RX, ny = (pt.y - CY) / RY, d = Math.hypot(nx, ny); return d > 0.97 ? { x: CX + nx / d * 0.97 * RX, y: CY + ny / d * 0.97 * RY } : { x: pt.x, y: pt.y }; };
+const clampArena = (pt, from, air) => {
+  const nx = (pt.x - CX) / RX, ny = (pt.y - CY) / RY, d = ndist(nx, ny);
+  let r = d > 0.97 ? { x: CX + nx / d * 0.97 * RX, y: CY + ny / d * 0.97 * RY } : { x: pt.x, y: pt.y };
+  if (!air && solidMap()) r = from ? slideTo(from.x, from.y, r.x, r.y) : snapWalk(r.x, r.y);
+  return r;
+};
 let fireSeq = 0;
 function spawnFoxfire(g, pos) {
   const c = clampArena(pos);
@@ -880,8 +964,9 @@ function assassinSkill(p, k, m, now) {
   } else {
     let tx = Number(m && m.cx), ty = Number(m && m.cy) + 30;
     if (!Number.isFinite(tx) || !Number.isFinite(ty)) { tx = o.x + Math.cos(p.aim) * 2 * RADPX; ty = o.y + Math.sin(p.aim) * 2 * RADPX * 0.8; }
-    const nx = (tx - CX) / RX, ny = (ty - CY) / RY, d = Math.hypot(nx, ny);
+    const nx = (tx - CX) / RX, ny = (ty - CY) / RY, d = ndist(nx, ny);
     if (d > 1) { tx = CX + nx / d * RX; ty = CY + ny / d * RY; }
+    if (solidMap()) { const q = slideTo(o.x, o.y, tx, ty); tx = q.x; ty = q.y; }
     broadcast({ t: 'fx', type: 'dash', x: o.x, y: o.y, x2: tx, y2: ty, c: 'rgba(190,120,255,.6)', dur: 380 });
     p.x = tx; p.y = ty;
     send(p.ws, { t: 'warp', x: tx, y: ty });
@@ -923,9 +1008,9 @@ function shielderSkill(p, k, m, now) {
     }
   } else if (k === 'E') {
     const a = p.aim, gx = o.x, gy = o.y / 0.8;
-    const inside = d => { const nx = (gx + Math.cos(a) * d - CX) / RX, ny = ((gy + Math.sin(a) * d) * 0.8 - CY) / RY; return nx * nx + ny * ny <= 1; };
+    const inside = d => { const px = gx + Math.cos(a) * d, py = (gy + Math.sin(a) * d) * 0.8; return ndist((px - CX) / RX, (py - CY) / RY) <= 1 && walkAt(px, py); };
     let len = S.dist;
-    while (len > 0 && !inside(len)) len -= 5;
+    if (solidMap()) { let l = 0; while (l + 4 <= S.dist && inside(l + 4)) l += 4; len = l; } else while (len > 0 && !inside(len)) len -= 5;
     len = Math.max(0, len);
     const ex = gx + Math.cos(a) * len, egy = gy + Math.sin(a) * len;
     broadcast({ t: 'fx', type: 'dash', by: p.id, x: o.x, y: o.y, x2: ex, y2: egy * 0.8, a, span: ATK.span, dur: S.dashMs + 150, follow: 1 });
@@ -973,6 +1058,12 @@ function applyBurn(t, by, ms, now) {
   t.burnUntil = now + ms; t.burnBy = by.id;
 }
 function wallDist(x, gy, a) {
+  if (mapId === 2) {
+    const px = x - CX, py = gy * 0.8 - CY, ax = Math.cos(a), ay = Math.sin(a) * 0.8; let t = Infinity;
+    if (ax > 1e-9) t = Math.min(t, (RX - px) / ax); else if (ax < -1e-9) t = Math.min(t, (-RX - px) / ax);
+    if (ay > 1e-9) t = Math.min(t, (RY - py) / ay); else if (ay < -1e-9) t = Math.min(t, (-RY - py) / ay);
+    return Math.max(0, t);
+  }
   const px = (x - CX) / RX, py = (gy * 0.8 - CY) / RY, ax = Math.cos(a) / RX, ay = Math.sin(a) * 0.8 / RY;
   const A = ax * ax + ay * ay, B = 2 * (px * ax + py * ay), C = px * px + py * py - 1, D = B * B - 4 * A * C;
   return D < 0 ? 0 : Math.max(0, (-B + Math.sqrt(D)) / (2 * A));
@@ -1056,7 +1147,7 @@ function stepBombs(now) {
 function mapRayLen(x, y, a) {
   for (let d = 0; d < MAP * 2; d += 12) {
     const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.8;
-    if (px < 0 || px > MAP || py < 0 || py > MAP) return d;
+    if (px < 0 || px > MAP || py < 0 || py > MAPH) return d;
   }
   return MAP * 2;
 }
@@ -1242,7 +1333,7 @@ function spawnUnit(p, type, now) {
   let n = 0; for (const u of units.values()) if (u.owner === p.id) n++;
   if (n >= TOWER.maxUnits) return;
   const D = type === 'i' ? TOWER.INF : TOWER.ARC, a = Math.random() * Math.PI * 2, r = 1.2 * RADPX + Math.random() * 40;
-  const c = clampArena({ x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r * 0.8 });
+  const c = clampArena({ x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r * 0.8 }, { x: p.x, y: p.y });
   const u = { id: 100000 + (++unitSeq), unit: true, ut: type, cls: type === 'i' ? 'UnitInf' : 'UnitArc', owner: p.id, name: '', x: c.x, y: c.y, hp: D.hp, mh: D.hp, role: 1, joined: true, hist: [],
     aim: 0, face: 1, moving: false, atkReady: now + 400, stunUntil: 0, slowUntil: 0, kbUntil: 0, kbx: 0, kby: 0, tauntUntil: 0, tauntBy: 0, tgt: 0, ws: null, hr: 0 };
   units.set(u.id, u);
@@ -1266,7 +1357,7 @@ function stepUnits(dt, now) {
         const d = gdist(u, tgt), a = Math.atan2((tgt.y - u.y) / 0.8, tgt.x - u.x), ux = Math.cos(a), uy = Math.sin(a);
         u.aim = a; u.face = ux >= 0 ? 1 : -1;
         if (u.ut === 'i') {
-          if (d > D.range + (tgt.hr || 0) - 12) { dx = ux; dy = uy; }
+          if (d > D.range + (tgt.hr || 0) - 12) { const q = steer(u, tgt, ux, uy, now); dx = q.x; dy = q.y; }
           else if (now >= u.atkReady) {
             u.atkReady = now + D.atkCd;
             broadcast({ t: 'fx', type: 'cone', by: u.id, x: u.x, y: u.y, a, span: ATK.span, r: D.range, c: 'rgba(255,255,255,.5)', dur: 220 });
@@ -1274,7 +1365,7 @@ function stepUnits(dt, now) {
             checkRoundEnd();
           }
         } else {
-          if (d > D.range * 0.92) { dx = ux; dy = uy; }
+          if (d > D.range * 0.92) { const q = steer(u, tgt, ux, uy, now); dx = q.x; dy = q.y; }
           else if (d < D.keep) { dx = -ux; dy = -uy; }
           if (d <= D.range && now >= u.atkReady) {
             u.atkReady = now + D.atkCd;
@@ -1292,17 +1383,19 @@ function stepUnits(dt, now) {
       }
     }
     if (now < u.kbUntil) {
-      u.x += u.kbx * dt; u.y += u.kby * dt * 0.8;
-      const nx = (u.x - CX) / RX, ny = (u.y - CY) / RY, d = Math.hypot(nx, ny);
+      const sx0 = u.x, sy0 = u.y; u.x += u.kbx * dt; u.y += u.kby * dt * 0.8;
+      const nx = (u.x - CX) / RX, ny = (u.y - CY) / RY, d = ndist(nx, ny);
       if (d > 1) { u.x = CX + nx / d * RX; u.y = CY + ny / d * RY; }
+      if (solidMap()) { const q = slideTo(sx0, sy0, u.x, u.y); u.x = q.x; u.y = q.y; }
     }
     const l = Math.hypot(dx, dy);
     if (l > 0.01) {
       dx /= l; dy /= l;
       const spd = D.speed * mul * (now < u.slowUntil ? KNIGHT.R.slow : 1);
-      u.x += dx * spd * dt; u.y += dy * spd * dt * 0.8;
-      const nx = (u.x - CX) / RX, ny = (u.y - CY) / RY, d = Math.hypot(nx, ny);
+      const sx0 = u.x, sy0 = u.y; u.x += dx * spd * dt; u.y += dy * spd * dt * 0.8;
+      const nx = (u.x - CX) / RX, ny = (u.y - CY) / RY, d = ndist(nx, ny);
       if (d > 0.97) { u.x = CX + nx / d * 0.97 * RX; u.y = CY + ny / d * 0.97 * RY; }
+      if (solidMap()) { const q = slideTo(sx0, sy0, u.x, u.y); u.x = q.x; u.y = q.y; }
       u.moving = true;
     } else u.moving = false;
     u.hist.push({ t: now, x: u.x, y: u.y });
@@ -1328,7 +1421,7 @@ function towerSkill(p, k, m, now) {
     cd(T.Q.cd);
     let tx = Number(m && m.cx), ty = Number(m && m.cy);
     if (!Number.isFinite(tx) || !Number.isFinite(ty)) { tx = o.x + Math.cos(p.aim) * 5 * RADPX; ty = o.y + Math.sin(p.aim) * 5 * RADPX * 0.8; }
-    const c = clampArena({ x: tx, y: ty }), ms = Math.max(350, Math.round(Math.hypot(c.x - o.x, (c.y - o.y) / 0.8) / T.Q.speed * 1000));
+    const c = clampArena({ x: tx, y: ty }, null, true), ms = Math.max(350, Math.round(Math.hypot(c.x - o.x, (c.y - o.y) / 0.8) / T.Q.speed * 1000));
     balls.push({ owner: p.id, x: c.x, y: c.y, at: now + ms, tint: curTint });
     broadcast({ t: 'fx', type: 'cannon', x0: o.x, y0: o.y, x1: c.x, y1: c.y, dur: ms });
   } else if (k === 'E') {
@@ -1547,7 +1640,7 @@ function stepCelestial(dt, now) {
     for (const t of live) {
       const dx = g.x - t.x, dy = (g.y - t.y) / 0.8, d = Math.hypot(dx, dy);
       if (d < 1) continue;
-      const st = Math.min(d, SPEED * R.pull * dt), c = clampArena({ x: t.x + dx / d * st, y: t.y + dy / d * st * 0.8 });
+      const st = Math.min(d, SPEED * R.pull * dt), c = clampArena({ x: t.x + dx / d * st, y: t.y + dy / d * st * 0.8 }, { x: t.x, y: t.y });
       t.x = c.x; t.y = c.y;
     }
     while (g.next <= g.until && now >= g.next) {
@@ -1963,7 +2056,7 @@ async function handleAuth(p, m, ip) {
 function mkPlayer(id, ws) {
   const a = Math.random() * Math.PI * 2, r = Math.random() * 0.5;
   return { id, ws, name: 'Player' + id, hue: Math.floor(Math.random() * 360),
-    x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r, face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
+    ...ringPos(a, r), face: 1, dx: 0, dy: 0, lastChat: 0, alive: true,
     joined: false, cls: '', ready: false, role: 0, inRound: false, lx: 0, ly: 0, deathOrder: 0,
     hp: 1000, mh: 1000, atkReady: 0, cdQ: 0, cdE: 0, cdR: 0, stunUntil: 0, guardUntil: 0, slowUntil: 0, chargeStart: 0, hasteUntil: 0, invisUntil: 0, tauntUntil: 0, tauntBy: 0, kbUntil: 0, hornUntil: 0, dash: null, markUntil: 0, asUntil: 0, asBonus: 0, fires: [], qNext: false, pull: null, charmUntil: 0, charmBy: 0, burnUntil: 0, burnNext: 0, titles: [], eq: null, lastEquip: 0, aim: 0, hist: [] };
 }
@@ -2049,7 +2142,7 @@ function stepBerserker(dt, now) {
         const step = Math.min(BERS.Q.spd * dt, BERS.Q.range - a.d);
         const nx = a.x + Math.cos(a.a) * step, ny = a.y + Math.sin(a.a) * step * 0.8, ex = (nx - CX) / RX, ey = (ny - CY) / RY;
         let land = false, hitNow = false;
-        if (ex * ex + ey * ey > 1) land = true; else { a.x = nx; a.y = ny; a.d += step; if (a.d >= BERS.Q.range - 0.01) land = true; }
+        if (ndist(ex, ey) > 1) land = true; else { a.x = nx; a.y = ny; a.d += step; if (a.d >= BERS.Q.range - 0.01) land = true; }
         for (const t of targetsOf(p)) {
           if (a.hit.has(t.id) || Math.hypot(t.x - a.x, (t.y - a.y) / 0.8) > BERS.Q.hit + (t.hr || 0)) continue;
           a.hit.add(t.id); any = true; hitNow = true;
@@ -2364,7 +2457,7 @@ function pbReuseR2(p, m, now) {
     for (const h of hits) { const dd = Math.hypot(h.x - o.x, (h.y - o.y) / 0.8); if (dd < bd) { bd = dd; t = h; } }
     dest = { x: t.x + Math.cos(a) * 0.9 * RADPX, y: t.y + Math.sin(a) * 0.9 * RADPX * 0.8 };
   } else dest = { x: o.x + Math.cos(a) * 4 * RADPX, y: o.y + Math.sin(a) * 4 * RADPX * 0.8 };
-  dest = clampArena(dest);
+  dest = clampArena(dest, { x: o.x, y: o.y });
   broadcast({ t: 'fx', type: 'dash', x: p.x, y: p.y, x2: dest.x, y2: dest.y, c: 'rgba(244,170,187,.7)', dur: 380 });
   if (p.pbSw) { p.pbSw.x = dest.x; p.pbSw.g = dest.y / 0.8; p.pbSw.vx = p.pbSw.vg = 0; }
   else { p.x = dest.x; p.y = dest.y; send(p.ws, { t: 'warp', x: dest.x, y: dest.y }); }
@@ -2392,7 +2485,7 @@ function pbSwordStep(p, dt, now) {
   S.vx += ((d > 1 ? ex / d * want : 0) - S.vx) * k; S.vg += ((d > 1 ? eg / d * want : 0) - S.vg) * k;
   const sp0 = Math.hypot(S.vx, S.vg);
   S.x += S.vx * dt; S.g += S.vg * dt;
-  const nx = (S.x - CX) / RX, ny = (S.g * 0.8 - CY) / RY, nd = Math.hypot(nx, ny);
+  const nx = (S.x - CX) / RX, ny = (S.g * 0.8 - CY) / RY, nd = ndist(nx, ny);
   if (nd > 1) { S.x = CX + nx / nd * RX; S.g = (CY + ny / nd * RY) / 0.8; S.vx = S.vg = 0; }
   const dmg = Math.round(PB_SW.dmg * Math.min(1, sp0 / PB_SW.vmax));
   if (dmg < 1) return;
@@ -2437,6 +2530,7 @@ function stepPlum(dt, now) {
       if (d >= w.r) continue;
       const ux = d > 0.01 ? dx / d : 1, uy = d > 0.01 ? dy / d : 0;
       q.x = w.x + ux * (w.r + 1); q.y = (w.gy + uy * (w.r + 1)) * 0.8;
+      if (solidMap()) { const c2 = snapWalk(q.x, q.y); q.x = c2.x; q.y = c2.y; }
     }
   }
   for (const p of players.values()) {
@@ -2497,9 +2591,10 @@ function reaperAttack(p, m, now) {
 }
 function summonSkeleton(p, cls, now, big, hp, pw) {
   const id = nextId++, sk = mkPlayer(id, null);
-  let ex = (p.x + Math.cos(p.aim) * 70 - CX) / RX, ey = (p.y + Math.sin(p.aim) * 70 * 0.8 - CY) / RY; const dd = Math.hypot(ex, ey);
+  let ex = (p.x + Math.cos(p.aim) * 70 - CX) / RX, ey = (p.y + Math.sin(p.aim) * 70 * 0.8 - CY) / RY; const dd = ndist(ex, ey);
   if (dd > 0.95) { ex *= 0.95 / dd; ey *= 0.95 / dd; }
   Object.assign(sk, { x: CX + ex * RX, y: CY + ey * RY, skel: p.id, name: '해골', cls, hue: p.hue, joined: true, role: 1, inRound: false, team: p.team || 0, titles: [], eq: null, skins: [], eqs: {}, gold: 0 });
+  if (solidMap()) { const q = snapWalk(sk.x, sk.y); sk.x = q.x; sk.y = q.y; }
   sk.lx = sk.x; sk.ly = sk.y;
   resetCombat(sk);
   sk.pw = pw;
@@ -2565,7 +2660,7 @@ function botTick(now) {
     const vx = foe.x - p.x, vy = (foe.y - p.y) / 0.8, d = fd || 1, R = BOT_RANGE[p.cls] || 95;
     let mx = 0, my = 0;
     if (iq > 0) {
-      if (d > R * 0.85) { mx = vx / d; my = vy / d; }
+      if (d > R * 0.85) { const q = steer(p, foe, vx / d, vy / d, now); mx = q.x; my = q.y; }
       else if (R > 200 && iq >= 3 && d < R * 0.45) { mx = -vx / d; my = -vy / d; }
       else if (iq >= 4) { if (now > (p.botSg || 0)) { p.botSg = now + 900 + Math.random() * 900; p.botDir = Math.random() < 0.5 ? -1 : 1; } mx = -vy / d * (p.botDir || 1); my = vx / d * (p.botDir || 1); }
       if (iq >= 7) for (const ar of arrows.values()) {
@@ -2795,16 +2890,18 @@ setInterval(() => {
     if (p.cls === 'Financier' && p.role === 1 && phase === 'round') stepFinancier(p, now);
     if (p.bleedUntil) stepBleed(p, now);
     if (now < p.kbUntil && inPlay(p)) {
-      p.x += p.kbx * dt; p.y += p.kby * dt * 0.8;
-      const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
+      const sx0 = p.x, sy0 = p.y; p.x += p.kbx * dt; p.y += p.kby * dt * 0.8;
+      const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = ndist(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
+      if (solidMap()) { const q = slideTo(sx0, sy0, p.x, p.y); p.x = q.x; p.y = q.y; }
     }
     if (dx || dy) {
       const l = Math.hypot(dx, dy); dx /= l; dy /= l;
       const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1) * (p.bm || 1);
-      p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
-      const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = Math.hypot(nx, ny);
+      const sx0 = p.x, sy0 = p.y; p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
+      const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = ndist(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
+      if (solidMap()) { const q = slideTo(sx0, sy0, p.x, p.y); p.x = q.x; p.y = q.y; }
     }
     p.moving = !!(dx || dy);
     p.hist.push({ t: now, x: p.x, y: p.y });
