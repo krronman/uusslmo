@@ -314,25 +314,6 @@ let COLC=null,colCv=null;
 fetch('map3_col.json').then(r=>r.json()).then(j=>{const g=new Uint8Array(j.w*j.h);let k=0,v=0;for(const n of j.rle){if(v)g.fill(1,k,k+n);k+=n;v^=1}COLC={w:j.w,h:j.h,c:j.c,g};colCv=document.createElement('canvas');colCv.width=j.w;colCv.height=j.h;const x=colCv.getContext('2d'),im=x.createImageData(j.w,j.h);for(let i=0;i<g.length;i++)if(!g[i]){im.data[i*4]=255;im.data[i*4+3]=95}x.putImageData(im,0,0)}).catch(()=>{});
 function cwalk(x,y){const c=COLC.c*mapScale,i=Math.floor(x/c),j=Math.floor(y/c);return i>=0&&j>=0&&i<COLC.w&&j<COLC.h&&COLC.g[j*COLC.w+i]===1}
 function cslide(x0,y0,x1,y1){if(!cwalk(x0,y0))return{x:x1,y:y1};const dx=x1-x0,dy=y1-y0,n=Math.max(1,Math.ceil(Math.hypot(dx,dy)/4));let x=x0,y=y0;for(let s=1;s<=n;s++){const tx=x0+dx*s/n,ty=y0+dy*s/n;if(cwalk(tx,ty)){x=tx;y=ty}else if(cwalk(tx,y))x=tx;else if(cwalk(x,ty))y=ty;else break}return{x,y}}
-let OBJ=null;
-Promise.all([fetch('map3_objs.json').then(r=>r.json()),new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src='map3_objs.png'})]).then(([j,im])=>{const c=document.createElement('canvas');c.width=j.aw;c.height=j.ah;const x=c.getContext('2d');x.drawImage(im,0,0);const d=x.getImageData(0,0,j.aw,j.ah).data,al=new Uint8Array(j.aw*j.ah);for(let i=0;i<al.length;i++)al[i]=d[i*4+3];OBJ={aw:j.aw,im,al,l:j.o.map(a=>({x:a[0],y:a[1],w:a[2],h:a[3],ax:a[4],ay:a[5],base:a[6],tree:a[7],a:1}))}}).catch(()=>{});
-function occList(vis,dt){
- if(mapId!==2||!OBJ)return[];
- const s=mapScale,k=1-Math.exp(-dt*14),ents=[];for(const [id,o] of vis)ents.push(o);const L=[];
- for(const ob of OBJ.l){
-  let occ=false;
-  for(const o of ents){
-   const ex=o.x/s,ey=o.y/s;
-   if(ey>=ob.base||ex+22<ob.x||ex-22>ob.x+ob.w||ey<ob.y||ey-70>ob.y+ob.h)continue;
-   for(let i=0;i<5&&!occ;i++)for(let j=0;j<5;j++){const px=Math.floor(ex-20+i*10-ob.x),py=Math.floor(ey-66+j*16-ob.y);if(px>=0&&py>=0&&px<ob.w&&py<ob.h&&OBJ.al[(ob.ay+py)*OBJ.aw+ob.ax+px]){occ=true;break}}
-   if(occ)break;
-  }
-  ob.a+=((occ?.28:1)-ob.a)*k;
-  if(occ||ob.a<.995)L.push(ob);else ob.a=1;
- }
- L.sort((a,b)=>a.base-b.base);return L;
-}
-function drawOb(ob){const s=mapScale,ga=ctx.globalAlpha;ctx.globalAlpha=ob.a;ctx.drawImage(OBJ.im,ob.ax,ob.ay,ob.w,ob.h,ob.x*s,ob.y*s,ob.w*s,ob.h*s);ctx.globalAlpha=ga}
 const MAPS=['bg.jpg','map2.png','map3.png'],bgs=MAPS.map(f=>{const i=new Image();i.src=f;return i});let bg=bgs[1],mapId=1;
 const spImg=new Image(); spImg.src='player.png';
 const swordImg=new Image();swordImg.src='sword.png';
@@ -1781,7 +1762,7 @@ function draw(t){
  for(const [id,o] of vis)if(o.ds&&t-(o.ghT||0)>45){o.ghT=t;ghosts.push({x:o.x,y:o.y,face:o.face,hue:o.hue,cls:o.cls,t0:t})}
  drawGhosts(t);
  drawDummies(t);
- {const OL=occList(vis,dt);let oi=0;for(const [id,o] of vis){while(oi<OL.length&&OL[oi].base*mapScale<=o.y){drawOb(OL[oi]);oi++}if(id===myId&&o.iv)ctx.globalAlpha=.4;drawPlayer(o,id===myId);ctx.globalAlpha=1}while(oi<OL.length){drawOb(OL[oi]);oi++}}
+ for(const [id,o] of vis){if(id===myId&&o.iv)ctx.globalAlpha=.4;drawPlayer(o,id===myId);ctx.globalAlpha=1}
  for(const [id,o] of vis){const b=bubbles.get(id);if(b){if(t>b.until)bubbles.delete(id);else drawBubble(o,b)}}
  drawArrows(t);drawHits(t);drawPbFog();updateSkillbar(t);
  updateBanner(t);
