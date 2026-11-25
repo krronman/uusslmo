@@ -773,6 +773,15 @@ function inConeAt(ox, oy, aim, tx, ty, range, span, ext = 0) {
   if (diff > Math.PI) diff = 2 * Math.PI - diff;
   return diff <= span / 2;
 }
+// ---- slash hitbox (matches drawSMSlash: sprite centre sweeps 0.5r..0.85r, sprite half-size 0.85r) ----
+const SLASH = { d0: 0.5, d1: 0.85, half: 0.85, fill: 0.62, aura: 1.4 };
+function slashHit(ox, oy, aim, r, aura, tx, ty, ext = 0) {
+  const th = Math.atan2(0.8 * Math.sin(aim), Math.cos(aim)), c = Math.cos(th), s = Math.sin(th);
+  const R = r * SLASH.half * (aura ? SLASH.aura : 1) * SLASH.fill + 10 + ext;
+  const ax = ox + c * r * SLASH.d0, ay = oy + s * r * SLASH.d0, bx = ox + c * r * SLASH.d1, by = oy + s * r * SLASH.d1;
+  const vx = bx - ax, vy = by - ay, u = Math.max(0, Math.min(1, ((tx - ax) * vx + (ty - ay) * vy) / (vx * vx + vy * vy)));
+  return Math.hypot(tx - ax - vx * u, ty - ay - vy * u) <= R;
+}
 const canAct = (p, now) => p.joined && p.role !== 2 && now >= p.stunUntil && now >= p.charmUntil && now >= (p.reloadUntil || 0);
 
 const chargeMax = (p, now) => p.cls === 'Reaper' ? REAPER.chargeMs : Math.max(1, ARCHER.charge.maxMs * (now < p.hasteUntil ? ARCHER.E.chargeMul : 1));
@@ -1449,7 +1458,7 @@ function smStrike(p, o, lag, now, aura, mult) {
   broadcast({ t: 'fx', type: 'smslash', by: p.id, x: o.x, y: o.y, a: p.aim, span: ATK.span, r: ATK.range, aura: aura ? 1 : 0, echo: mult < 1 ? 1 : 0, dur: 280 });
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
-    if (!inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) continue;
+    if (!slashHit(o.x, o.y, p.aim, ATK.range, aura, tp.x, tp.y, t.hr || 0)) continue;
     dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: aura ? 'magic' : 'phys' });
     if (aura && t.role === 1) knockFrom(t, o, SM.atk.kb, SM.atk.kbMs, now);
   }
@@ -1849,7 +1858,7 @@ const db = (UP_URL && UP_TOKEN) ? {
   } catch (e) { console.error('wins (per-user) load failed:', e.message); }
 })();
 (async () => {
-  try { const r = await db.get('mapcfg'), o = r ? JSON.parse(r) : null; if (o) { if (Number.isFinite(o.rt) && o.rt >= 10000 && o.rt <= 3600000) ROUND_MS = o.rt; if ([1, 1.5, 2].includes(o.scale) && o.scale !== mapScale) setScale(o.scale); if (ARENAS[o.id] && o.id !== mapId) setMap(o.id); } } catch (e) { console.error('mapcfg load failed:', e.message); }
+  try { const r = await db.get('mapcfg'), o = r ? JSON.parse(r) : null; if (o) { if (Number.isFinite(o.rt) && o.rt >= 10000 && o.rt <= 3600000) { ROUND_MS = o.rt; broadcast({ t: 'rtime', ms: ROUND_MS }); } if ([1, 1.5, 2].includes(o.scale) && o.scale !== mapScale) setScale(o.scale); if (ARENAS[o.id] && o.id !== mapId) setMap(o.id); } } catch (e) { console.error('mapcfg load failed:', e.message); }
 })();
 (async () => { try { const r = await db.get('shopprice'); const o = r ? JSON.parse(r) : {}; for (const id of Object.keys(o)) if (SKINS[id] && Number.isInteger(o[id]) && o[id] >= 0) shopPrices[id] = o[id]; } catch (e) { console.error('shopprice load failed:', e.message); } })();
 console.log((UP_URL && UP_TOKEN) ? 'Accounts: Upstash Redis' : 'WARNING: UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set - accounts live in memory and are LOST on restart');
@@ -2285,9 +2294,9 @@ function plumAttack(p, m, now) {
   let hit = false;
   for (const t of targetsOf(p)) {
     const tp = posAt(t, now - lag);
-    if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, ATK.range, ATK.span, t.hr || 0)) { dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'phys' }); hit = true; }
+    if (slashHit(o.x, o.y, p.aim, ATK.range, 0, tp.x, tp.y, t.hr || 0)) { dmgTo(t, dmg, now, { x: o.x, y: o.y, by: p, basic: true, type: 'phys' }); hit = true; }
   }
-  if (hit) pbGain(p, 5 * Math.pow(2, p.pbStage));
+  pbGain(p, hit ? 3 * Math.pow(2, p.pbStage) : 1);
   checkRoundEnd();
 }
 function plumSkill(p, k, m, now) {
@@ -2471,12 +2480,12 @@ function plumBot(p, foe, now) {
 }
 function pbSend(p, now) {
   const cmd = p.pbCmd && now < p.pbCmd.until ? p.pbCmd : null;
-  const key = [p.pbD, p.pbA, p.pbStage, p.pbCh ? p.pbCh.t : 0, cmd ? cmd.k + (cmd.sp ? 's' : '') + cmd.until : '', p.pbBonus ? 1 : 0, Object.values(p.pbCd).join(','), p.pbRe.e2 ? p.pbRe.e2.until : 0, p.pbRe.r2 ? p.pbRe.r2.until + ':' + p.pbRe.r2.left : 0, p.pbFly && p.pbFly.mast && !p.pbFly.done ? p.pbFly.end : 0].join('|');
+  const pa = Math.round(p.pbA * 10) / 10, key = [p.pbD, pa, p.pbStage, p.pbCh ? p.pbCh.t : 0, cmd ? cmd.k + (cmd.sp ? 's' : '') + cmd.until : '', p.pbBonus ? 1 : 0, Object.values(p.pbCd).join(','), p.pbRe.e2 ? p.pbRe.e2.until : 0, p.pbRe.r2 ? p.pbRe.r2.until + ':' + p.pbRe.r2.left : 0, p.pbFly && p.pbFly.mast && !p.pbFly.done ? p.pbFly.end : 0].join('|');
   if (key === p.pbKey) return;
   p.pbKey = key;
   const cds = {}; for (const k in p.pbCd) { const r = p.pbCd[k] - now; if (r > 0) cds[k] = Math.round(r); }
   const re = { e: p.pbRe.e2 && now < p.pbRe.e2.until ? Math.round(p.pbRe.e2.until - now) : 0, r: p.pbRe.r2 && now < p.pbRe.r2.until ? Math.round(p.pbRe.r2.until - now) : 0, rl: p.pbRe.r2 ? p.pbRe.r2.left : 0, f: p.pbFly && p.pbFly.mast && !p.pbFly.done && now < p.pbFly.end ? Math.round(p.pbFly.end - now) : 0 };
-  send(p.ws, { t: 'pb', d: p.pbD, a: p.pbA, s: p.pbStage, ch: p.pbCh ? p.pbCh.t : 0, cmd: cmd ? cmd.k + (cmd.sp ? 's' : '') : '', cm: cmd ? Math.round(cmd.until - now) : 0, cds, re, bn: p.pbBonus ? 1 : 0 });
+  send(p.ws, { t: 'pb', d: p.pbD, a: pa, s: p.pbStage, ch: p.pbCh ? p.pbCh.t : 0, cmd: cmd ? cmd.k + (cmd.sp ? 's' : '') : '', cm: cmd ? Math.round(cmd.until - now) : 0, cds, re, bn: p.pbBonus ? 1 : 0 });
 }
 const PB_SW = { vmax: 1500, hitR: 0.5 * RADPX, dmg: 300, rehit: 300 };
 function pbSwordStep(p, dt, now) {
@@ -2537,6 +2546,7 @@ function stepPlum(dt, now) {
     if (p.cls !== 'PlumBlossom') continue;
     if (!inPlay(p)) { p.pbCh = null; p.pbResume = null; p.pbCmd = null; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = 0; p.pbSw = null; continue; }
     if (p.pbSw) pbSwordStep(p, dt, now);
+    if (p.pbA < p.pbD && now >= (p.atkReady || 0)) p.pbA = Math.min(p.pbD, p.pbA + p.pbD * 0.001 * dt);
     if (p.pbCmd && now > p.pbCmd.until) p.pbCmd = null;
     const ch = p.pbCh;
     if (ch) {
