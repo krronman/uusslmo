@@ -305,11 +305,16 @@ body.mob #clBody{height:110px}
 <button id="authGo">로그인</button><div id="guestLink" role="button" tabindex="0">게스트로 입장</div></form></div>
 <script>
 const PROTO_V=2;let glowOff=false,slowN=0,fastN=0;const GL=n=>glowOff?0:n;
-let W=1254,mapScale=1;const W0=1254,PX=5;
-function setWorld(sc){sc=sc||1;mapScale=sc;W=W0*sc;LB.x=W/2-140;resize();camX=W/2;camY=W/2}
+let W=1254,WH=1254,mapScale=1;const W0=1254,PX=5,MD=[[1254,1254],[1254,1254],[1536,1024]];
+function setWorld(sc){sc=sc||1;mapScale=sc;W=MD[mapId][0]*sc;WH=MD[mapId][1]*sc;LB.x=W/2-140;resize();camX=W/2;camY=WH/2}
 const cv=document.getElementById('c'), hud=document.getElementById('hud');let ctx=cv.getContext('2d');
 const chatEl=document.getElementById('chat'), login=document.getElementById('login');
-const MAPS=['bg.jpg','map2.png'],bgs=MAPS.map(f=>{const i=new Image();i.src=f;return i});let bg=bgs[1],mapId=1;
+// ---- map 3 collision ----
+let COLC=null,colCv=null;
+fetch('map3_col.json').then(r=>r.json()).then(j=>{const g=new Uint8Array(j.w*j.h);let k=0,v=0;for(const n of j.rle){if(v)g.fill(1,k,k+n);k+=n;v^=1}COLC={w:j.w,h:j.h,c:j.c,g};colCv=document.createElement('canvas');colCv.width=j.w;colCv.height=j.h;const x=colCv.getContext('2d'),im=x.createImageData(j.w,j.h);for(let i=0;i<g.length;i++)if(!g[i]){im.data[i*4]=255;im.data[i*4+3]=95}x.putImageData(im,0,0)}).catch(()=>{});
+function cwalk(x,y){const c=COLC.c*mapScale,i=Math.floor(x/c),j=Math.floor(y/c);return i>=0&&j>=0&&i<COLC.w&&j<COLC.h&&COLC.g[j*COLC.w+i]===1}
+function cslide(x0,y0,x1,y1){if(!cwalk(x0,y0))return{x:x1,y:y1};const dx=x1-x0,dy=y1-y0,n=Math.max(1,Math.ceil(Math.hypot(dx,dy)/4));let x=x0,y=y0;for(let s=1;s<=n;s++){const tx=x0+dx*s/n,ty=y0+dy*s/n;if(cwalk(tx,ty)){x=tx;y=ty}else if(cwalk(tx,y))x=tx;else if(cwalk(x,ty))y=ty;else break}return{x,y}}
+const MAPS=['bg.jpg','map2.png','map3.png'],bgs=MAPS.map(f=>{const i=new Image();i.src=f;return i});let bg=bgs[1],mapId=1;
 const spImg=new Image(); spImg.src='player.png';
 const swordImg=new Image();swordImg.src='sword.png';
 const towerImg=new Image(),tInfImg=new Image(),tArcImg=new Image(),cbImg=new Image();towerImg.src='tower.png';tInfImg.src='towerinfantry.png';const stkImg=new Image();stkImg.src='stock.png';tArcImg.src='towerarcher.png';cbImg.src='cannonball.png';
@@ -339,7 +344,7 @@ let vw,vh,scale,ox,oy,dpr;
 const ZOOM_MAX=2.5;let zoom=1;
 try{const z=parseFloat(localStorage.getItem('mpvp_zoom'));if(z>=1&&z<=ZOOM_MAX)zoom=z}catch(e){}
 function resize(){dpr=devicePixelRatio||1;vw=innerWidth;vh=innerHeight;cv.width=vw*dpr;cv.height=vh*dpr;
- scale=Math.min(vw,vh)/W0*dpr*zoom;ox=(cv.width-W*scale)/2;oy=(cv.height-W*scale)/2}
+ scale=Math.min(vw,vh)/W0*dpr*zoom;ox=(cv.width-W*scale)/2;oy=(cv.height-WH*scale)/2}
 addEventListener('resize',resize);resize();
 cv.addEventListener('wheel',e=>{e.preventDefault();
  zoom=Math.max(1,Math.min(ZOOM_MAX,zoom*(e.deltaY<0?1.08:1/1.08)));if(zoom<1.02)zoom=1;
@@ -522,7 +527,7 @@ function toast(msg){const el=document.getElementById('toast');el.textContent=msg
 let rtt=60,lastSent='',atkLocal=0,myAim=0,mWx=0,mWy=0,mouseOn=false,aimSent=0,aimSentT=0;
 const ATK_CD={Knight:700,Archer:800,Shielder:800,Assassin:600,Gumiho:700,Lucifer:900,Gambler:600,SwordMaster:400,Tower:2000,Financier:900,Gamer:700,Celestial:800,Reaper:700,Berserker:900,PlumBlossom:800},arrowsC=[];
 const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b)),lerpAng=(a,b,t)=>a+angDiff(b,a)*t;
-let mcx=0,mcy=0,camX=W/2,camY=W/2;
+let mcx=0,mcy=0,camX=W/2,camY=WH/2;
 addEventListener('mousemove',e=>{mcx=e.clientX;mcy=e.clientY;mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale;mouseOn=true});
 function updateAim(o){
  if(MOB)mobTarget(o);
@@ -1373,7 +1378,7 @@ function drawFx(t){
   }catch(e){fxs.splice(i,1);throw e}
  }
 }
-function wallLen(x,gy,a){const px=(x-arena.CX)/arena.RX,py=(gy*.8-arena.CY)/arena.RY,ax=Math.cos(a)/arena.RX,ay=Math.sin(a)*.8/arena.RY,A=ax*ax+ay*ay,B=2*(px*ax+py*ay),C=px*px+py*py-1,D=B*B-4*A*C;return D<0?0:Math.max(0,(-B+Math.sqrt(D))/(2*A))}
+function wallLen(x,gy,a){if(mapId===2){const px=x-arena.CX,py=gy*.8-arena.CY,ax=Math.cos(a),ay=Math.sin(a)*.8;let t=1e9;if(ax>1e-9)t=Math.min(t,(arena.RX-px)/ax);else if(ax<-1e-9)t=Math.min(t,(-arena.RX-px)/ax);if(ay>1e-9)t=Math.min(t,(arena.RY-py)/ay);else if(ay<-1e-9)t=Math.min(t,(-arena.RY-py)/ay);return Math.max(0,t)}const px=(x-arena.CX)/arena.RX,py=(gy*.8-arena.CY)/arena.RY,ax=Math.cos(a)/arena.RX,ay=Math.sin(a)*.8/arena.RY,A=ax*ax+ay*ay,B=2*(px*ax+py*ay),C=px*px+py*py-1,D=B*B-4*A*C;return D<0?0:Math.max(0,(-B+Math.sqrt(D))/(2*A))}
 function drawBeam(f,k){
  ctx.save();ctx.translate(f.x,f.y);ctx.scale(1,.8);ctx.rotate(f.a-Math.PI/2);
  ctx.globalAlpha=Math.min(1,k*12,(1-k)*6)*(.8+.2*Math.sin(performance.now()/45));
@@ -1669,7 +1674,7 @@ function updatePb(t){
  if(MOB){const sh=left>0,pk=sh?pbCmdK+pbCmdSp+st:'';if(pk!==pbPadKey){pbPadKey=pk;pbPad.style.display=sh?'grid':'none';if(sh)for(const b of pbPad.children){b.style.display=b.dataset.sp?(pbCmdK==='E'&&!pbCmdSp?'':'none'):(+b.dataset.n<=(pbCmdK==='Q'?st+1:(pbCmdK==='E'&&!pbCmdSp&&st>=6?4:3))?'':'none')}}}}
 const PB_FX_OK=1;
 let pbFog=null;
-function drawPbFog(){if(!pbFog||!pbFog.length)return;ctx.save();ctx.fillStyle='rgba(14,6,18,.94)';ctx.beginPath();ctx.rect(0,0,W,W);
+function drawPbFog(){if(!pbFog||!pbFog.length)return;ctx.save();ctx.fillStyle='rgba(14,6,18,.94)';ctx.beginPath();ctx.rect(0,0,W,WH);
  for(const [gx,sy,a,len,w] of pbFog){const c=Math.cos(a),s=Math.sin(a);let first=1;for(const [u,v] of [[0,-w/2],[len,-w/2],[len,w/2],[0,w/2]]){const x=gx+u*c-v*s,y=sy+(u*s+v*c)*.8;if(first){ctx.moveTo(x,y);first=0}else ctx.lineTo(x,y)}ctx.closePath()}
  ctx.fill('evenodd');ctx.restore()}
 
@@ -1714,12 +1719,12 @@ function frame(t){requestAnimationFrame(frame);
 function draw(t){
  const dt=Math.min((t-last)/1000,.05);last=t;
  ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.shadowBlur=0;ctx.setLineDash([]);ctx.fillStyle='#8fc4f5';ctx.fillRect(0,0,cv.width,cv.height);
-  {const me=others.get(myId),fx=me&&myRole!==2?me.x:W/2,fy=me&&myRole!==2?me.y-30:W/2,sw=W*scale,sh=W*scale,kc=Math.min(1,dt*10);
+  {const me=others.get(myId),fx=me&&myRole!==2?me.x:W/2,fy=me&&myRole!==2?me.y-30:WH/2,sw=W*scale,sh=WH*scale,kc=Math.min(1,dt*10);
   camX+=(fx-camX)*kc;camY+=(fy-camY)*kc;
   ox=sw>cv.width+1?Math.max(cv.width-sw,Math.min(0,cv.width/2-camX*scale)):(cv.width-sw)/2;
   oy=sh>cv.height+1?Math.max(cv.height-sh,Math.min(0,cv.height/2-camY*scale)):(cv.height-sh)/2;
   mWx=(mcx*dpr-ox)/scale;mWy=(mcy*dpr-oy)/scale}
- ctx.setTransform(scale,0,0,scale,ox,oy);if(imOk(bg))ctx.drawImage(bg,0,0,W,W);ctx.imageSmoothingEnabled=false;drawLB();
+ ctx.setTransform(scale,0,0,scale,ox,oy);if(imOk(bg))ctx.drawImage(bg,0,0,W,WH);ctx.imageSmoothingEnabled=false;if(mapId===2&&colCv&&isAdmin&&location.hash==='#col')ctx.drawImage(colCv,0,0,W,WH);drawLB();
  const k=1-Math.exp(-dt*18),list=[];
  for(const [id,o] of others){
   if(id===myId&&arena&&myRole!==2){
@@ -1731,9 +1736,10 @@ function draw(t){
    if(Math.abs(Math.cos(myAim))>.2)o.face=Math.cos(myAim)>0?1:-1;
    if(o.moving){
     const l=Math.hypot(dx,dy),spd=300*(o.gd?1.15:1)*(o.sl?.7:1)*(o.pz||1)*(o.hn?.85:1)*(o.cls==='Assassin'&&o.iv?1.15:1)*(o.lb?1.2:1)*(o.fs?1.2:1)*(o.bm||1);
-    o.x+=dx/l*spd*dt;o.y+=dy/l*spd*dt*0.8;
-    const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=Math.hypot(nx,ny);
+    const ox0=o.x,oy0=o.y;o.x+=dx/l*spd*dt;o.y+=dy/l*spd*dt*0.8;
+    const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=mapId===2?Math.max(Math.abs(nx),Math.abs(ny)):Math.hypot(nx,ny);
     if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}
+    if(mapId===2&&COLC){const q=cslide(ox0,oy0,o.x,o.y);o.x=q.x;o.y=q.y}
    }
 
    if(o.tx!==undefined){
