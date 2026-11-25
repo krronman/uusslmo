@@ -385,7 +385,7 @@ function addKill(m){const el=document.createElement('div'),ic=c=>CLS[c]?CLS[c][0
  setTimeout(()=>{el.style.opacity=0;setTimeout(()=>el.remove(),500)},6000)}
 // ---- networking ----
 let ws,myId=null,joined=false,snapUntil=0,arena=null;
-let phase='lobby',roundLeft=0,myRole=0,snapNext=false,cdEnd=0,winnerText='',winnerUntil=0,myCls='',myForm='';
+let phase='lobby',roundLeft=0,roundEnd=0,myRole=0,snapNext=false,cdEnd=0,winnerText='',winnerUntil=0,myCls='',myForm='';
 let gcS={l:[],s:1,ch:0},celS={d:0,b:0};const skCd={Q:0,E:0,R:0},fxs=[],hits=[];let PRED={},pseq=0;const pend=new Map();let rv={n:0,i:0,live:0,blank:0,rlEnd:0};let stk={id:0,name:'',pl:0,hist:[]};
 let isAdmin=false,myTitles=[],myEq=null,gameMode='ffa',kickedFlag=false;const titleMap=new Map();
 const others=new Map(),bubbles=new Map();
@@ -407,7 +407,7 @@ function connect(){
   else if(m.t==='state'){
    for(const e of m.p)for(const k of PDK)if(e[k]===undefined)e[k]=0;
    dmyList=m.dmy||[];dmyMap.clear();for(const d of dmyList)dmyMap.set(d[0],{x:d[1],y:d[2]});
-   phase=m.ph;roundLeft=m.left;foxes=m.ff||[];soulOrbs=m.sb||[];pbFog=m.fg||null;
+   phase=m.ph;roundLeft=m.left;roundEnd=performance.now()+m.left;foxes=m.ff||[];soulOrbs=m.sb||[];pbFog=m.fg||null;
    const seen=new Set();
    for(const p of m.p){
     seen.add(p.id);
@@ -754,7 +754,7 @@ const CHARS=[
 {id:'PlumBlossom',ko:'매화검',img:'MaeHwa_sword.png',stats:{hp:1000,atk:90},rng:'1 radpx (근접)',
    style:'내공을 쌓아 삼류에서 현경까지 경지를 오르는 검객. 단계가 오를수록 체력과 공격력이 복리로 폭증하고, 익힌 무공이 늘어납니다.',
    skills:[
-    {icon:'🌸',name:'내공 / 무공',key:'패시브',types:['buff'],desc:'경지(삼류→이류→일류→절정→초절정→화경→현경)는 단전 내공으로 결정. 일반 공격이 적을 맞히면 내공 +5(삼류 기준, 경지마다 2배: 5→10→20→40…, 단전·진기 동시 증가). 스킬은 진기만 소모(삼류 0 / 이류 2.5 / 일류 5 / 절정 10 / 초절정 20 / 화경·현경 40), 단전은 줄지 않음. 경지 상승 시 최대·현재 체력과 기본 공격력이 복리 성장(2%부터 단계마다 2배) 하고 진기가 단전과 같아짐. 재사용은 진기를 추가 소모. 화경부터 [검기]: 모든 공격이 마법 피해로 변환.'},
+    {icon:'🌸',name:'내공 / 무공',key:'패시브',types:['buff'],desc:'경지(삼류→이류→일류→절정→초절정→화경→현경)는 단전 내공으로 결정. 일반 공격이 적을 맞히면 내공 +3(삼류 기준, 경지마다 2배: 3→6→12→24…), 빗나가면 +1(단전·진기 동시 증가). 공격 중이 아닐 때 진기가 초당 단전의 0.1%씩 회복(단전까지). 스킬은 진기만 소모(삼류 0 / 이류 2.5 / 일류 5 / 절정 10 / 초절정 20 / 화경·현경 40), 단전은 줄지 않음. 경지 상승 시 최대·현재 체력과 기본 공격력이 복리 성장(2%부터 단계마다 2배) 하고 진기가 단전과 같아짐. 재사용은 진기를 추가 소모. 화경부터 [검기]: 모든 공격이 마법 피해로 변환.'},
     {icon:'🧘',name:'내공심법',key:'Q (메뉴)',types:['buff','heal'],desc:'Q 후 숫자키로 익힌 심법 운공(이동·공격·피격 시 중단, 다시 Q로 종료). 1 육합공: 0.5초마다 내공+3 / 2 운기조식: 0.5초마다 내공+4.5·체력 40 / 3 소주천: 1초마다 +12 / 4 자하신공: 1초마다 +22.5, 종료 시 공속 +10%(운공 시간의 1/2) / 5 대주천: 2초마다 +75 / 6 자하신공 숙련: 1초마다 +45, 종료 시 공속 +20%(3/4) / 7 정기신 합일: 1초마다 내공 +45, 2초마다 잃은 체력 5% 회복, 5초마다 다음 일반 공격 +20%, 이동으로 안 끊김·공격으로만 중단되며 1초 뒤 자동 재개.'},
     {icon:'🗡️',name:'무공',key:'E (0.3초 내 입력)',types:['phys','pierce','magic','cc','def'],desc:'E+1/2/3 = 육합검, E+Space+1/2/3 = 칠매검 (모든 무공 쿨 4초, 진기 소모 2.5배). 육합검: 1 내려치기: 0.1초 뒤 1.5 radpx 직선 물리 100%, 0.1초 띄움 / 2 찌르기: 1 radpx 관통 90%+출혈 2초 / 3 막기: 정면 1 radpx 공격 1회 무효화·투사체 제거. 이류~ 칠매검: 1 매화참: 5 radpx 마법 100% / 2 매화섬: 3×6 radpx 장판 1.5초 이속 -40%, 2초 내 E 재사용 시 3 radpx 관통 100%+출혈 / 3 매화벽: 폭 2 radpx 벽 1초, HP 1000, 관통 피해 2배. 현경 E+4 검아일체: 일반 공격 불가, 검이 마우스를 따라다님(스킬은 검 위치에서 시전). 적중 시 피해는 검 속도에 비례(정지 0 ~ 최대 속도 300), 적중하면 속도 초기화. Q로 종료.'},
     {icon:'🌺',name:'이십사수매화검법',key:'R (일류~)',types:['magic','pierce','def'],desc:'R+1 매화분분: 정면 검기 8발(0.2초 간격)+무작위 8방향 검기 3회(0.3초 간격) / R+2 매화조광: 4×6 radpx 장판 2초 이속 -20%, 장판 안의 적은 장판 밖이 보이지 않음, 2초 내 R 최대 2회 재사용: 4 radpx 관통 120%+출혈 3초, 마지막 찌르기 시 4 radpx 이동(적중 시 적 뒤로) / R+3 매화난벽: 반경 1 radpx 벽 4초, HP 2000, 중앙에 매화나무(판정 없음, 시전자 외 플레이어는 내부 진입 불가). (모든 무공 쿨 4초) 절정~ 숙련: 분분 검기 속도 +20%·추가 검기 8발(기본 공격력 50% 마법 피해), 발사 직후 R을 다시 누르면 검기가 커서 방향으로 전환 / 조광 무작위 대상 가짜 찌르기 2회·사거리 +1 / 난벽 HP +1000, 플레이어를 따라 이동. 초절정~ 극성: 분분 속도 추가 +10%p·추가 검기 16발(기본 공격력 50% 마법 피해)·발사 방향 16개 / 조광 가짜 찌르기가 실제 찌르기(동일 피해, 무작위 대상)로 바뀌고 8회로 증가 / 난벽 HP +2000·반경 +1 radpx.'}]},
@@ -1076,9 +1076,12 @@ function drawSMSword(o,h,lift){
  }
  ctx.drawImage(swImg,0,0,15,15,-2*S,-12.5*S,15*S,15*S);ctx.restore();
 }
+const HB=location.hash==='#hb';
 function drawSMSlash(f,k,img){
- img=f.pb?pbSlashImg:(img||smSlashImg);if(!imOk(img))return;
+ img=f.pb?pbSlashImg:(img||smSlashImg);
  const th=Math.atan2(.8*Math.sin(f.a),Math.cos(f.a)),dist=f.r*(.5+.35*Math.min(1,k*3)),S=f.r*1.7/15*(f.aura?1.4:1),al=k<.15?k/.15:1-(k-.15)/.85;
+ if(HB){const c=Math.cos(th),s=Math.sin(th),R=f.r*.85*(f.aura?1.4:1)*.62;ctx.save();ctx.strokeStyle='#3f3';ctx.lineWidth=2;for(const d of [.5,.85]){ctx.beginPath();ctx.arc(f.x+c*f.r*d,f.y-34+s*f.r*d,R,0,7);ctx.stroke()}ctx.restore()}
+ if(!imOk(img))return;
  ctx.save();ctx.globalAlpha=Math.max(0,al)*(f.echo?.6:.95);
  ctx.translate(f.x+Math.cos(th)*dist,f.y-34+Math.sin(th)*dist);ctx.rotate(th+Math.PI+(k-.5)*.5);
  if(!f.pb&&(f.aura||f.echo)){ctx.shadowColor=f.aura?'#ffffff':'#8fe3ff';ctx.shadowBlur=GL(f.aura?24:12)}
@@ -1707,7 +1710,7 @@ let bannerTxt='';
 function updateBanner(t){
  let b='';
  if(phase==='countdown'&&cdEnd){const r=Math.ceil((cdEnd-t)/1000);if(r>0)b='⚔️ Round starts in '+r+'…'}
- else if(phase==='round'){const s=Math.ceil(roundLeft/1000);b=(myRole===2?'👁 관전자 수  ':'')+'⏱ '+(s/60|0)+':'+String(s%60).padStart(2,'0')}
+ else if(phase==='round'){const s=Math.ceil(Math.max(0,roundEnd-t)/1000);b=(myRole===2?'👁 관전자 수  ':'')+'⏱ '+(s/60|0)+':'+String(s%60).padStart(2,'0')}
  else if(t<winnerUntil)b=winnerText;
  if(b!==bannerTxt){bannerTxt=b;banner.textContent=b;banner.style.display=b?'block':'none'}
 }
