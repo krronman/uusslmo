@@ -12,7 +12,7 @@ const ARENA_BASE = [{ CX: 630, CY: 640, RX: 410, RY: 335 }, { CX: 630, CY: 600, 
 let mapScale = 1;
 const ARENAS = ARENA_BASE.map(a => ({ ...a }));
 let mapId = 1, { CX, CY, RX, RY } = ARENAS[1];
-// ---- map 3 collision ----
+// ---- map 3 (Maehwa plaza) collision ----
 const MAPDIM = [[1254, 1254], [1254, 1254], [1536, 1024]];
 let COL = null, Q = null, SEEN = null, PAR = null, bfsStamp = 0;
 try {
@@ -87,7 +87,7 @@ function steer(o, t, ux, uy, now) {
 }
 function ringPos(a, r) {
   if (!solidMap()) return { x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r };
-  const sc = mapScale; return snapWalk((770 + Math.cos(a) * 290 * r) * sc, (655 + Math.sin(a) * 105 * r) * sc);
+  const sc = mapScale; return snapWalk((768 + Math.cos(a) * 400 * r) * sc, (531 + Math.sin(a) * 190 * r) * sc);
 }
 function applyDims() { MAP = MAPDIM[mapId][0] * mapScale; MAPH = MAPDIM[mapId][1] * mapScale; }
 
@@ -134,7 +134,7 @@ const wss = new WebSocketServer({ server, maxPayload: 1024, perMessageDeflate: f
 const players = new Map();
 // ---- training dummies ----
 const dummies = [-101, -102, -103].map(id => ({ id, unit: true, dummy: true, owner: -1, role: 1, joined: true, hist: [], hr: 26, x: 0, y: 0, hp: 1e5, mh: 1e5, cls: '', team: 0, sum: 0, last: 0, lastT: 0, stunUntil: 0, charmUntil: 0, slowUntil: 0, kbUntil: 0 }));
-function placeDummies() { [-0.42, 0, 0.42].forEach((f, i) => { const d = dummies[i]; if (solidMap()) { const q = snapWalk((690 + i * 100) * mapScale, 560 * mapScale); d.x = q.x; d.y = q.y; } else { d.x = CX + f * RX; d.y = CY - 0.38 * RY; } d.stunUntil = d.slowUntil = d.kbUntil = 0; }); }
+function placeDummies() { [-0.42, 0, 0.42].forEach((f, i) => { const d = dummies[i]; if (solidMap()) { const q = snapWalk((668 + i * 100) * mapScale, 531 * mapScale); d.x = q.x; d.y = q.y; } else { d.x = CX + f * RX; d.y = CY - 0.38 * RY; } d.stunUntil = d.slowUntil = d.kbUntil = 0; }); }
 function dummyHit(t, d, now) { if (now - t.lastT > 3000) t.sum = 0; t.sum += d; t.last = d; t.lastT = now; }
 const inPlay = p => !!p && p.joined && (p.role === 1 || (p.role === 0 && phase !== 'round'));
 const PRACT = () => phase === 'round' || phase === 'lobby';
