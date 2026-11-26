@@ -1311,7 +1311,7 @@ function drawAzOrigin(o,h){
  const vx=o.x-(o.azLx===undefined?o.x:o.azLx),vy=(o.y-(o.azLy===undefined?o.y:o.azLy))/.8;o.azLx=o.x;o.azLy=o.y;
  if(o.azTh===undefined)o.azTh=o.face>0?0:Math.PI;
  if(o.moving&&Math.hypot(vx,vy)>.3)o.azTh=Math.atan2(vy,vx);
- o.azm=(o.azm||0)+((o.moving?1:0)-(o.azm||0))*(1-Math.exp(-dt*6));const m=o.azm;
+ o.azm=(o.azm||0)+((o.moving?1:0)-(o.azm||0))*(1-Math.exp(-dt*6));const m=o;
  o.azP=(o.azP||(o.id||0)*1.7)+dt*2.4*(1+1.1*m);
  if(Math.abs(Math.cos(o.azTh))>.35)o.azMir=Math.cos(o.azTh)>0;if(o.azMir===undefined)o.azMir=o.face>0;
  const wm=m>.5?o.azMir:o.face>0,fl=(o.face>0)!==wm,thp=wm?Math.PI-o.azTh:o.azTh;
