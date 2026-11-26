@@ -89,6 +89,14 @@ function ringPos(a, r) {
   if (!solidMap()) return { x: CX + Math.cos(a) * RX * r, y: CY + Math.sin(a) * RY * r };
   const sc = mapScale; return snapWalk((768 + Math.cos(a) * 400 * r) * sc, (531 + Math.sin(a) * 190 * r) * sc);
 }
+function rectSlots(n, x0, x1, y0, y1) {
+  const w = x1 - x0, h = y1 - y0, rows = Math.max(1, Math.min(n, Math.round(Math.sqrt(n * h / w)))), base = Math.floor(n / rows), extra = n % rows, out = [], sc = mapScale;
+  for (let r = 0; r < rows; r++) {
+    const k = base + (r < extra ? 1 : 0), y = y0 + (r + 0.5) * h / rows;
+    for (let c = 0; c < k; c++) out.push(snapWalk((x0 + (c + 0.5) * w / k) * sc, y * sc));
+  }
+  return out;
+}
 function applyDims() { MAP = MAPDIM[mapId][0] * mapScale; MAPH = MAPDIM[mapId][1] * mapScale; }
 
 const SPEED = 300, TICK = 30, MAX_PLAYERS = 50, MAX_SOCKETS = 200, MAX_PER_IP = 8, AUTH_TIMEOUT = Number(process.env.AUTH_TIMEOUT_MS) || 20000, RATE_PER_S = 100, RATE_BURST = 200, PROTO = 2;
@@ -244,14 +252,18 @@ function startRound() {
       return sysChat('Round cancelled: both teams need at least one player.');
     }
   }
-  phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); soulOrbs.clear(); balls.length = 0; planets.length = 0; galaxies.length = 0; pbZones.length = 0; pbWalls.length = 0; pbTimers.length = 0;
+  phase = 'round'; roundStart = Date.now(); arrows.clear(); bombs.clear(); units.clear(); soulOrbs.clear(); balls.length = 0; planets.length = 0; galaxies.length = 0; pbZones.length = 0; pbWalls.length = 0; azTimers.length = 0; pbTimers.length = 0;
   const order = parts.slice(); for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
-  const rot = Math.random() * Math.PI * 2;
+  const rot = Math.random() * Math.PI * 2, rectPos = new Map();
+  if (mapId === 2) {
+    const groups = gameMode === 'ffa' ? [order] : [1, 2].map(t => order.filter(q => q.team === t)), regs = gameMode === 'ffa' ? [[360, 1176]] : [[360, 740], [796, 1176]];
+    groups.forEach((g, gi) => rectSlots(g.length, regs[gi][0], regs[gi][1], 330, 750).forEach((s, i) => rectPos.set(g[i], s)));
+  }
   order.forEach((p, i) => {
     let a = rot + i * 2 * Math.PI / order.length;
     if (gameMode !== 'ffa') { const side = order.filter(q => q.team === p.team); a = (p.team === 1 ? Math.PI : 0) + (side.indexOf(p) - (side.length - 1) / 2) * 0.45; }
     p.lx = p.x; p.ly = p.y;
-    { const sp = ringPos(a, 0.92); p.x = sp.x; p.y = sp.y; }
+    { const sp = rectPos.get(p) || ringPos(a, 0.92); p.x = sp.x; p.y = sp.y; }
     p.dx = p.dy = 0; p.role = 1; p.inRound = true; p.ready = false; p.deathOrder = 0; p.hist = [];
     resetCombat(p);
     if (bossMult && p.id === bossId) { p.pw = Math.min(bossMult, BOSS_CAP.dmg); p.bm = Math.min(bossMult, BOSS_CAP.spd); p.mh = p.hp = Math.round(p.mh * (parts.length - 1) * 2); }
@@ -811,6 +823,7 @@ function doAttack(p, m) {
   if (p.cls === 'SwordMaster') return swordmasterAttack(p, m, now);
   if (p.cls === 'Gamer') return gamerAttack(p, m, now);
   if (p.cls === 'Celestial') return celestialAttack(p, m, now);
+  if (p.cls === 'AzureDragon') return azureAttack(p, m, now);
   if (now < p.atkReady) return;
   const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
@@ -2634,7 +2647,41 @@ function reaperSkill(p, k, m, now) {
   }
 }
 // ---- Azure Dragon ----
-const AZ = { R: { cd: 25000, ms: 10000 } };
+const AZ = { R: { cd: 25000, ms: 10000 }, beam: { r: 4, dmg: 160, hw: 0.3 }, strike: { n: 4, step: 1, gap: 200, r: 1, dmg: 150 } };
+const azTimers = [];
+function azureAttack(p, m, now) {
+  if (now < p.atkReady) return;
+  const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
+  p.atkReady = now + st.atkCd / atkSpeed(p, now);
+  breakStealth(p);
+  const gx = o.x, gy = o.y / 0.8, cs = Math.cos(p.aim), sn = Math.sin(p.aim);
+  if (now < (p.azUntil || 0)) {
+    for (let i = 1; i <= AZ.strike.n; i++) azTimers.push({ at: now + (i - 1) * AZ.strike.gap, p, x: gx + cs * i * AZ.strike.step * RADPX, y: gy + sn * i * AZ.strike.step * RADPX });
+    return;
+  }
+  const L = AZ.beam.r * RADPX, ex = gx + cs * L, ey = gy + sn * L;
+  broadcast({ t: 'fx', type: 'azbeam', by: p.id, x: o.x, y: o.y, a: p.aim, len: L, dur: 320 });
+  for (const t of targetsOf(p)) {
+    const tp = posAt(t, now - lag);
+    if (segDist(tp.x, tp.y / 0.8, gx, gy, ex, ey) > AZ.beam.hw * RADPX + (t.hr || 0)) continue;
+    dmgTo(t, AZ.beam.dmg, now, { x: o.x, y: o.y, by: p, type: 'magic', basic: true });
+  }
+  checkRoundEnd();
+}
+function stepAzure(now) {
+  for (let i = azTimers.length - 1; i >= 0; i--) {
+    const z = azTimers[i]; if (now < z.at) continue;
+    azTimers.splice(i, 1);
+    const p = z.p; if (!inPlay(p) || p.cls !== 'AzureDragon') continue;
+    broadcast({ t: 'fx', type: 'azstrike', by: p.id, x: z.x, y: z.y * 0.8, r: AZ.strike.r * RADPX, dur: 520 });
+    for (const t of targetsOf(p)) {
+      const tp = posAt(t, now);
+      if (Math.hypot(tp.x - z.x, tp.y / 0.8 - z.y) > AZ.strike.r * RADPX + (t.hr || 0)) continue;
+      dmgTo(t, AZ.strike.dmg, now, { x: z.x, y: z.y * 0.8, by: p, type: 'magic', basic: true });
+    }
+    checkRoundEnd();
+  }
+}
 function azureSkill(p, k, m, now) {
   if (k !== 'R' || !(p.user === ADMIN_ID || p.ai)) return;
   p.azUntil = now + AZ.R.ms;
@@ -2933,7 +2980,7 @@ setInterval(() => {
   stepSanct(now);
   stepArrows(dt, now);
   stepBombs(now);
-  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now); stepSouls(); stepBerserker(dt, now); stepPlum(dt, now); placeDummies();
+  stepUnits(dt, now); stepBalls(now); stepCelestial(dt, now); stepGamer(now); stepSouls(); stepBerserker(dt, now); stepPlum(dt, now); stepAzure(now); placeDummies();
   } catch (e) { tickErr(e); }
   try {
   const list = [], hidden = [];
