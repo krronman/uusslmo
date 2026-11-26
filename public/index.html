@@ -1265,7 +1265,7 @@ function drawPlayer(o,isMe){
   try{drawPlayerBody(o,isMe)}finally{ctx.restore()}return}
  drawPlayerBody(o,isMe)}
 // ---- Azure Dragon origin form ----
-const AZK=1.3,azoImg=new Image();azoImg.src='blueDragon_origin.png';
+const AZK=2.6,azoImg=new Image();azoImg.src='blueDragon_origin.png';
 let azBody=null,azBeard=null;
 function azPrep(){
  if(azBody||!imOk(azoImg))return !!azBody;
@@ -1273,28 +1273,65 @@ function azPrep(){
   const d=g.getImageData(0,0,200,200),a=d.data,bd=[];
   for(let y=0;y<200;y++)for(let x=0;x<200;x++){const i=(y*200+x)*4;if(a[i+3]&&a[i]===32&&a[i+1]===47&&a[i+2]===111){bd.push([x,y]);a[i+3]=0}}
   g.putImageData(d,0,0);azBody=c;azBeard=bd;return true}catch(e){azBody=null;return false}}
+function azBolt(x0,y0,x1,y1,seed,j,w,a){
+ const n=8,dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;let r=(Math.abs(seed|0)%2147483646)+1;
+ const rnd=()=>(r=r*16807%2147483647)/2147483647;
+ ctx.beginPath();ctx.moveTo(x0,y0);
+ for(let i=1;i<n;i++){const t=i/n,q=(rnd()-.5)*j*Math.sin(t*Math.PI);ctx.lineTo(x0+dx*t+nx*q,y0+dy*t+ny*q)}
+ ctx.lineTo(x1,y1);ctx.lineJoin='round';
+ ctx.globalAlpha=a*.28;ctx.strokeStyle='#2f7bff';ctx.lineWidth=w*3.2;ctx.stroke();
+ ctx.globalAlpha=a*.8;ctx.strokeStyle='#6cc4ff';ctx.lineWidth=w*1.4;ctx.stroke();
+ ctx.globalAlpha=a;ctx.strokeStyle='#fff';ctx.lineWidth=w*.55;ctx.stroke()}
+function azGlow(x,y,r,a,c){const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(255,255,255,'+a+')');g.addColorStop(.25,'rgba('+c+','+a*.8+')');g.addColorStop(1,'rgba('+c+',0)');ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2)}
+function azFxDraw(o,cx,cy,age,t){
+ const S=o.azS||1;
+ ctx.save();ctx.globalCompositeOperation='lighter';
+ ctx.globalAlpha=1;azGlow(cx,cy,AZK*95*(1+.06*Math.sin(t*5)),.32,'60,140,255');
+ if(age<1.5){
+  const f=1-age/1.5;
+  ctx.globalAlpha=1;azGlow(cx,cy,AZK*(60+age*260),Math.max(0,1-age/.55),'90,170,255');
+  for(let k=0;k<3;k++){const a=age-k*.14;if(a<0||a>.9)continue;const r=AZK*(20+a*230);ctx.globalAlpha=(1-a/.9)*.9;ctx.strokeStyle=k?'#6cc4ff':'#fff';ctx.lineWidth=7*(1-a/.9)+1;ctx.beginPath();ctx.ellipse(cx,cy+AZK*60,r,r*.38,0,0,7);ctx.stroke()}
+  if(age<.5){const fl=Math.floor(age*22);for(let k=0;k<3;k++){const ox=(k-1)*AZK*38;azBolt(cx+ox+(k-1)*60,cy-900,cx+ox*.3,cy+AZK*50,S*7+k*131+fl*977,70,3.2,Math.max(0,1-age/.5))}}
+  const fl2=Math.floor(age*16);
+  for(let k=0;k<11;k++){if(age>.75+k*.04)continue;const ang=k/11*Math.PI*2+S%6.28,len=AZK*(90+((k*53)%70))*(.4+Math.min(1,age/.25)*.6);
+   azBolt(cx,cy,cx+Math.cos(ang)*len,cy+Math.sin(ang)*len*.8,k*313+fl2*541+S,34,2.6,f)}
+  ctx.fillStyle='#bfe6ff';for(let k=0;k<26;k++){const ang=k*2.399,sp=AZK*(90+(k*37)%140),d=Math.min(1,age/1.2);ctx.globalAlpha=(1-d)*.9;ctx.fillRect(cx+Math.cos(ang)*sp*d-2,cy+Math.sin(ang)*sp*d*.8-d*d*40-2,4,4)}
+ }
+ const fl3=Math.floor(t*12);
+ for(let k=0;k<3;k++){const ang=(fl3*7+k*2.1)%6.28,r0=AZK*(40+((fl3*13+k*29)%40)),r1=r0+AZK*34;azBolt(cx+Math.cos(ang)*r0,cy+Math.sin(ang)*r0*.9,cx+Math.cos(ang+.5)*r1,cy+Math.sin(ang+.5)*r1*.9,fl3*101+k*59+3,14,1.6,.55)}
+ ctx.restore()}
 function drawAzOrigin(o,h){
  if(!imOk(azoImg))return;
- const bx=o.x-86*AZK,by=o.y-8-165*AZK;
- if(!azPrep()){ctx.drawImage(azoImg,bx,by,200*AZK,200*AZK);return}
- const t=performance.now()/1000+(o.id||0)*1.7,ph=t*2.4,cl=(v,a,b)=>v<a?a:v>b?b:v,bob=Math.sin(ph*.5)*2;
- ctx.fillStyle='#202f6f';
- for(const [x,y] of azBeard){
-  const dd=Math.hypot(x-80,y-48),wd=cl(dd/70,0,1),w2=wd*wd,
-   dx=w2*7*Math.sin(ph*1.1-dd*.07)+wd*2.2*Math.sin(ph*2.2+.5-dd*.12),
-   dy=w2*5.5*Math.cos(ph*1.1-dd*.06+.7)+wd*1.6*Math.sin(ph*1.7-dd*.1);
-  ctx.fillRect(bx+(x+dx)*AZK,by+(y+dy)*AZK+bob*AZK*.6,AZK+.7,AZK+.7)}
- const Y=y=>{const s=cl((y-50)/115,0,1),w=.1+.9*s*s*(3-2*s);return y+w*1.4*Math.sin(ph+.8-y*.05)};
- let y0=Y(31);
- for(let y=31;y<=165;y++){
-  const s=cl((y-50)/115,0,1),w=.1+.9*s*s*(3-2*s),tf=cl((y-135)/30,0,1),
-   dx=w*(3.8*Math.sin(ph-y*.075)+1.3*Math.sin(ph*2+1.3-y*.14))+tf*2.6*Math.sin(ph*3-y*.3),y1=Y(y+1);
-  ctx.drawImage(azBody,30,y,110,1,bx+(30+dx)*AZK,by+y0*AZK+bob*AZK*.6,110*AZK,(y1-y0)*AZK+.8);y0=y1}}
+ const n=performance.now(),dt=Math.min(.1,(n-(o.azT||n))/1000);o.azT=n;
+ o.azm=(o.azm||0)+((o.moving?1:0)-(o.azm||0))*(1-Math.exp(-dt*7));const m=o.azm;
+ o.azP=(o.azP||(o.id||0)*1.7)+dt*2.4*(1+.9*m);
+ const ph=o.azP,t=n/1000,age=(n-(o.azT0||n))/1000,cl=(v,a,b)=>v<a?a:v>b?b:v,bob=Math.sin(ph*.5)*2*(1+m*1.5),
+  bx=o.x-86*AZK,by=o.y-8-165*AZK,px=o.x,py=by+100*AZK,sh=m*15*AZK,am=1+.7*m;
+ ctx.save();ctx.translate(o.x,0);ctx.scale(-1,1);ctx.translate(-o.x,0);
+ ctx.save();ctx.translate(px,py+sh);ctx.rotate(-1.15*m+Math.sin(ph)*.05*m);ctx.translate(-px,-py);
+ if(!azPrep())ctx.drawImage(azoImg,bx,by,200*AZK,200*AZK);
+ else{
+  ctx.fillStyle='#202f6f';
+  for(const [x,y] of azBeard){
+   const dd=Math.hypot(x-80,y-48),wd=cl(dd/70,0,1),w2=wd*wd,
+    dx=(w2*7*Math.sin(ph*1.1-dd*.07)+wd*2.2*Math.sin(ph*2.2+.5-dd*.12))*(1+.5*m),
+    dy=w2*5.5*Math.cos(ph*1.1-dd*.06+.7)+wd*1.6*Math.sin(ph*1.7-dd*.1);
+   ctx.fillRect(bx+(x+dx)*AZK,by+(y+dy)*AZK+bob*AZK*.6,AZK+.7,AZK+.7)}
+  const Y=y=>{const s=cl((y-50)/115,0,1),w=.1+.9*s*s*(3-2*s);return y+w*1.4*am*Math.sin(ph+.8-y*.05)};
+  let y0=Y(31);
+  for(let y=31;y<=165;y++){
+   const s=cl((y-50)/115,0,1),w=.1+.9*s*s*(3-2*s),tf=cl((y-135)/30,0,1),
+    dx=am*(w*(3.8*Math.sin(ph-y*.075)+1.3*Math.sin(ph*2+1.3-y*.14))+tf*2.6*Math.sin(ph*3-y*.3)),y1=Y(y+1);
+   ctx.drawImage(azBody,30,y,110,1,bx+(30+dx)*AZK,by+y0*AZK+bob*AZK*.6,110*AZK,(y1-y0)*AZK+.8);y0=y1}}
+ ctx.restore();
+ azFxDraw(o,o.x,py+sh,age,t);
+ ctx.restore()}
 function drawPlayerBody(o,isMe){
- const azO=o.cls==='AzureDragon'&&!!o.az&&!o.skl,AZN=o.cls==='AzureDragon'&&!o.az&&!o.skl;
+ const azO=o.cls==='AzureDragon'&&!!o.az&&!o.skl;
+ if(azO){if(!o.azOn){o.azOn=1;o.azT0=performance.now();o.azS=(o.id||1)*17+(o.azT0|0)%1000}}else o.azOn=0;
  const lift=o.su>0?Math.sin((1-Math.min(1,o.su/(o.sMax||1000)))*Math.PI)*55:0;
  const s=Math.sin(o.phase),step=o.moving?s:0,bob=o.moving&&Math.abs(s)>.6?1:0;
- const lL=step>.3?1:0,lR=step<-.3?1:0,tw=o.cls==='Tower'&&!o.skl,us=unitSkin(o),ush=us&&imOk(o.ut==='i'?us.ui:us.ua)?(o.ut==='i'?us.ui:us.ua):null,w=(tw?30:15)*PX,h=(tw?40:ush?ush.naturalHeight:azO?145*AZK/PX:AZN?20:15)*PX,x0=o.x-w/2,yb=o.y-h-lift,sp=o.ut?(ush||(o.ut==='i'?tInfImg:tArcImg)):tw?(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:towerImg):o.skl&&imOk(skelImg)?skelImg:(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:spriteFor(o.hue,o.cls,o.lf)),whole=!!ush||(tw&&sp!==towerImg)||(o.skl&&sp===skelImg)||(o.cls==='Reaper'&&!o.skl&&sp===clsImg.Reaper)||(AZN&&sp===clsImg.AzureDragon);
+ const lL=step>.3?1:0,lR=step<-.3?1:0,tw=o.cls==='Tower'&&!o.skl,us=unitSkin(o),ush=us&&imOk(o.ut==='i'?us.ui:us.ua)?(o.ut==='i'?us.ui:us.ua):null,w=(tw?30:15)*PX,h=(tw?40:ush?ush.naturalHeight:azO?145*AZK/PX:15)*PX,x0=o.x-w/2,yb=o.y-h-lift,sp=o.ut?(ush||(o.ut==='i'?tInfImg:tArcImg)):tw?(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:towerImg):o.skl&&imOk(skelImg)?skelImg:(skOf(o)&&imOk(skOf(o).spr)?skOf(o).spr:spriteFor(o.hue,o.cls,o.lf)),whole=!!ush||(tw&&sp!==towerImg)||(o.skl&&sp===skelImg)||(o.cls==='Reaper'&&!o.skl&&sp===clsImg.Reaper);
  if((o.ut||tw)&&!imOk(sp))return;
  ctx.fillStyle='rgba(30,40,80,.3)';ctx.beginPath();ctx.ellipse(o.x,o.y-2,(tw?46:22)-(bob?2:0),PX*(tw?2.2:1.3),0,0,7);ctx.fill();
  if(o.skl){ctx.save();ctx.strokeStyle=o.so===myId?'#4cd964':'#ff5a4a';ctx.lineWidth=2.5;ctx.beginPath();ctx.ellipse(o.x,o.y-2,26,9,0,0,7);ctx.stroke();ctx.restore()}
