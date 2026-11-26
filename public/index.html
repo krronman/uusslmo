@@ -336,7 +336,7 @@ const lsImg=new Image(),fsImg=new Image(),crImg=new Image(),fbImg=new Image(),hf
 lsImg.src='lightshot.png';fsImg.src='fireshot.png';crImg.src='crystal.png';fbImg.src='flamebomb.png';hfImg.src='holyfield.png';lgImg.src='light.png';wlImg.src='angelForm_s_left_wing.png';wrImg.src='angelForm_s_right_wing.png';
 const revImg=new Image(),sylImg=new Image(),bulImg=new Image();revImg.src='revolver.png';sylImg.src='sylinder.png';bulImg.src='bullet.png';
 const imOk=i=>!!i&&i.complete&&i.naturalWidth>0;
-const PDK=['m','r','ai','ar','skl','so','su','gd','sl','hs','iv','hn','ta','kb','ds','mk','as','cm','bn','qn','lb','dm','cg','rl','mt','gb','fs','sa','smn','smx','sk','tr','ins','dp','gm','sn','iq','bs','bm','rg','ax','bu','bd','az'];
+const PDK=['m','r','ai','ar','skl','so','su','gd','sl','hs','iv','hn','ta','kb','ds','mk','as','cm','bn','qn','lb','dm','cg','rl','mt','gb','fs','sa','smn','smx','sk','tr','ins','dp','gm','sn','iq','bs','bm','rg','ax','bu','bd','az','sh'];
 let dmyList=[],roundMs=240000;const dmyMap=new Map(),dmyHit=new Map(),dummyImg=new Image();dummyImg.src='TrainingDummy.png';
 const dvlImg=new Image(),dvrImg=new Image();dvlImg.src='devilForm_s_left_wing.png';dvrImg.src='devilForm_s_right_wing.png';
 const plImg=new Image(),gxImg=new Image();plImg.src='planet.png';gxImg.src='galaxy.png';for(const i of [plImg,gxImg])if(i.decode)i.decode().catch(()=>{});
@@ -416,7 +416,7 @@ function connect(){
     if(snapNext){o.x=p.x;o.y=p.y}
     const f0=o.face;
     if(p.su>0&&(p.su>(o.su||0)+60||!(o.su>0)))o.sMax=p.su;
-    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,tm:p.tm,ai:p.ai,ar:p.ar,skl:p.skl,so:p.so,sz:p.sz,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,pbs:p.pbs,pbc:p.pbc,pz:p.pz,pbk:p.pbk,psw:p.psw,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,sn:p.sn,rg:p.rg,ax:p.ax,bu:p.bu||0,bd:p.bd||0,az:p.az||0,smn:p.smn||0,smx:p.smx||0,buT:performance.now(),bs:p.bs,bm:p.bm,iq:p.iq,id:p.id});
+    Object.assign(o,{tx:p.x,ty:p.y,name:p.name,hue:p.hue,moving:p.m,sm:p.m,face:p.f,aim:p.a,cls:p.c,ready:p.r,role:p.o,tm:p.tm,ai:p.ai,ar:p.ar,skl:p.skl,so:p.so,sz:p.sz,hp:p.hp,mh:p.mh,su:p.su,gd:p.gd,sl:p.sl,hs:p.hs,iv:p.iv,cg:p.cg,hn:p.hn,ta:p.ta,kb:p.kb,ds:p.ds,mk:p.mk,as:p.as,cm:p.cm,bn:p.bn,qn:p.qn,lf:p.lf,lb:p.lb,dm:p.dm,rl:p.rl,mt:p.mt,gb:p.gb,fs:p.fs,sa:p.sa,sk:p.sk,ut:p.ut,ow:p.ow,tr:p.tr,pbs:p.pbs,pbc:p.pbc,pz:p.pz,pbk:p.pbk,psw:p.psw,ins:p.ins,dp:p.dp,gm:p.gm,gt:p.gt,sn:p.sn,rg:p.rg,ax:p.ax,bu:p.bu||0,bd:p.bd||0,az:p.az||0,sh:p.sh||0,smn:p.smn||0,smx:p.smx||0,buT:performance.now(),bs:p.bs,bm:p.bm,iq:p.iq,id:p.id});
     if(p.id===myId)o.face=f0;
    }
    snapNext=false;
@@ -464,7 +464,7 @@ function connect(){
   else if(m.t==='gadmin'){gmReply(m)}
   else if(m.t==='gc'){gcS={l:m.l,s:m.s,ch:performance.now()+m.ch}}
   else if(m.t==='fx'){if(eatEcho(m))return;m.t0=performance.now();if(m.g){const go=others.get(m.g);if(go)go.shot=m.t0}if(!(m.by===myId&&(m.type==='cone'||m.type==='gslash')&&!m.tint&&!m.sq))fxs.push(m);
-   if(m.by&&m.type==='disc'){const o=others.get(m.by);if(o)o.spin=m.t0}else if(m.by){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
+   if(m.by&&m.type==='disc'){const o=others.get(m.by);if(o)o.spin=m.t0}else if(m.by&&m.type!=='azbeam'&&m.type!=='azstrike'){const o=others.get(m.by);if(o&&!(m.by===myId&&o.sw&&performance.now()-o.sw.t0<500))startSwing(o,m.a,m.span,m.dur)}}
   else if(m.t==='rv'){rv={n:m.n,i:m.i,live:m.live,blank:m.blank,rlEnd:m.rl?performance.now()+m.rl:0}}
   else if(m.t==='stk'){if(!m.id)stk={id:0,name:'',pl:0,hist:[]};else{if(stk.id!==m.id)stk={id:m.id,name:m.n||'',pl:m.pl,hist:[]};stk.pl=m.pl;stk.hist.push(m.pl);if(stk.hist.length>90)stk.hist.shift()}}
   else if(m.t==='kill')addKill(m);
@@ -767,7 +767,7 @@ const CHARS=[
     {icon:'❔',name:'미정',key:'패시브',desc:'추후 공개됩니다.'},
     {icon:'❔',name:'미정',key:'Q',desc:'추후 공개됩니다.'},
     {icon:'❔',name:'미정',key:'E',desc:'추후 공개됩니다.'},
-    {icon:'🌀',name:'천공',key:'R · 25초',types:['buff'],desc:'10초간 용의 근원(Dragon Origin) 형태로 변신합니다. 추가 효과는 추후 공개됩니다.'}]},
+    {icon:'🌀',name:'천공',key:'R · 25초',types:['buff'],desc:'10초간 용의 근원(Dragon Origin) 형태로 변신합니다. 변신 중 보호막 3,000, 이동 속도 30% 증가, 공중에 뜨거나 밀려나지 않습니다. 쿨타임은 변신이 끝난 뒤부터 시작됩니다.'}]},
   ...new Array(4).fill(null)
 ];
 const csScreen=document.getElementById('csScreen'),csBox=document.getElementById('csBox');
@@ -1311,7 +1311,7 @@ function drawAzOrigin(o,h){
  const vx=o.x-(o.azLx===undefined?o.x:o.azLx),vy=(o.y-(o.azLy===undefined?o.y:o.azLy))/.8;o.azLx=o.x;o.azLy=o.y;
  if(o.azTh===undefined)o.azTh=o.face>0?0:Math.PI;
  if(o.moving&&Math.hypot(vx,vy)>.3)o.azTh=Math.atan2(vy,vx);
- o.azm=(o.azm||0)+((o.moving?1:0)-(o.azm||0))*(1-Math.exp(-dt*6));const m=0;
+ o.azm=(o.azm||0)+((o.moving?1:0)-(o.azm||0))*(1-Math.exp(-dt*6));const m=o.azm;
  o.azP=(o.azP||(o.id||0)*1.7)+dt*2.4*(1+1.1*m);
  if(Math.abs(Math.cos(o.azTh))>.35)o.azMir=Math.cos(o.azTh)>0;if(o.azMir===undefined)o.azMir=o.face>0;
  const wm=m>.5?o.azMir:o.face>0,fl=(o.face>0)!==wm,thp=wm?Math.PI-o.azTh:o.azTh;
@@ -1432,6 +1432,7 @@ function drawPlayerBody(o,isMe){
  if(phase==='round'&&o.mh){const bw=tw?92:o.ut?34:46,bx=o.x-bw/2,by=o.y+8,r=Math.max(0,o.hp/o.mh);
   ctx.fillStyle='rgba(10,20,50,.85)';ctx.fillRect(bx-2,by-2,bw+4,10);
   ctx.fillStyle=r>.35?'#4cd964':'#ff5a4a';ctx.fillRect(bx,by,bw*r,6);
+  if(o.sh>0){ctx.fillStyle='#bfe6ff';ctx.fillRect(bx,by-5,bw*Math.min(1,o.sh/3000),3);ctx.strokeStyle='#6cc4ff';ctx.lineWidth=1;ctx.strokeRect(bx-.5,by-5.5,bw+1,4)}
   if(o.sl||o.pz){ctx.fillStyle='#8fd0ff';ctx.fillRect(bx,by+7,bw,2)}}
  if(o.rl){ctx.font="bold 13px 'Galmuri11',system-ui,sans-serif";ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(10,20,50,.9)';ctx.fillStyle='#ffd66b';ctx.strokeText('재장전…',o.x,o.y+(phase==='round'&&o.mh?32:20));ctx.fillText('재장전…',o.x,o.y+(phase==='round'&&o.mh?32:20))}
  if(o.chg>=0){const bw=46,bx=o.x-bw/2,by=o.y+(phase==='round'&&o.mh?20:8);
@@ -1840,7 +1841,7 @@ function draw(t){
    o.moving=!!(dx||dy);
    if(Math.abs(Math.cos(myAim))>.2)o.face=Math.cos(myAim)>0?1:-1;
    if(o.moving){
-    const l=Math.hypot(dx,dy),spd=300*(o.gd?1.15:1)*(o.sl?.7:1)*(o.pz||1)*(o.hn?.85:1)*(o.cls==='Assassin'&&o.iv?1.15:1)*(o.lb?1.2:1)*(o.fs?1.2:1)*(o.bm||1);
+    const l=Math.hypot(dx,dy),spd=300*(o.gd?1.15:1)*(o.sl?.7:1)*(o.pz||1)*(o.hn?.85:1)*(o.cls==='Assassin'&&o.iv?1.15:1)*(o.lb?1.2:1)*(o.fs?1.2:1)*(o.az?1.3:1)*(o.bm||1);
     const ox0=o.x,oy0=o.y;o.x+=dx/l*spd*dt;o.y+=dy/l*spd*dt*0.8;
     const nx=(o.x-arena.CX)/arena.RX,ny=(o.y-arena.CY)/arena.RY,d=mapId===2?Math.max(Math.abs(nx),Math.abs(ny)):Math.hypot(nx,ny);
     if(d>1){o.x=arena.CX+nx/d*arena.RX;o.y=arena.CY+ny/d*arena.RY}
