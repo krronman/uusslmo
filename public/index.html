@@ -1313,7 +1313,7 @@ function drawAzOrigin(o,h){
  const vx=o.x-(o.azLx===undefined?o.x:o.azLx),vy=(o.y-(o.azLy===undefined?o.y:o.azLy))/.8;o.azLx=o.x;o.azLy=o.y;
  if(o.azTh===undefined)o.azTh=o.face>0?0:Math.PI;
  if(o.moving&&Math.hypot(vx,vy)>.3)o.azTh=Math.atan2(vy,vx);
- o.azm=(o.azm||0)+((o.moving?1:0)-(o.azm||0))*(1-Math.exp(-dt*6));const m=o;
+ o.azm=(o.azm||0)+((o.moving?1:0)-(o.azm||0))*(1-Math.exp(-dt*6));const m=0;
  o.azP=(o.azP||(o.id||0)*1.7)+dt*2.4*(1+1.1*m);
  if(Math.abs(Math.cos(o.azTh))>.35)o.azMir=Math.cos(o.azTh)>0;if(o.azMir===undefined)o.azMir=o.face>0;
  const wm=m>.5?o.azMir:o.face>0,fl=(o.face>0)!==wm,thp=wm?Math.PI-o.azTh:o.azTh;
@@ -1357,7 +1357,7 @@ const AZFX={
   azGlow(x,y-10,R*.95,Math.max(0,1-k*1.6),'90,170,255');
   for(let q=0;q<10;q++){const ang=q*2.399+(sd&15),d=Math.min(1,k*2.2)*R*(.4+(q%4)*.2);ctx.globalAlpha=(1-k)*.9;ctx.fillStyle='#bfe6ff';ctx.fillRect(x+Math.cos(ang)*d-2,y-8+Math.sin(ang)*d*.7-k*30-2,4,4)}
   ctx.restore()}};
-function azSafe(fn){const t=ctx.getTransform();try{fn()}catch(e){ctx.setTransform(t);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.shadowBlur=0;ctx.setLineDash([]);if(!azSafe.w){azSafe.w=1;console.error('Azure draw error:',e)}}}
+function azSafe(fn){const t=ctx.getTransform(),sv=ctx.save,rs=ctx.restore;let d=0;ctx.save=function(){d++;return sv.call(this)};ctx.restore=function(){d--;return rs.call(this)};try{fn()}catch(e){delete ctx.save;delete ctx.restore;while(d-->0)ctx.restore();ctx.setTransform(t);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.shadowBlur=0;ctx.setLineDash([]);if(!azSafe.w){azSafe.w=1;console.error('Azure draw error:',e)}return}delete ctx.save;delete ctx.restore}
 function drawPlayerBody(o,isMe){
  const azO=o.cls==='AzureDragon'&&!!o.az&&!o.skl;
  if(azO){if(!o.azOn){o.azOn=1;o.azT0=performance.now();o.azS=(o.id||1)*17+(o.azT0|0)%1000}}else o.azOn=0;
