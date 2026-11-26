@@ -678,7 +678,7 @@ function resetCombat(p) {
   p.axes = p.cls === 'Berserker' ? [{ s: 0, x: 0, y: 0, a: 0, d: 0 }] : []; p.bRUntil = 0;
   p.pw = 1; p.bm = 0;
   p.pbD = p.pbA = p.pbStage = 0; p.pbCd = {}; p.pbCmd = null; p.pbCh = null; p.pbResume = null; p.pbBonus = false; p.pbBn = 0; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = p.pbSlowUntil = 0; p.pbSlowMul = 1; p.pbKey = ''; p.pbSw = null; pbClean(p.id);
-  p.azUntil = 0;
+  p.azUntil = 0; p.azOn = false; p.shield = p.shUntil = 0;
   p.lf = ''; p.lPend = p.lUsed = false; p.beam = p.pure = p.sanct = null; p.libUntil = p.dmUntil = 0; p.dmList = [];
   p.mh = p.hp = statsOf(p).hp;
   p.atkReady = p.cdQ = p.cdE = p.cdR = 0;
@@ -749,6 +749,8 @@ function dmgTo(t, amount, now, src) {
   if (now < t.dmUntil) { const mo = players.get(t.dmBy); incT += mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp; }
   let d = (src && src.fixed) ? Math.round(amount0) : (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount0 * (1 + incA + incT) * (1 - Math.min(cut, 0.95))));
   if (t.dummy) { dummyHit(t, d, now); broadcast({ t: 'hit', id: t.id, dmg: d, bl: blocked ? 1 : 0 }); return; }
+  let ab = 0;
+  if (t.shield > 0 && now < (t.shUntil || 0)) { ab = Math.min(t.shield, d); t.shield -= ab; d -= ab; }
   t.hp -= d;
   if (t.cls === 'PlumBlossom' && t.pbCh && d > 0 && t.pbCh.t !== 7) pbStop(t, now, false);
   if (t.cls === 'Celestial' && t.role === 1 && d > 0) { t.dim = Math.min(CEL.cap, (t.dim || 0) + d * CEL.store); if (t.hp > 0) t.hp = Math.min(t.mh, t.hp + d * CEL.heal); }
@@ -756,7 +758,7 @@ function dmgTo(t, amount, now, src) {
   const atkr = src && (src.by || src.kill);
   if (atkr && !t.unit && atkr.id !== t.id) for (const f of players.values()) if (f.cls === 'Financier' && f.buy === atkr.id) f.buyDealt += d;
   if (src && (src.by || src.kill)) { t.lastBy = (src.by || src.kill).id; t.lastByT = now; }
-  broadcast({ t: 'hit', id: t.id, dmg: d, bl: blocked ? 1 : 0 });
+  broadcast({ t: 'hit', id: t.id, dmg: d || ab, bl: blocked ? 1 : 0 });
   if (blocked && src.by && now < t.hornUntil && src.by.role === 1) {
     const back = Math.round(amount * SHIELDER.R.reflect);
     if (back > 0) dmgTo(src.by, back, now, { kill: t });
@@ -1019,7 +1021,7 @@ function dashHits(p, D, px, py, now) {
     if (t.role !== 1) continue;
     t.stunUntil = Math.max(t.stunUntil, now + S.stun);
     const v = S.kb / (S.kbMs / 1000);
-    t.kbUntil = now + S.kbMs; t.kbx = Math.cos(D.a) * v; t.kby = Math.sin(D.a) * v;
+    if (!airImmune(t, now)) { t.kbUntil = now + S.kbMs; t.kbx = Math.cos(D.a) * v; t.kby = Math.sin(D.a) * v; }
   }
   return any;
 }
@@ -1467,6 +1469,7 @@ function towerSkill(p, k, m, now) {
 // ---- Sword Master ----
 const smNeed = (p, now) => now < p.smAwkUntil ? SM.atk.needAwk : SM.atk.need;
 function knockFrom(t, o, dist, ms, now) {
+  if (airImmune(t, now)) return;
   const a = Math.atan2((t.y - o.y) / 0.8, t.x - o.x), v = dist / (ms / 1000);
   t.kbUntil = now + ms; t.kbx = Math.cos(a) * v; t.kby = Math.sin(a) * v;
 }
@@ -2647,7 +2650,13 @@ function reaperSkill(p, k, m, now) {
   }
 }
 // ---- Azure Dragon ----
-const AZ = { R: { cd: 25000, ms: 10000 }, beam: { r: 4, dmg: 160, hw: 0.3 }, strike: { n: 4, step: 1, gap: 200, r: 1, dmg: 150 } };
+const AZ = { R: { cd: 25000, ms: 10000, shield: 3000, spd: 1.3 }, beam: { r: 4, dmg: 160, hw: 0.45 }, strike: { n: 4, step: 1, gap: 200, r: 1, dmg: 150 }, pad: 12 };
+function azActive(p, now) { return !!p && p.cls === 'AzureDragon' && !!p.azOn && now < (p.azUntil || 0); }
+function airImmune(t, now) { return !!t && t.cls === 'AzureDragon' && now < (t.azUntil || 0); }
+function azEnd(p, now) {
+  p.azOn = false; p.azUntil = 0; p.shield = 0; p.shUntil = 0;
+  if (p.cls === 'AzureDragon') { p.cdR = now + AZ.R.cd; send(p.ws, { t: 'cd', k: 'R', ms: AZ.R.cd }); }
+}
 const azTimers = [];
 function azureAttack(p, m, now) {
   if (now < p.atkReady) return;
@@ -2655,20 +2664,21 @@ function azureAttack(p, m, now) {
   p.atkReady = now + st.atkCd / atkSpeed(p, now);
   breakStealth(p);
   const gx = o.x, gy = o.y / 0.8, cs = Math.cos(p.aim), sn = Math.sin(p.aim);
-  if (now < (p.azUntil || 0)) {
+  if (azActive(p, now)) {
     for (let i = 1; i <= AZ.strike.n; i++) azTimers.push({ at: now + (i - 1) * AZ.strike.gap, p, x: gx + cs * i * AZ.strike.step * RADPX, y: gy + sn * i * AZ.strike.step * RADPX });
     return;
   }
   const L = AZ.beam.r * RADPX, ex = gx + cs * L, ey = gy + sn * L;
   broadcast({ t: 'fx', type: 'azbeam', by: p.id, x: o.x, y: o.y, a: p.aim, len: L, dur: 320 });
   for (const t of targetsOf(p)) {
-    const tp = posAt(t, now - lag);
-    if (segDist(tp.x, tp.y / 0.8, gx, gy, ex, ey) > AZ.beam.hw * RADPX + (t.hr || 0)) continue;
+    const tol = AZ.beam.hw * RADPX + (t.hr || 0) + AZ.pad, tp = posAt(t, now - lag);
+    if (segDist(tp.x, tp.y / 0.8, gx, gy, ex, ey) > tol && segDist(t.x, t.y / 0.8, gx, gy, ex, ey) > tol) continue;
     dmgTo(t, AZ.beam.dmg, now, { x: o.x, y: o.y, by: p, type: 'magic', basic: true });
   }
   checkRoundEnd();
 }
 function stepAzure(now) {
+  for (const p of players.values()) if (p.azOn && !(p.cls === 'AzureDragon' && inPlay(p) && now < (p.azUntil || 0))) azEnd(p, now);
   for (let i = azTimers.length - 1; i >= 0; i--) {
     const z = azTimers[i]; if (now < z.at) continue;
     azTimers.splice(i, 1);
@@ -2676,7 +2686,7 @@ function stepAzure(now) {
     broadcast({ t: 'fx', type: 'azstrike', by: p.id, x: z.x, y: z.y * 0.8, r: AZ.strike.r * RADPX, dur: 520 });
     for (const t of targetsOf(p)) {
       const tp = posAt(t, now);
-      if (Math.hypot(tp.x - z.x, tp.y / 0.8 - z.y) > AZ.strike.r * RADPX + (t.hr || 0)) continue;
+      if (Math.hypot(tp.x - z.x, tp.y / 0.8 - z.y) > AZ.strike.r * RADPX + (t.hr || 0) + AZ.pad) continue;
       dmgTo(t, AZ.strike.dmg, now, { x: z.x, y: z.y * 0.8, by: p, type: 'magic', basic: true });
     }
     checkRoundEnd();
@@ -2684,8 +2694,9 @@ function stepAzure(now) {
 }
 function azureSkill(p, k, m, now) {
   if (k !== 'R' || !(p.user === ADMIN_ID || p.ai)) return;
-  p.azUntil = now + AZ.R.ms;
-  p.cdR = now + AZ.R.cd; send(p.ws, { t: 'cd', k: 'R', ms: AZ.R.cd });
+  if (azActive(p, now)) return;
+  p.azOn = true; p.azUntil = now + AZ.R.ms; p.shield = AZ.R.shield; p.shUntil = p.azUntil; p.kbUntil = 0;
+  p.cdR = Number.MAX_SAFE_INTEGER; send(p.ws, { t: 'cd', k: 'R', ms: AZ.R.ms });
 }
 // ---- AI players ----
 const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper', 'Berserker', 'PlumBlossom', 'AzureDragon'];
@@ -2905,7 +2916,7 @@ function autoClearAi() {
   for (const q of players.values()) { if (q.ai) bots.push(q); else if ((q.user || q.guest) && !q.obs && !q.skel && q.ws && q.ws.readyState === 1) humans++; }
   if (!humans && bots.length) { for (const q of bots) removeBot(q); console.log('No human players left: removed ' + bots.length + ' AI player(s).'); }
 }
-const SLIM_KEYS = ['m', 'r', 'ai', 'ar', 'skl', 'so', 'su', 'gd', 'sl', 'hs', 'iv', 'hn', 'ta', 'kb', 'ds', 'mk', 'as', 'cm', 'bn', 'qn', 'lb', 'dm', 'cg', 'rl', 'mt', 'gb', 'fs', 'sa', 'smn', 'smx', 'sk', 'tr', 'ins', 'dp', 'gm', 'sn', 'iq', 'bs', 'bm', 'rg', 'ax', 'bu', 'bd', 'az'];
+const SLIM_KEYS = ['m', 'r', 'ai', 'ar', 'skl', 'so', 'su', 'gd', 'sl', 'hs', 'iv', 'hn', 'ta', 'kb', 'ds', 'mk', 'as', 'cm', 'bn', 'qn', 'lb', 'dm', 'cg', 'rl', 'mt', 'gb', 'fs', 'sa', 'smn', 'smx', 'sk', 'tr', 'ins', 'dp', 'gm', 'sn', 'iq', 'bs', 'bm', 'rg', 'ax', 'bu', 'bd', 'az', 'sh'];
 setInterval(() => {
   const now = Date.now(), dt = Math.min((now - last) / 1000, 0.1); last = now;
   let needEnd = false;
@@ -2957,6 +2968,7 @@ setInterval(() => {
     }
     if (p.cls === 'Financier' && p.role === 1 && phase === 'round') stepFinancier(p, now);
     if (p.bleedUntil) stepBleed(p, now);
+    if (p.kbUntil && airImmune(p, now)) p.kbUntil = 0;
     if (now < p.kbUntil && inPlay(p)) {
       const sx0 = p.x, sy0 = p.y; p.x += p.kbx * dt; p.y += p.kby * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = ndist(nx, ny);
@@ -2965,7 +2977,7 @@ setInterval(() => {
     }
     if (dx || dy) {
       const l = Math.hypot(dx, dy); dx /= l; dy /= l;
-      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1) * (p.bm || 1);
+      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1) * (p.cls === 'AzureDragon' && now < (p.azUntil || 0) ? AZ.R.spd : 1) * (p.bm || 1);
       const sx0 = p.x, sy0 = p.y; p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = ndist(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
@@ -2995,7 +3007,7 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0, az: p.cls === 'AzureDragon' && now < (p.azUntil || 0) ? 1 : 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0, az: p.cls === 'AzureDragon' && now < (p.azUntil || 0) ? 1 : 0, sh: p.shield > 0 && now < (p.shUntil || 0) ? Math.round(p.shield) : 0 };
     for (const k of SLIM_KEYS) if (e[k] === 0) delete e[k];
     if (p.cls === 'PlumBlossom') { e.pbs = p.pbStage + 1; if (p.pbCh) e.pbc = p.pbCh.t; if (now < (p.pbBlockUntil || 0)) e.pbk = 1; if (p.pbSw) e.psw = [Math.round(p.pbSw.x), Math.round(p.pbSw.g * 0.8), Math.round(Math.hypot(p.pbSw.vx, p.pbSw.vg)), +Math.atan2(p.pbSw.vg * 0.8, p.pbSw.vx).toFixed(2)]; }
     if (p.role === 1 && now < (p.pbSlowUntil || 0)) e.pz = p.pbSlowMul;
