@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Geolgani PvP</title>
+<title>파티게임</title>
 <style>
 html,body{margin:0;height:100%;background:#8fc4f5;overflow:hidden;font-family:system-ui,sans-serif}
 canvas{display:block;width:100%;height:100%}
@@ -1307,6 +1307,8 @@ function azPrep(){
   g.putImageData(d,0,0);azBody=c;azBeard=bd;return true}catch(e){azBody=null;return false}}
 function drawAzOrigin(o,h){
  if(!imOk(azoImg))return;
+ if(!isFinite(o.x+o.y)){azSafe.w||console.warn('az bad pos',o.x,o.y);return}
+ for(const k of ['azm','azP','azT','azT0','azLx','azLy','azTh'])if(o[k]!==undefined&&!isFinite(o[k])){azSafe.w||console.warn('az bad state',k,o[k]);o[k]=undefined}
  const n=performance.now(),dt=Math.min(.1,(n-(o.azT||n))/1000);o.azT=n;
  const vx=o.x-(o.azLx===undefined?o.x:o.azLx),vy=(o.y-(o.azLy===undefined?o.y:o.azLy))/.8;o.azLx=o.x;o.azLy=o.y;
  if(o.azTh===undefined)o.azTh=o.face>0?0:Math.PI;
