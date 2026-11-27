@@ -475,7 +475,7 @@ const CLASS_STATS = {
   Reaper: { hp: 1200, dmg: 50, reduce: 0, atkCd: 700 },
   Berserker: { hp: 1200, dmg: 170, reduce: 0, atkCd: 900 },
   PlumBlossom: { hp: 1000, dmg: 90, reduce: 0, atkCd: 800 },
-  AzureDragon: { hp: 1200, dmg: 100, reduce: 0, atkCd: 800 }
+  AzureDragon: { hp: 1300, dmg: 160, reduce: 0, atkCd: 800 }
 };
 const statsBase = p => p.cls === 'PlumBlossom' ? { hp: Math.round(1000 * pbMul(p)), dmg: 90 * pbMul(p), reduce: 0, atkCd: 800 } : p.cls === 'Financier' ? { hp: 1000, dmg: p.fDmg || 90, reduce: 0, atkCd: 900 } : p.cls === 'Lucifer' ? { hp: lForm(p).hp, dmg: lForm(p).dmg, reduce: 0, atkCd: p.lf === 'd' && Date.now() < p.libUntil ? LUC.lib.atkCd : lForm(p).atkCd } : p.cls === 'Berserker' && !axeHeld(p) ? Object.assign({}, CLASS_STATS.Berserker, { dmg: 50 }) : CLASS_STATS[p.cls] || BASE;
 const statsOf = p => { const s = statsBase(p); return p.pw && p.pw !== 1 ? Object.assign({}, s, { atkCd: s.atkCd / p.pw }) : s; };
@@ -624,7 +624,7 @@ function arrowHit(ar, t, now) {
   if (type === 'phys' && t.cls === 'Shielder' && now < t.hornUntil && shieldBlocks(t, { dir: inDir })) { deflectArrow(ar, t); return true; }
   if (t.cls === 'PlumBlossom' && now < (t.pbBlockUntil || 0) && pbTryBlock(t, { dir: inDir }, now)) { ar.left = 0; return false; }
   dmgTo(t, ar.hpPct ? ar.dmg + Math.round(t.hp * ar.hpPct) : ar.dmg, now, { dir: inDir, kill: players.get(ar.owner), type });
-  if (ar.stun && t.role === 1) t.stunUntil = now + ar.stun;
+  if (ar.stun && t.role === 1) applyStun(t, ar.stun, now);
   if (ar.luc) lucHit(ar, t, now);
   if (ar.orb && ar.eff) { const g = players.get(ar.owner); if (g) foxHit(t, now, g, GUMIHO.eff.dmg, { dir: inDir, kill: g, type: 'magic' }); }
   return false;
@@ -678,7 +678,7 @@ function resetCombat(p) {
   p.axes = p.cls === 'Berserker' ? [{ s: 0, x: 0, y: 0, a: 0, d: 0 }] : []; p.bRUntil = 0;
   p.pw = 1; p.bm = 0;
   p.pbD = p.pbA = p.pbStage = 0; p.pbCd = {}; p.pbCmd = null; p.pbCh = null; p.pbResume = null; p.pbBonus = false; p.pbBn = 0; p.pbRe = {}; p.pbFly = null; p.pbBlockUntil = p.pbSlowUntil = 0; p.pbSlowMul = 1; p.pbKey = ''; p.pbSw = null; pbClean(p.id);
-  p.azUntil = 0; p.azOn = false; p.shield = p.shUntil = 0;
+  p.azUntil = 0; p.azOn = false; p.shield = p.shUntil = 0; p.azAir = null; p.azG = p.cls === 'AzureDragon' ? AZ.g0 : 0;
   p.lf = ''; p.lPend = p.lUsed = false; p.beam = p.pure = p.sanct = null; p.libUntil = p.dmUntil = 0; p.dmList = [];
   p.mh = p.hp = statsOf(p).hp;
   p.atkReady = p.cdQ = p.cdE = p.cdR = 0;
@@ -724,6 +724,7 @@ function shieldBlocks(t, src) {
 }
 
 function dmgTo(t, amount, now, src) {
+  if (azAirOn(t, now)) return;
   if (inSanct(t, now)) return;
   if (pbWalls.length && src && src.x !== undefined && pbMeleeWall(t, amount, src, now)) return;
   if (t.cls === 'PlumBlossom' && now < (t.pbBlockUntil || 0) && pbTryBlock(t, src, now)) return;
@@ -748,6 +749,7 @@ function dmgTo(t, amount, now, src) {
   if (now < t.markUntil) incT += ASSASSIN.Q.mark;
   if (now < t.dmUntil) { const mo = players.get(t.dmBy); incT += mo && now < mo.libUntil ? LUC.mark.ampLib : LUC.mark.amp; }
   let d = (src && src.fixed) ? Math.round(amount0) : (blocked && now < t.hornUntil) ? 0 : Math.max(1, Math.round(amount0 * (1 + incA + incT) * (1 - Math.min(cut, 0.95))));
+  if (atk0 && atk0.cls === 'AzureDragon' && atk0.id !== t.id) azGain(atk0, d);
   if (t.dummy) { dummyHit(t, d, now); broadcast({ t: 'hit', id: t.id, dmg: d, bl: blocked ? 1 : 0 }); return; }
   let ab = 0;
   if (t.shield > 0 && now < (t.shUntil || 0)) { ab = Math.min(t.shield, d); t.shield -= ab; d -= ab; }
@@ -778,7 +780,8 @@ const targetsOf = p => {
   const r = [];
   if (phase !== 'round') { if (p.joined && !p.obs) for (const d of dummies) r.push(d); return r; }
   const rp = rootOf(p);
-  for (const t of players.values()) if (t !== p && t.joined && t.role === 1 && !sameTeam(p, t) && rootOf(t) !== rp) r.push(t);
+  const tn = Date.now();
+  for (const t of players.values()) if (t !== p && t.joined && t.role === 1 && !sameTeam(p, t) && rootOf(t) !== rp && !azAirOn(t, tn)) r.push(t);
   for (const t of units.values()) if (t.owner !== p.id && !sameTeam(p, t) && rootOf(t) !== rp) r.push(t);
   return r;
 };
@@ -799,7 +802,30 @@ function slashHit(ox, oy, aim, r, aura, tx, ty, ext = 0) {
   const vx = bx - ax, vy = by - ay, u = Math.max(0, Math.min(1, ((tx - ax) * vx + (ty - ay) * vy) / (vx * vx + vy * vy)));
   return Math.hypot(tx - ax - vx * u, ty - ay - vy * u) <= R;
 }
-const canAct = (p, now) => p.joined && p.role !== 2 && now >= p.stunUntil && now >= p.charmUntil && now >= (p.reloadUntil || 0);
+const canAct = (p, now) => p.joined && p.role !== 2 && now >= p.stunUntil && now >= p.charmUntil && now >= (p.reloadUntil || 0) && !azAirOn(p, now);
+// ---- stun (public status effect) ----
+const stunImmune = (t, now) => azAirOn(t, now);
+function interruptActions(t, now) {
+  const hadCh = !!(t.beam || t.pure);
+  t.dash = null; t.chargeStart = 0; t.beam = t.pure = null;
+  if (hadCh) broadcast({ t: 'fxcut', ow: t.id });
+  for (let i = azTimers.length - 1; i >= 0; i--) if (azTimers[i].p === t) azTimers.splice(i, 1);
+  if (t.cls === 'PlumBlossom') {
+    const ch7 = !!(t.pbCh && t.pbCh.t === 7);
+    if (t.pbCh) pbStop(t, now, ch7);
+    for (let i = pbTimers.length - 1; i >= 0; i--) if (pbTimers[i].owner === t.id) pbTimers.splice(i, 1);
+    t.pbCmd = null; t.pbFly = null; t.pbRe = {};
+    if (t.pbSw) { t.pbSw = null; broadcast({ t: 'fx', type: 'pbburst', x: t.x, y: t.y, r: 1.2 * RADPX, dur: 600 }); }
+    if (t.pbResume) t.pbResume.at = Math.max(t.pbResume.at, t.stunUntil);
+  }
+}
+function applyStun(t, ms, now) {
+  if (!t || !(ms > 0) || !(t.hp > 0) || stunImmune(t, now)) return false;
+  if (!t.unit && !t.dummy && t.role !== 1) return false;
+  t.stunUntil = Math.max(t.stunUntil || 0, now + ms);
+  interruptActions(t, now);
+  return true;
+}
 
 const chargeMax = (p, now) => p.cls === 'Reaper' ? REAPER.chargeMs : Math.max(1, ARCHER.charge.maxMs * (now < p.hasteUntil ? ARCHER.E.chargeMul : 1));
 function archerAttack(p, m, now) {
@@ -816,6 +842,7 @@ function archerAttack(p, m, now) {
 function doAttack(p, m) {
   const now = Date.now();
   if (!canAct(p, now)) return;
+  if (p.cls === 'AzureDragon' && !azOk(p)) return;
   if (p.cls === 'Archer') return archerAttack(p, m, now);
   if (p.cls === 'Reaper') return reaperAttack(p, m, now);
   if (p.cls === 'PlumBlossom') return plumAttack(p, m, now);
@@ -857,6 +884,7 @@ function doSkill(p, k, m) {
 function runSkill(p, k, m) {
   const now = Date.now();
   if (!['Q', 'E', 'R'].includes(k) || !canAct(p, now)) return;
+  if (p.cls === 'AzureDragon' && !azOk(p)) return;
   if (now < p['cd' + k]) return;
   if (p.cls === 'Knight') knightSkill(p, k, m, now);
   else if (p.cls === 'Archer') archerSkill(p, k, m, now);
@@ -1010,6 +1038,7 @@ function assassinSkill(p, k, m, now) {
   checkRoundEnd();
 }
 function dashHits(p, D, px, py, now) {
+  if (D.az) return azDashHits(p, D, px, py, now);
   let any = false;
   for (const t of targetsOf(p)) {
     if (D.hit.has(t.id)) continue;
@@ -1019,7 +1048,7 @@ function dashHits(p, D, px, py, now) {
     const S = SHIELDER.E;
     dmgTo(t, S.dmg, now, { x: D.sx, y: D.sy, by: p });
     if (t.role !== 1) continue;
-    t.stunUntil = Math.max(t.stunUntil, now + S.stun);
+    applyStun(t, S.stun, now);
     const v = S.kb / (S.kbMs / 1000);
     if (!airImmune(t, now)) { t.kbUntil = now + S.kbMs; t.kbx = Math.cos(D.a) * v; t.kby = Math.sin(D.a) * v; }
   }
@@ -1056,7 +1085,7 @@ function knightSkill(p, k, m, now) {
     broadcast({ t: 'fx', type: 'cone', by: p.id, x: o.x, y: o.y, a: p.aim, span: S.span, r: S.range, c: 'rgba(255,214,107,.65)', dur: 380 });
     for (const t of targetsOf(p)) {
       const tp = posAt(t, now - lag);
-      if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, S.range, S.span, t.hr || 0)) { dmgTo(t, S.dmg, now, { x: o.x, y: o.y, by: p }); if (t.role === 1) t.stunUntil = now + S.stun; }
+      if (inConeAt(o.x, o.y, p.aim, tp.x, tp.y, S.range, S.span, t.hr || 0)) { dmgTo(t, S.dmg, now, { x: o.x, y: o.y, by: p }); if (t.role === 1) applyStun(t, S.stun, now); }
     }
   } else if (k === 'E') {
     p.guardUntil = now + S.dur;
@@ -1163,7 +1192,7 @@ function stepBombs(now) {
       if (Math.hypot(t.x - px, t.y / 0.8 - pgy) > b.r + 15) continue;
       const nx = b.next.get(t.id);
       if (nx !== undefined && now < nx) continue;
-      if (nx === undefined && b.lift) t.stunUntil = Math.max(t.stunUntil, now + LUC.bomb.lift);
+      if (nx === undefined && b.lift) applyStun(t, LUC.bomb.lift, now);
       b.next.set(t.id, now + LUC.bomb.tickMs);
       dmgTo(t, b.dmg, now, { x: px, y: pgy * 0.8, kill: own, type: 'phys' });
       devilMark(own, t, now); any = true;
@@ -1243,14 +1272,14 @@ function luciferSkill(p, k, m, now) {
     if (k === 'Q') {
       const len = mapRayLen(o.x, o.y, p.aim) + LUC.beam.pad;
       cd(LUC.beam.cd); p.beam = { x: o.x, y: o.y, a: p.aim, len, next: now, until: now + LUC.beam.ms };
-      broadcast({ t: 'fx', type: 'beam', x: o.x, y: o.y, a: p.aim, len, w: LUC.beam.half * 2, dur: LUC.beam.ms });
+      broadcast({ t: 'fx', type: 'beam', ow: p.id, x: o.x, y: o.y, a: p.aim, len, w: LUC.beam.half * 2, dur: LUC.beam.ms });
     } else if (k === 'E') {
       cd(LUC.sanct.cd); p.sanct = { x: o.x, y: o.y, r: LUC.sanct.r, until: now + LUC.sanct.ms, t: now };
       broadcast({ t: 'fx', type: 'sanct', x: o.x, y: o.y, r: LUC.sanct.r, dur: LUC.sanct.ms });
       stepSanct(now);
     } else {
       cd(LUC.pure.cd); p.pure = { x: o.x, y: o.y, t0: now, next: now, until: now + LUC.pure.ms };
-      broadcast({ t: 'fx', type: 'pillar', x: o.x, y: o.y, r0: LUC.pure.r0, r1: LUC.pure.r1, delay: LUC.pure.delay, dur: LUC.pure.ms });
+      broadcast({ t: 'fx', type: 'pillar', ow: p.id, x: o.x, y: o.y, r0: LUC.pure.r0, r1: LUC.pure.r1, delay: LUC.pure.delay, dur: LUC.pure.ms });
     }
   } else {
     const lib = now < p.libUntil;
@@ -2004,6 +2033,7 @@ async function loginOk(p, rec, token) {
   if (winsData[rec.id] && winsData[rec.id].n !== rec.nick) { winsData[rec.id].n = rec.nick; calcWinTop(); }
   if (!p.joined) { p.joined = true; if (phase === 'round') p.role = 2; }
   send(p.ws, { t: 'auth', ok: 1, name: rec.nick, token, admin: rec.id === ADMIN_ID ? 1 : 0 });
+  if (rec.id === ADMIN_ID) send(p.ws, { t: 'azinfo', c: AZ_INFO });
   const sk = await loadSkins(rec.id); p.skins = sk.own; p.eqs = sk.eqs; p.skinsErr = sk.err;
   const cl = await loadCls(rec.id); p.clsOwn = cl.own; p.clsErr = cl.err;
   sendTinfo(p); send(p.ws, { t: 'gold', g: p.gold }); sendSinfo(p); sendCinfo(p); sendShop(p.ws); sendWins(p);
@@ -2100,7 +2130,7 @@ function berserkSlam(p, c, now) {
   for (const t of targetsOf(p)) {
     if (Math.hypot(t.x - c.x, (t.y - c.y) / 0.8) > BERS.E.r + (t.hr || 0)) continue;
     dmgTo(t, BERS.E.dmg, now, { x: c.x, y: c.y, by: p, type: 'phys' });
-    if (t.role === 1 && !t.unit) t.stunUntil = Math.max(t.stunUntil || 0, now + BERS.E.stun);
+    if (t.role === 1 && !t.unit) applyStun(t, BERS.E.stun, now);
   }
 }
 function berserkerSkill(p, k, m, now) {
@@ -2362,7 +2392,7 @@ function pbCast(p, id, m, now) {
       for (const t of targetsOf(p)) {
         if (segDist(t.x, t.y / 0.8, gx, gy, ex, ey) > PB.hw + (t.hr || 0)) continue;
         dmgTo(t, Math.round(base), t0, { x: pp.x, y: pp.y, by: p, type: 'phys' });
-        if (t.role === 1) t.stunUntil = Math.max(t.stunUntil || 0, t0 + 100);
+        if (t.role === 1) applyStun(t, 100, t0);
       }
       checkRoundEnd();
     });
@@ -2650,35 +2680,120 @@ function reaperSkill(p, k, m, now) {
   }
 }
 // ---- Azure Dragon ----
-const AZ = { R: { cd: 25000, ms: 10000, shield: 3000, spd: 1.3 }, beam: { r: 4, dmg: 160, hw: 0.45 }, strike: { n: 4, step: 1, gap: 200, r: 1, dmg: 150 }, pad: 12 };
+const AZ = {
+  gMax: 2000, g0: 500, dmgPer: 0.0002,
+  chain: { th: 500, r: 1, max: 5, mul: 0.6, bonus: 0.5 },
+  Q: { cd: 12000, air: 3000, dmg: 300, r: 2, r2: 3, th2: 1000, spd: 1.4, spd2: 1.5, stun: 1000 },
+  E: { cd: 8000, cdMiss: 500, dist: 2 * RADPX, dashMs: 220, hit: 56, dmg: 150, stun: 500, stun2: 1000, th: 1500 },
+  R: { ms: 15000, shield: 3000, spd: 1.4, atkCd: 100, hrAdd: 7.5 },
+  beam: { r: 4, dmg: 160, hw: 0.45 }, strike: { n: 4, step: 1, gap: 200, r: 2, dmg: 150 }, pad: 12
+};
+const AZ_INFO = {
+  id: 'AzureDragon', ko: '청룡', img: 'blueDragon.png', adm: 1, stats: { hp: 1300, atk: 160 }, as: 0.8, rng: '4 radpx (원거리, 마법)',
+  style: '번개를 다루는 푸른 용. 여의주에 피해를 모을수록 스킬이 강해지고, 가득 차면 용의 근원으로 각성합니다.',
+  skb: ['🌩️', '⚡', '🌀'],
+  skills: [
+    { icon: '🔮', name: '여의주', key: '패시브', types: ['magic', 'buff'], desc: '피해를 줄 때마다 입힌 피해량만큼 게이지 충전(최대 2,000, 게임 시작 시 500). 게이지 1당 모든 스킬 피해 +0.02%p. 25%(500~): 연쇄 번개 – 일반 공격 적중 시 대상 1 radpx 내 적에게 최대 5명까지 연쇄(이전 피해의 60%), 추가로 50% 피해의 연쇄 번개가 주변 적에게 발동하고 적중한 적에게서 다시 연쇄. 50%(1,000~): 등천 착지 반경 3 radpx, 공중 이동 속도 50%. 75%(1,500~): 경공 기절 1초. 100%(2,000): 각성 사용 가능.' },
+    { icon: '🌩️', name: '등천', key: 'Q · 12초', types: ['magic', 'cc', 'def'], desc: '하늘로 도약(원래 위치에 표식). 3초간 모든 공격·피해에 면역, 이동 속도 +40%, 공격·스킬 불가. 3초 뒤 현재 위치로 내리꽂아 반경 2 radpx 적에게 마법 피해 300과 1초 기절.' },
+    { icon: '⚡', name: '경공', key: 'E · 8초', types: ['magic', 'cc', 'util'], desc: '바라보는 방향으로 2 radpx 돌진. 경로의 적에게 마법 피해 150과 0.5초 기절. 적중하지 못하면 쿨타임이 0.5초로 감소.' },
+    { icon: '🌀', name: '각성', key: 'R · 쿨타임 없음', types: ['buff'], desc: '여의주 게이지가 가득 찼을 때 사용. 15초간 용의 근원 형태로 변신: 보호막 3,000, 이동 속도 +40%, 공중에 뜨거나 밀려나지 않음. 일반 공격 반경 2 radpx, 공격 간격 0.1초, 피격 판정 1.5배. 종료 시 게이지 0.' }
+  ]
+};
+const azOk = p => !!p && (p.ai || p.user === ADMIN_ID);
+const azAirOn = (p, now) => !!p && p.cls === 'AzureDragon' && !!p.azAir && now < p.azAir.until;
+const azMul = p => 1 + (p.azG || 0) * AZ.dmgPer;
+function azGain(p, n) { if (p.cls === 'AzureDragon' && n > 0) p.azG = Math.min(AZ.gMax, (p.azG || 0) + n); }
 function azActive(p, now) { return !!p && p.cls === 'AzureDragon' && !!p.azOn && now < (p.azUntil || 0); }
-function airImmune(t, now) { return !!t && t.cls === 'AzureDragon' && now < (t.azUntil || 0); }
+function airImmune(t, now) { return !!t && t.cls === 'AzureDragon' && (now < (t.azUntil || 0) || azAirOn(t, now)); }
 function azEnd(p, now) {
   p.azOn = false; p.azUntil = 0; p.shield = 0; p.shUntil = 0;
-  if (p.cls === 'AzureDragon') { p.cdR = now + AZ.R.cd; send(p.ws, { t: 'cd', k: 'R', ms: AZ.R.cd }); }
+  if (p.cls === 'AzureDragon') { p.azG = 0; p.hr = 0; }
 }
 const azTimers = [];
+function azChain(p, from, dmg, now, seen) {
+  let cur = from, d = dmg;
+  for (let i = 1; i < AZ.chain.max; i++) {
+    d = Math.round(d * AZ.chain.mul);
+    let best = null, bd = Infinity;
+    for (const t of targetsOf(p)) {
+      if (seen.has(t)) continue;
+      const dd = Math.hypot(t.x - cur.x, (t.y - cur.y) / 0.8);
+      if (dd <= AZ.chain.r * RADPX + (t.hr || 0) && dd < bd) { bd = dd; best = t; }
+    }
+    if (!best) break;
+    seen.add(best);
+    broadcast({ t: 'fx', type: 'azchain', x: cur.x, y: cur.y, x2: best.x, y2: best.y, dur: 300 });
+    dmgTo(best, d, now, { x: cur.x, y: cur.y, by: p, type: 'magic' });
+    cur = best;
+  }
+}
+function azChainAll(p, h, dmg, now, beamHits) {
+  azChain(p, h, dmg, now, new Set(beamHits));
+  const R = AZ.chain.r * RADPX, bd = Math.round(dmg * AZ.chain.bonus);
+  const vic = targetsOf(p).filter(t => !beamHits.includes(t) && Math.hypot(t.x - h.x, (t.y - h.y) / 0.8) <= R + (t.hr || 0));
+  for (const v of vic) {
+    broadcast({ t: 'fx', type: 'azchain', x: h.x, y: h.y, x2: v.x, y2: v.y, dur: 300 });
+    dmgTo(v, bd, now, { x: h.x, y: h.y, by: p, type: 'magic' });
+    azChain(p, v, bd, now, new Set([...beamHits, v]));
+  }
+}
 function azureAttack(p, m, now) {
-  if (now < p.atkReady) return;
-  const st = statsOf(p), o = originOf(p, m), lag = lagOf(m);
-  p.atkReady = now + st.atkCd / atkSpeed(p, now);
+  if (!azOk(p) || now < p.atkReady) return;
+  const st = statsOf(p), o = originOf(p, m), lag = lagOf(m), form = azActive(p, now);
+  p.atkReady = now + (form ? AZ.R.atkCd : st.atkCd / atkSpeed(p, now));
   breakStealth(p);
   const gx = o.x, gy = o.y / 0.8, cs = Math.cos(p.aim), sn = Math.sin(p.aim);
-  if (azActive(p, now)) {
+  if (form) {
     for (let i = 1; i <= AZ.strike.n; i++) azTimers.push({ at: now + (i - 1) * AZ.strike.gap, p, x: gx + cs * i * AZ.strike.step * RADPX, y: gy + sn * i * AZ.strike.step * RADPX });
     return;
   }
-  const L = AZ.beam.r * RADPX, ex = gx + cs * L, ey = gy + sn * L;
+  const L = AZ.beam.r * RADPX, ex = gx + cs * L, ey = gy + sn * L, hit = [];
   broadcast({ t: 'fx', type: 'azbeam', by: p.id, x: o.x, y: o.y, a: p.aim, len: L, dur: 320 });
   for (const t of targetsOf(p)) {
     const tol = AZ.beam.hw * RADPX + (t.hr || 0) + AZ.pad, tp = posAt(t, now - lag);
     if (segDist(tp.x, tp.y / 0.8, gx, gy, ex, ey) > tol && segDist(t.x, t.y / 0.8, gx, gy, ex, ey) > tol) continue;
-    dmgTo(t, AZ.beam.dmg, now, { x: o.x, y: o.y, by: p, type: 'magic', basic: true });
+    hit.push(t);
+  }
+  for (const t of hit) dmgTo(t, AZ.beam.dmg, now, { x: o.x, y: o.y, by: p, type: 'magic', basic: true });
+  if (hit.length && (p.azG || 0) >= AZ.chain.th) for (const h of hit) azChainAll(p, h, AZ.beam.dmg, now, hit);
+  checkRoundEnd();
+}
+function azLand(p, now) {
+  const r = ((p.azG || 0) >= AZ.Q.th2 ? AZ.Q.r2 : AZ.Q.r) * RADPX, dmg = Math.round(AZ.Q.dmg * azMul(p));
+  broadcast({ t: 'fx', type: 'azland', x: p.x, y: p.y, r, dur: 800 });
+  for (const t of targetsOf(p)) {
+    if (Math.hypot(t.x - p.x, (t.y - p.y) / 0.8) > r + (t.hr || 0)) continue;
+    dmgTo(t, dmg, now, { x: p.x, y: p.y, by: p, type: 'magic' });
+    applyStun(t, AZ.Q.stun, now);
   }
   checkRoundEnd();
 }
+function azDashHits(p, D, px, py, now) {
+  let any = false;
+  for (const t of targetsOf(p)) {
+    if (D.hit.has(t)) continue;
+    const tp = posAt(t, now - D.lag);
+    if (segDist(tp.x, tp.y / 0.8, px, py / 0.8, p.x, p.y / 0.8) > AZ.E.hit + (t.hr || 0)) continue;
+    D.hit.add(t); any = true;
+    const ms = (p.azG || 0) >= AZ.E.th ? AZ.E.stun2 : AZ.E.stun;
+    dmgTo(t, Math.round(AZ.E.dmg * azMul(p)), now, { x: D.sx, y: D.sy, by: p, type: 'magic' });
+    applyStun(t, ms, now);
+  }
+  return any;
+}
+function azDashEnd(p, D, now) {
+  if (D.hit.size) return;
+  p.cdE = Math.max(now, D.t0 + AZ.E.cdMiss);
+  send(p.ws, { t: 'cd', k: 'E', ms: p.cdE - now });
+}
 function stepAzure(now) {
-  for (const p of players.values()) if (p.azOn && !(p.cls === 'AzureDragon' && inPlay(p) && now < (p.azUntil || 0))) azEnd(p, now);
+  for (const p of players.values()) {
+    if (p.azOn && !(p.cls === 'AzureDragon' && inPlay(p) && now < (p.azUntil || 0))) azEnd(p, now);
+    if (p.azAir) {
+      if (!inPlay(p) || p.cls !== 'AzureDragon') p.azAir = null;
+      else if (now >= p.azAir.until) { p.azAir = null; azLand(p, now); }
+    }
+  }
   for (let i = azTimers.length - 1; i >= 0; i--) {
     const z = azTimers[i]; if (now < z.at) continue;
     azTimers.splice(i, 1);
@@ -2693,10 +2808,33 @@ function stepAzure(now) {
   }
 }
 function azureSkill(p, k, m, now) {
-  if (k !== 'R' || !(p.user === ADMIN_ID || p.ai)) return;
+  if (!azOk(p)) return;
+  if (k === 'R') {
+    if (azActive(p, now)) return;
+    if ((p.azG || 0) < AZ.gMax) { if (!p.ai) fxTxt(p.x, p.y - 40, '여의주 부족', '#9fd0ff'); return; }
+    p.azOn = true; p.azUntil = now + AZ.R.ms; p.shield = AZ.R.shield; p.shUntil = p.azUntil; p.kbUntil = 0; p.hr = AZ.R.hrAdd;
+    return;
+  }
   if (azActive(p, now)) return;
-  p.azOn = true; p.azUntil = now + AZ.R.ms; p.shield = AZ.R.shield; p.shUntil = p.azUntil; p.kbUntil = 0;
-  p.cdR = Number.MAX_SAFE_INTEGER; send(p.ws, { t: 'cd', k: 'R', ms: AZ.R.ms });
+  const o = originOf(p, m);
+  if (k === 'Q') {
+    p.cdQ = now + AZ.Q.cd; send(p.ws, { t: 'cd', k: 'Q', ms: AZ.Q.cd });
+    p.dash = null; p.chargeStart = 0;
+    p.azAir = { x: o.x, y: o.y, until: now + AZ.Q.air };
+    broadcast({ t: 'fx', type: 'azmark', x: o.x, y: o.y, dur: AZ.Q.air });
+    broadcast({ t: 'fx', type: 'azleap', x: o.x, y: o.y, dur: 700 });
+    return;
+  }
+  const a = p.aim, gx = o.x, gy = o.y / 0.8, lag = lagOf(m);
+  const inside = d => { const px = gx + Math.cos(a) * d, py = (gy + Math.sin(a) * d) * 0.8; return ndist((px - CX) / RX, (py - CY) / RY) <= 1 && walkAt(px, py); };
+  let len = AZ.E.dist;
+  if (solidMap()) { let l = 0; while (l + 4 <= AZ.E.dist && inside(l + 4)) l += 4; len = l; } else while (len > 0 && !inside(len)) len -= 5;
+  len = Math.max(0, len);
+  const ex = gx + Math.cos(a) * len, egy = gy + Math.sin(a) * len;
+  p.cdE = now + AZ.E.cd; send(p.ws, { t: 'cd', k: 'E', ms: AZ.E.cd });
+  broadcast({ t: 'fx', type: 'azdash', x: o.x, y: o.y, x2: ex, y2: egy * 0.8, dur: 420 });
+  p.x = o.x; p.y = o.y;
+  p.dash = { az: 1, sx: o.x, sy: o.y, ex, ey: egy * 0.8, a, t0: now, ms: AZ.E.dashMs, lag, hit: new Set() };
 }
 // ---- AI players ----
 const CLASS_LIST = ['Knight', 'Archer', 'Shielder', 'Assassin', 'Gumiho', 'Lucifer', 'Gambler', 'SwordMaster', 'Tower', 'Financier', 'Gamer', 'Celestial', 'Reaper', 'Berserker', 'PlumBlossom', 'AzureDragon'];
@@ -2813,7 +2951,7 @@ wss.on('connection', (ws, req) => {
       if (text && now - p.lastChat > 800) { p.lastChat = now; addChat({ id, name: p.name, text }); }
     } else if (m.t === 'class') {
       if ((phase === 'lobby' || p.role === 2 || p.obs) && CLASS_LIST.includes(m.cls)) {
-        if (!clsOk(p, m.cls)) { send(ws, { t: 'cbuy', ok: 0, msg: ADMIN_ONLY.has(m.cls) ? '추가 예정' : '잠긴 클래스입니다. 클래스 선택창에서 해금해 주세요.', cls: m.cls }); sendCinfo(p); }
+        if (!clsOk(p, m.cls)) { send(ws, { t: 'cbuy', ok: 0, msg: ADMIN_ONLY.has(m.cls) ? '선택할 수 없는 클래스입니다.' : '잠긴 클래스입니다. 클래스 선택창에서 해금해 주세요.', cls: m.cls }); sendCinfo(p); }
         else { p.cls = m.cls; resetCombat(p); }
       }
     } else if (m.t === 'mode') {
@@ -2916,7 +3054,7 @@ function autoClearAi() {
   for (const q of players.values()) { if (q.ai) bots.push(q); else if ((q.user || q.guest) && !q.obs && !q.skel && q.ws && q.ws.readyState === 1) humans++; }
   if (!humans && bots.length) { for (const q of bots) removeBot(q); console.log('No human players left: removed ' + bots.length + ' AI player(s).'); }
 }
-const SLIM_KEYS = ['m', 'r', 'ai', 'ar', 'skl', 'so', 'su', 'gd', 'sl', 'hs', 'iv', 'hn', 'ta', 'kb', 'ds', 'mk', 'as', 'cm', 'bn', 'qn', 'lb', 'dm', 'cg', 'rl', 'mt', 'gb', 'fs', 'sa', 'smn', 'smx', 'sk', 'tr', 'ins', 'dp', 'gm', 'sn', 'iq', 'bs', 'bm', 'rg', 'ax', 'bu', 'bd', 'az', 'sh'];
+const SLIM_KEYS = ['m', 'r', 'ai', 'ar', 'skl', 'so', 'su', 'gd', 'sl', 'hs', 'iv', 'hn', 'ta', 'kb', 'ds', 'mk', 'as', 'cm', 'bn', 'qn', 'lb', 'dm', 'cg', 'rl', 'mt', 'gb', 'fs', 'sa', 'smn', 'smx', 'sk', 'tr', 'ins', 'dp', 'gm', 'sn', 'iq', 'bs', 'bm', 'rg', 'ax', 'bu', 'bd', 'az', 'sh', 'ag', 'aa'];
 setInterval(() => {
   const now = Date.now(), dt = Math.min((now - last) / 1000, 0.1); last = now;
   let needEnd = false;
@@ -2934,7 +3072,7 @@ setInterval(() => {
         const px = p.x, py = p.y, f = Math.min(1, (now - D.t0) / D.ms);
         p.x = D.sx + (D.ex - D.sx) * f; p.y = D.sy + (D.ey - D.sy) * f;
         if (dashHits(p, D, px, py, now)) needEnd = true;
-        if (f >= 1) p.dash = null;
+        if (f >= 1) { if (D.az) azDashEnd(p, D, now); p.dash = null; }
       }
       dx = dy = 0;
     }
@@ -2977,7 +3115,7 @@ setInterval(() => {
     }
     if (dx || dy) {
       const l = Math.hypot(dx, dy); dx /= l; dy /= l;
-      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1) * (p.cls === 'AzureDragon' && now < (p.azUntil || 0) ? AZ.R.spd : 1) * (p.bm || 1);
+      const spd = SPEED * (now < p.guardUntil ? KNIGHT.E.speed : 1) * (now < p.slowUntil ? KNIGHT.R.slow : 1) * tauntMul * (now < p.hornUntil ? SHIELDER.R.speed : 1) * ((p.cls === 'Assassin' || (p.cls === 'Gamer' && p.gInvis)) && now < p.invisUntil ? ASSASSIN.E.speed : 1) * (now < (p.pbSlowUntil || 0) ? p.pbSlowMul : 1) * (now < p.libUntil ? LUC.lib.speed : 1) * (now < p.fastUntil ? GAMBLER.R.fast : 1) * (p.cls === 'AzureDragon' ? (now < (p.azUntil || 0) ? AZ.R.spd : 1) * (azAirOn(p, now) ? ((p.azG || 0) >= AZ.Q.th2 ? AZ.Q.spd2 : AZ.Q.spd) : 1) : 1) * (p.bm || 1);
       const sx0 = p.x, sy0 = p.y; p.x += dx * spd * dt; p.y += dy * spd * dt * 0.8;
       const nx = (p.x - CX) / RX, ny = (p.y - CY) / RY, d = ndist(nx, ny);
       if (d > 1) { p.x = CX + nx / d * RX; p.y = CY + ny / d * RY; }
@@ -3007,7 +3145,7 @@ setInterval(() => {
       hs: now < p.hasteUntil ? 1 : 0, iv: iv ? 1 : 0, hn: now < p.hornUntil ? 1 : 0, ta: p.role === 1 && now < p.tauntUntil ? 1 : 0, kb: now < p.kbUntil ? 1 : 0, ds: p.dash ? 1 : 0,
       mk: now < p.markUntil ? 1 : 0, as: now < p.asUntil ? p.asBonus : 0, cm: p.role === 1 && now < p.charmUntil ? 1 : 0, bn: p.role === 1 && now < p.burnUntil ? 1 : 0, qn: (p.qNext || p.eNext) ? 1 : 0, lf: p.lf || '', lb: now < p.libUntil ? 1 : 0, dm: p.role === 1 && now < p.dmUntil ? 1 : 0,
       cg: p.chargeStart ? Math.max(1, Math.round(Math.min(now - p.chargeStart, chargeMax(p, now)) / chargeMax(p, now) * ARCHER.charge.maxMs)) : 0,
-      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0, az: p.cls === 'AzureDragon' && now < (p.azUntil || 0) ? 1 : 0, sh: p.shield > 0 && now < (p.shUntil || 0) ? Math.round(p.shield) : 0 };
+      rl: p.reloadUntil && now < p.reloadUntil ? 1 : 0, mt: p.myTurn ? 1 : 0, gb: now < p.gbUntil || now < p.gbPlusUntil ? 1 : 0, fs: now < p.fastUntil ? 1 : 0, sa: p.smAura ? 1 : 0, smn: p.cls === 'SwordMaster' ? p.smN | 0 : 0, smx: p.cls === 'SwordMaster' ? smNeed(p, now) : 0, sk: now < p.smAwkUntil ? 1 : 0, tr: now < p.towerRUntil ? 1 : 0, ins: now < p.insUntil ? 1 : 0, dp: now < p.depUntil ? 1 : 0, gm: p.gNext | 0, sn: skinOf(p), gt: now < p.gtUntil ? p.gtint : '', iq: p.ai ? iqOf(p) : 0, bs: p.id === bossId ? 1 : 0, bm: p.bm || 0, rg: bRage(p) ? 1 : 0, ax: p.cls === 'Berserker' && p.axes && p.role === 1 ? p.axes.map(a => [a.s, Math.round(a.x), Math.round(a.y)]) : 0, bu: buffsOf(p, now), bd: now < (p.bleedUntil || 0) ? 1 : 0, az: p.cls === 'AzureDragon' && now < (p.azUntil || 0) ? 1 : 0, sh: p.shield > 0 && now < (p.shUntil || 0) ? Math.round(p.shield) : 0, ag: p.cls === 'AzureDragon' ? Math.round(p.azG || 0) : 0, aa: azAirOn(p, now) ? ((p.azG || 0) >= AZ.Q.th2 ? 2 : 1) : 0 };
     for (const k of SLIM_KEYS) if (e[k] === 0) delete e[k];
     if (p.cls === 'PlumBlossom') { e.pbs = p.pbStage + 1; if (p.pbCh) e.pbc = p.pbCh.t; if (now < (p.pbBlockUntil || 0)) e.pbk = 1; if (p.pbSw) e.psw = [Math.round(p.pbSw.x), Math.round(p.pbSw.g * 0.8), Math.round(Math.hypot(p.pbSw.vx, p.pbSw.vg)), +Math.atan2(p.pbSw.vg * 0.8, p.pbSw.vx).toFixed(2)]; }
     if (p.role === 1 && now < (p.pbSlowUntil || 0)) e.pz = p.pbSlowMul;
