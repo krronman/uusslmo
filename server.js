@@ -2681,11 +2681,11 @@ function reaperSkill(p, k, m, now) {
 }
 // ---- Azure Dragon ----
 const AZ = {
-  gMax: 2000, g0: 500, dmgPer: 0.0002,
-  chain: { th: 500, r: 1, max: 5, mul: 0.6, bonus: 0.5 },
-  Q: { cd: 12000, air: 3000, dmg: 300, r: 2, r2: 3, th2: 1000, spd: 1.4, spd2: 1.5, stun: 1000 },
-  E: { cd: 8000, cdMiss: 500, dist: 2 * RADPX, dashMs: 220, hit: 56, dmg: 150, stun: 500, stun2: 1000, th: 1500 },
-  R: { ms: 15000, shield: 3000, spd: 1.4, atkCd: 100, hrAdd: 7.5 },
+  gMax: 5000, g0: 0, dmgPer: 0.0002,
+  chain: { th: 1250, r: 1, max: 5, mul: 0.6, bonus: 0.5 },
+  Q: { cd: 12000, air: 3000, dmg: 300, r: 1.5, r2: 3, th2: 2500, spd: 1.4, spd2: 1.5, stun: 1000 },
+  E: { cd: 8000, cdMiss: 500, dist: 1.5 * RADPX, dashMs: 200, hit: 56, dmg: 150, stun: 500, stun2: 1000, th: 3750 },
+  R: { ms: 15000, shield: 3000, spd: 1.4, atkCd: 700, hrAdd: 7.5 },
   beam: { r: 4, dmg: 160, hw: 0.45 }, strike: { n: 4, step: 1, gap: 200, r: 2, dmg: 150 }, pad: 12
 };
 const AZ_INFO = {
@@ -2693,10 +2693,10 @@ const AZ_INFO = {
   style: '번개를 다루는 푸른 용. 여의주에 피해를 모을수록 스킬이 강해지고, 가득 차면 용의 근원으로 각성합니다.',
   skb: ['🌩️', '⚡', '🌀'],
   skills: [
-    { icon: '🔮', name: '여의주', key: '패시브', types: ['magic', 'buff'], desc: '피해를 줄 때마다 입힌 피해량만큼 게이지 충전(최대 2,000, 게임 시작 시 500). 게이지 1당 모든 스킬 피해 +0.02%p. 25%(500~): 연쇄 번개 – 일반 공격 적중 시 대상 1 radpx 내 적에게 최대 5명까지 연쇄(이전 피해의 60%), 추가로 50% 피해의 연쇄 번개가 주변 적에게 발동하고 적중한 적에게서 다시 연쇄. 50%(1,000~): 등천 착지 반경 3 radpx, 공중 이동 속도 50%. 75%(1,500~): 경공 기절 1초. 100%(2,000): 각성 사용 가능.' },
-    { icon: '🌩️', name: '등천', key: 'Q · 12초', types: ['magic', 'cc', 'def'], desc: '하늘로 도약(원래 위치에 표식). 3초간 모든 공격·피해에 면역, 이동 속도 +40%, 공격·스킬 불가. 3초 뒤 현재 위치로 내리꽂아 반경 2 radpx 적에게 마법 피해 300과 1초 기절.' },
-    { icon: '⚡', name: '경공', key: 'E · 8초', types: ['magic', 'cc', 'util'], desc: '바라보는 방향으로 2 radpx 돌진. 경로의 적에게 마법 피해 150과 0.5초 기절. 적중하지 못하면 쿨타임이 0.5초로 감소.' },
-    { icon: '🌀', name: '각성', key: 'R · 쿨타임 없음', types: ['buff'], desc: '여의주 게이지가 가득 찼을 때 사용. 15초간 용의 근원 형태로 변신: 보호막 3,000, 이동 속도 +40%, 공중에 뜨거나 밀려나지 않음. 일반 공격 반경 2 radpx, 공격 간격 0.1초, 피격 판정 1.5배. 종료 시 게이지 0.' }
+    { icon: '🔮', name: '여의주', key: '패시브', types: ['magic', 'buff'], desc: '피해를 줄 때마다 입힌 피해량만큼 게이지 충전(최대 5,000, 게임 시작 시 0). 게이지 1당 모든 스킬 피해 +0.02%p. 25%(1,250~): 연쇄 번개 – 일반 공격 적중 시 대상 1 radpx 내 적에게 최대 5명까지 연쇄(이전 피해의 60%), 추가로 50% 피해의 연쇄 번개가 주변 적에게 발동하고 적중한 적에게서 다시 연쇄. 50%(2,500~): 등천 착지 반경 3 radpx, 공중 이동 속도 50%. 75%(3,750~): 경공 기절 1초. 100%(5,000): 각성 사용 가능.' },
+    { icon: '🌩️', name: '등천', key: 'Q · 12초', types: ['magic', 'cc', 'def'], desc: '화면 밖까지 도약. 3초간 모든 공격·피해에 면역, 이동 속도 +40%, 공격·스킬 불가. 바닥의 표식이 현재 위치를 따라다니며, 3초 뒤 그 위치로 내리꽂아 반경 1.5 radpx 적에게 마법 피해 300과 1초 기절.' },
+    { icon: '⚡', name: '경공', key: 'E · 8초', types: ['magic', 'cc', 'util'], desc: '바라보는 방향으로 1.5 radpx 돌진. 경로의 적에게 마법 피해 150과 0.5초 기절. 적중하지 못하면 쿨타임이 0.5초로 감소.' },
+    { icon: '🌀', name: '각성', key: 'R · 쿨타임 없음', types: ['buff'], desc: '여의주 게이지가 가득 찼을 때 사용. 15초간 용의 근원 형태로 변신: 보호막 3,000, 이동 속도 +40%, 공중에 뜨거나 밀려나지 않음. 일반 공격 반경 2 radpx, 공격 간격 0.7초, 피격 판정 1.5배. 종료 시 게이지 0.' }
   ]
 };
 const azOk = p => !!p && (p.ai || p.user === ADMIN_ID);
@@ -2821,7 +2821,7 @@ function azureSkill(p, k, m, now) {
     p.cdQ = now + AZ.Q.cd; send(p.ws, { t: 'cd', k: 'Q', ms: AZ.Q.cd });
     p.dash = null; p.chargeStart = 0;
     p.azAir = { x: o.x, y: o.y, until: now + AZ.Q.air };
-    broadcast({ t: 'fx', type: 'azmark', x: o.x, y: o.y, dur: AZ.Q.air });
+    broadcast({ t: 'fx', type: 'azmark', ow: p.id, x: o.x, y: o.y, dur: AZ.Q.air });
     broadcast({ t: 'fx', type: 'azleap', x: o.x, y: o.y, dur: 700 });
     return;
   }
@@ -2852,6 +2852,20 @@ function removeBot(q) {
   if (bossId === q.id) bossId = 0;
   players.delete(q.id); broadcast({ t: 'leave', id: q.id });
   if (phase === 'lobby') checkReady(); else if (phase === 'round') checkRoundEnd();
+}
+const AI_SOLO_MAX = 10;
+const humansOf = () => [...players.values()].filter(q => !q.ai && (q.user || q.guest) && !q.obs && !q.skel && q.ws && q.ws.readyState === 1);
+const aiSolo = p => { if (!p || p.ai || p.obs || p.user === ADMIN_ID) return false; const h = humansOf(); return h.length === 1 && h[0] === p; };
+const soloBots = p => [...players.values()].filter(q => q.ai && q.soloOwner === p.id);
+function syncAiPerm() {
+  const h = humansOf(), solo = h.length === 1 && h[0].user !== ADMIN_ID ? h[0] : null;
+  for (const q of h) {
+    const on = q === solo ? 1 : 0;
+    if (q.aiPerm !== on) { q.aiPerm = on; send(q.ws, { t: 'aiperm', on, max: AI_SOLO_MAX }); }
+  }
+  let n = 0;
+  for (const b of [...players.values()]) if (b.ai && b.soloOwner && b.soloOwner !== (solo && solo.id)) { removeBot(b); n++; }
+  if (n) sysChat('Solo-mode AI players were removed.');
 }
 const iqOf = p => p.skel ? 5 : Number.isInteger(p.iq) ? p.iq : 5;
 function velOf(t, now) {
@@ -2969,19 +2983,21 @@ wss.on('connection', (ws, req) => {
       const q = players.get(Number(m.id));
       if (p.user === ADMIN_ID && gameMode === 'boss' && phase === 'lobby' && q && q.joined && !q.obs && !q.skel) { bossId = bossId === q.id ? 0 : q.id; sysChat(bossId ? q.name + ' is the Boss.' : 'Boss designation cleared.'); }
     } else if (m.t === 'aiadd') {
-      if (p.user === ADMIN_ID && phase === 'lobby' && (m.cls === 'random' || CLASS_LIST.includes(m.cls))) { const b = addBot(m.cls, m.iq); if (b) { sysChat(p.name + ' added ' + b.name + '.'); checkReady(); } }
+      const adm = p.user === ADMIN_ID;
+      if ((adm || aiSolo(p)) && phase === 'lobby' && (m.cls === 'random' || (CLASS_LIST.includes(m.cls) && (adm || !ADMIN_ONLY.has(m.cls)))) && (adm || soloBots(p).length < AI_SOLO_MAX)) { const b = addBot(m.cls, m.iq); if (b) { if (!adm) b.soloOwner = p.id; sysChat(p.name + ' added ' + b.name + '.'); checkReady(); } }
     } else if (m.t === 'aiset') {
       const q = players.get(Number(m.id));
-      if (p.user === ADMIN_ID && phase === 'lobby' && q && q.ai) {
+      const adm = p.user === ADMIN_ID;
+      if ((adm || (aiSolo(p) && q && q.soloOwner === p.id)) && phase === 'lobby' && q && q.ai) {
         if (Number.isInteger(m.iq) && m.iq >= 0 && m.iq <= 10) q.iq = m.iq;
-        if (m.cls === 'random' || CLASS_LIST.includes(m.cls)) {
+        if (m.cls === 'random' || (CLASS_LIST.includes(m.cls) && (adm || !ADMIN_ONLY.has(m.cls)))) {
           const same = m.cls === 'random' ? q.aiRand : (!q.aiRand && q.cls === m.cls);
           if (!same) { q.aiRand = m.cls === 'random'; q.cls = q.aiRand ? randClass(q.cls) : m.cls; resetCombat(q); }
         }
       }
     } else if (m.t === 'aidel') {
       const q = players.get(Number(m.id));
-      if (p.user === ADMIN_ID && q && q.ai) { sysChat(q.name + ' was removed.'); removeBot(q); }
+      if (q && q.ai && (p.user === ADMIN_ID || (aiSolo(p) && q.soloOwner === p.id))) { sysChat(q.name + ' was removed.'); removeBot(q); }
     } else if (m.t === 'kick') {
       const q = players.get(Number(m.id));
       if (p.user === ADMIN_ID && q && q.ai) { sysChat(q.name + ' was removed.'); removeBot(q); }
@@ -2999,7 +3015,7 @@ wss.on('connection', (ws, req) => {
         else send(ws, { t: 'rtime', ms: ROUND_MS, err: 1 });
       } else send(ws, { t: 'rtime', ms: ROUND_MS, err: 1 });
     } else if (m.t === 'aiclear') {
-      if (p.user === ADMIN_ID) { const bs = [...players.values()].filter(q => q.ai); if (bs.length) { for (const q of bs) removeBot(q); sysChat(p.name + ' removed all AI players.'); } }
+      if (p.user === ADMIN_ID || aiSolo(p)) { const bs = [...players.values()].filter(q => q.ai && (p.user === ADMIN_ID || q.soloOwner === p.id)); if (bs.length) { for (const q of bs) removeBot(q); sysChat(p.name + ' removed all AI players.'); } }
     } else if (m.t === 'pbc') {
       const S = p.pbSw, x = Number(m.x), y = Number(m.y);
       if (S && Number.isFinite(x) && Number.isFinite(y)) { S.cx = x; S.cg = (y + 30) / 0.8; }
@@ -3060,6 +3076,7 @@ setInterval(() => {
   let needEnd = false;
   try {
   if (now - lastAiChk > 2000) { lastAiChk = now; autoClearAi(); }
+  syncAiPerm();
   botTick(now);
   for (const p of players.values()) {
     if (!p.joined) continue;
